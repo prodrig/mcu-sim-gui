@@ -22,6 +22,35 @@ project(mcu-sim-gui
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# --- Un aviso que ahorra una tarde ------------------------------------------
+# Compilar DENTRO de una carpeta sincronizada (Dropbox, OneDrive, Drive) falla
+# de una forma que no se parece en nada a su causa: el cliente de sincronizacion
+# -y el antivirus detras- abren cada `.exe` recien creado para subirlo, y
+# mientras lo tienen abierto CMake no puede leerlo ni borrarlo. El sintoma es
+# "Permission denied" sobre `CompilerIdCXX/a.exe` o sobre un `cmTC_*.exe`, y
+# como la deteccion del compilador REINTENTA, a veces acaba diciendo "works"
+# despues de haber fallado. Un fallo intermitente que ademas se contradice.
+#
+# La solucion no es apagar nada: es sacar el arbol de compilacion de ahi. Y de
+# paso se deja de sincronizar un directorio con miles de ficheros objeto.
+#
+#   cmake -G Ninja -B C:/build/mcu-sim-gui -S .
+#
+# Esto no lo impide -hay quien tiene el antivirus configurado y le funciona-
+# pero lo dice antes de que el error aparezca y confunda.
+foreach(_carpeta_nube "Dropbox" "OneDrive" "Google Drive" "GoogleDrive" "iCloud")
+    string(FIND "${CMAKE_BINARY_DIR}" "${_carpeta_nube}" _pos_nube)
+    if(NOT _pos_nube EQUAL -1)
+        message(WARNING
+            "El arbol de compilacion esta dentro de una carpeta de ${_carpeta_nube}:\n"
+            "  ${CMAKE_BINARY_DIR}\n"
+            "El cliente de sincronizacion abre cada .exe recien creado y CMake no "
+            "puede leerlo ni borrarlo: sale 'Permission denied' sobre a.exe o "
+            "cmTC_*.exe. Compila fuera de la carpeta sincronizada:\n"
+            "  cmake -G Ninja -B C:/build/mcu-sim-gui -S .")
+    endif()
+endforeach()
+
 find_package(Qt6 6.3 REQUIRED COMPONENTS Widgets Network)
 
 qt_standard_project_setup()

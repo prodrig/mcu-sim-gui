@@ -4,15 +4,8 @@ La **contraparte de visualización gráfica de
 [`mcu-sim`](../mcu-sim)**, el modelo SystemC de microcontroladores STM32.
 `mcu-sim` simula; esto lo enseña y deja tocarlo.
 
-> **Estado: fase 0 EJECUTADA.** El esqueleto compila y abre una ventana; el
-> protocolo y el plan están escritos; y `mcu-sim` ya **reconoce
-> `--gui host:puerto`** —las seis formas, con sus errores— y lleva la copia
-> vendida de `protocolo.h`. Todavía no se abre ningún socket: eso es la fase 3.
->
-> Lo que la fase 0 tenía que demostrar, demostrado: **sin `--gui` no ha
-> cambiado nada.** Las tres suites de `mcu-sim` siguen pasando —**2117** (43
-> nuevas, las del parseo), 203 y 164— y el invariante del F407 sigue en
-> `2336217899213 ps` **al picosegundo**.
+> **Estado: fase 0.** Hay un esqueleto que compila y abre una ventana vacía, el
+> protocolo escrito y el plan por fases. Todavía no habla con nadie.
 
 ---
 
@@ -118,7 +111,7 @@ una con qué deja hecho, cómo se comprueba y qué NO entra.
 
 | | Fase | Dónde toca |
 | :--- | :--- | :--- |
-| **0** | ~~Los dos esqueletos y la cadena de herramientas~~ **HECHA** | los dos |
+| 0 | Los dos esqueletos y la cadena de herramientas | los dos |
 | 1 | `Observable` / `Mando`, instantánea y cola de órdenes | `mcu-sim` |
 | 2 | La capa de transporte, probada sin SystemC | los dos |
 | 3 | El saludo y el arranque diferido | los dos |
@@ -148,12 +141,56 @@ Si CMake no encuentra Qt, se le dice dónde está:
 cmake -B build -DCMAKE_PREFIX_PATH=/ruta/a/Qt/6.7.0/gcc_64
 ```
 
+### En Windows con MSYS2, dos cosas que hay que hacer bien
+
+Las dos están comprobadas a base de tropezar con ellas, así que van aquí y no
+en un comentario que nadie lee.
+
+**1. No compiles dentro de la carpeta sincronizada.** Si el árbol de
+compilación está en Dropbox, OneDrive o Drive, el cliente de sincronización —y
+el antivirus detrás— abre cada `.exe` recién creado para subirlo, y mientras lo
+tiene abierto CMake no puede leerlo ni borrarlo. Sale esto:
+
+```
+file STRINGS file ".../CompilerIdCXX/a.exe" cannot be read.
+file failed to open for reading (Permission denied)
+The file ".../cmTC_32e80.exe" could not be removed: Permission denied
+```
+
+y como la detección del compilador **reintenta**, puede acabar diciendo
+`Check for working CXX compiler - works` **después** de haber fallado la
+detección de ABI. Un fallo intermitente que además se contradice, que es la
+peor clase. `CMakeLists.txt` avisa si detecta el caso, pero la solución es
+sacar el árbol de ahí —y de paso se deja de sincronizar un directorio con miles
+de ficheros objeto—:
+
+```bash
+cmake -G Ninja -B /c/build/mcu-sim-gui -S .
+cmake --build /c/build/mcu-sim-gui
+```
+
+**2. Usa el CMake de MinGW, no el de MSYS.** Si el error cita
+`/usr/share/cmake/...` mientras el compilador es `/mingw64/bin/c++.exe`, están
+mezclados dos entornos distintos. MSYS2 lo dice en su documentación: *«When
+building projects for Windows with CMake […] make sure to install the MinGW
+version of CMake»*, y recomienda Ninja como generador. Desde el shell
+**MINGW64**:
+
+```bash
+pacman -S --needed mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja \
+                   mingw-w64-x86_64-gcc  mingw-w64-x86_64-qt6-base
+which cmake     # tiene que decir /mingw64/bin/cmake
+```
+
+Con el CMake correcto las rutas salen como `C:/Users/...` y no como
+`/c/Users/...`, que es la señal de que se está usando el de MSYS.
+
 ### Qué está verificado y qué no
 
 | Plataforma | Estado |
 | :--- | :--- |
 | Linux, g++ 13, **Qt 6.4.2** | **Verificado**: configura, compila, enlaza y arranca (`QT_QPA_PLATFORM=offscreen`) |
-| Windows, MinGW / MSVC, Qt 6.7.0 | **⚠ sin verificar.** Nada del esqueleto es específico de plataforma, pero eso no es una demostración |
+| Windows, MSYS2 / MinGW-w64 | **⚠ sin verificar todavía.** Primer intento **fallido por el entorno, no por el código**: árbol de compilación dentro de Dropbox y el CMake de MSYS en vez del de MinGW. Las dos trampas, y su salida, están arriba |
 | macOS, clang, Qt 6 | **⚠ sin verificar** |
 
 Es la misma regla que sigue `mcu-sim` y por el mismo motivo: decir lo que se ha

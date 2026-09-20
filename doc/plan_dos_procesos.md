@@ -486,7 +486,7 @@ en un Mac.
 
 | | Riesgo | Cómo se cierra | Cuándo se sabe |
 | :--- | :--- | :--- | :--- |
-| **R-1** | SystemC no se construye para MinGW, o el modelo no corre en Windows | Construirlo y ejecutar la suite allí. Es el riesgo heredado más grande del proyecto (`[AG]` §19.3) y no lo crea este plan | fase 0 |
+| **R-1** | SystemC no se construye para MinGW, o el modelo no corre en Windows | Construirlo y ejecutar la suite allí. Es el riesgo heredado más grande del proyecto (`[AG]` §19.3) y no lo crea este plan. **Primer intento hecho y fallido por el ENTORNO, no por el código: §8.7** | fase 0, **abierto** |
 | **R-2** | Los procesos nuevos mueven el invariante del F407 | Que no despierten sin `--gui`. Probado en la fase 4 del plan del F415/F417 | fase 1 |
 | **R-3** | El socket solo se atiende si el tiempo simulado avanza, y en pausa no avanza | Rodajas cortas en pausa, como ya hace `sim_main.cpp` con un stub de GDB esperando | fase 6 |
 | **R-4** | La interactividad rompe el determinismo | No se puede evitar; se compensa grabando la sesión con sus instantes reales | fase 8 |
@@ -656,3 +656,43 @@ por costumbre y aquí solo hay 6.4.2. Se bajó a **6.3**, que es la versión des
 la que existe `qt_standard_project_setup()` y por tanto el mínimo real. Pedir
 más versión de la que se usa no protege de nada: solo deja fuera máquinas que
 habrían funcionado.
+
+### 8.7 El primer intento en Windows: dos trampas del entorno, ninguna del código
+
+El riesgo **R-1** se puso a prueba antes de lo previsto, con MSYS2, y falló —
+pero **no por nada que este proyecto haya escrito**. Las dos causas quedan aquí
+porque las dos se van a repetir:
+
+**1. El árbol de compilación estaba dentro de Dropbox.** El síntoma:
+
+```
+file STRINGS file ".../CompilerIdCXX/a.exe" cannot be read.
+file failed to open for reading (Permission denied)
+The file ".../cmTC_32e80.exe" could not be removed: Permission denied
+```
+
+El cliente de sincronización —y el antivirus detrás— abre cada `.exe` recién
+creado para subirlo, y mientras lo tiene abierto CMake no puede leerlo ni
+borrarlo. Lo peor no es que falle: es que la detección del compilador
+**reintenta**, así que la misma ejecución acaba diciendo
+`Check for working CXX compiler - works` después de haber fallado la detección
+de ABI. Un fallo intermitente que se contradice a sí mismo.
+
+`CMakeLists.txt` lleva ahora un `message(WARNING)` que lo detecta —Dropbox,
+OneDrive, Drive e iCloud— y dice qué hacer, porque el error de CMake no se
+parece en nada a su causa. No lo impide: avisa. Y la salida es compilar fuera
+de la carpeta sincronizada, que además evita sincronizar miles de ficheros
+objeto.
+
+**2. El CMake de MSYS con el compilador de MinGW.** En la traza, las rutas de
+los módulos eran `/usr/share/cmake/...` mientras el compilador era
+`/mingw64/bin/c++.exe`: dos entornos distintos mezclados. MSYS2 lo dice en su
+documentación —instalar la versión **MinGW** de CMake para compilar programas
+de Windows, y Ninja como generador—. La señal rápida es la forma de las rutas:
+con el CMake correcto salen como `C:/Users/...`, y con el de MSYS como
+`/c/Users/...`.
+
+**Consecuencia para el plan:** R-1 sigue **abierto** —Windows no está
+verificado— pero baja de nivel: lo que ha fallado es el montaje del entorno, no
+el `CMakeLists.txt` ni el código. El apartado «En Windows con MSYS2» del README
+tiene las dos salidas escritas, con las órdenes exactas.
