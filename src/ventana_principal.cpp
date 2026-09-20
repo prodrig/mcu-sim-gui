@@ -35,7 +35,7 @@ VentanaPrincipal::VentanaPrincipal(QWidget* padre)
 
     statusBar()->showMessage(
         tr("protocolo v%1, puerto por omision %2")
-            .arg(proto::VERSION)
+            .arg(proto::VERSION_PROTO)
             .arg(proto::PUERTO_OMISION));
 }
 

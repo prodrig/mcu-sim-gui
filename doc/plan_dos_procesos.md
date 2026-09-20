@@ -264,7 +264,7 @@ esperan sobre un `sc_event` que nadie notifica nunca. Eso es todo.
 **Cómo se comprueba.** Un grupo nuevo en la suite del F407 que, **sin gastar
 tiempo simulado**, pregunte al modelo: que un `Led` declara dos observables con
 sus unidades, que un `Button` declara un mando, que `acciona()` sobre un botón
-cambia su `pulsado`, que una orden con pieza inexistente devuelve `R_PIEZA`. La
+cambia su `pulsado`, que una orden con pieza inexistente devuelve `RES_PIEZA`. La
 doctrina del proyecto aquí es conocida: **se pregunta al modelo, no se pasa por
 el bus**, porque una sola lectura de bus cuesta 62 500 ps y mueve el invariante.
 
@@ -372,8 +372,8 @@ comprobar que los cuatro `T_ORDEN_HECHA` traen exactamente 1,00 s, 1,50 s,
 4,00 s y 4,22 s de tiempo simulado. Si esa prueba pasa, la parte con miga del
 protocolo está bien.
 
-Y las tres que hacen falta al lado: pieza inexistente → `R_PIEZA`; valor fuera
-de rango → recorte, `R_RANGO` y un `T_AVISO`; delta 0 → dos órdenes en el mismo
+Y las tres que hacen falta al lado: pieza inexistente → `RES_PIEZA`; valor fuera
+de rango → recorte, `RES_RANGO` y un `T_AVISO`; delta 0 → dos órdenes en el mismo
 instante, en el orden del mensaje.
 
 **Qué NO entra.** La grabación de sesiones. Es la fase 8 y depende de esta.
