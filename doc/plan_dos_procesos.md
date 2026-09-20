@@ -177,6 +177,8 @@ invalidar el trabajo de abajo.**
 
 ### Fase 0 — Los dos esqueletos, y que la cadena de herramientas exista
 
+> **EJECUTADA.** Lo hecho y lo medido está en §8, al final de este documento.
+
 **Por qué va primero.** Porque si Qt 6 no compila en las tres plataformas de
 destino, o si el `--gui` mínimo mueve el invariante, todo lo que hay debajo
 cambia de forma. Es una tarde y decide el resto.
@@ -523,3 +525,134 @@ adelante es una cadena, porque cada una necesita que la anterior hable.
 **La 1 es la única que se queda si se cambia de idea**: si mañana se volviera al
 escenario 2 de `[AG]` —un solo ejecutable con la simulación en un hilo—, las
 fases 2, 3 y 9 sobran y todo lo demás vale igual. Por eso está donde está.
+
+---
+
+## 8. Fase 0, ejecutada
+
+### 8.1 Qué se ha escrito
+
+**En `mcu-sim-gui`** (commit inicial): el repositorio, `CMakeLists.txt` con
+Qt 6.3+ (`Widgets` y `Network`), `main.cpp`, una `VentanaPrincipal` vacía,
+`src/protocolo.h`, `config.ejemplo.json`, el `.gitignore`, el README y estos dos
+documentos.
+
+**En `mcu-sim`**, y son cuatro ficheros:
+
+| Fichero | Qué es |
+| :--- | :--- |
+| `src/common/protocolo.h` | La copia vendida, **idéntica byte a byte** a la de `mcu-sim-gui/src/` |
+| `src/common/gui_destino.h` | El parseo de `--gui host:puerto`. Una función pura: no abre nada, no resuelve nombres, no avanza el reloj |
+| `src/top/sim_main.cpp` | Reconoce `--gui`, `--gui X` y `--gui=X`, dice a dónde apuntaría, avisa si el host no es la propia máquina, y lo pone en `--help` |
+| `src/top/sc_main.cpp` | **T130**, el grupo de comprobaciones del argumento |
+
+**Por qué el parseo es un fichero y no cuatro líneas dentro de `sc_main`.**
+Porque así se puede probar. Las formas que se equivocan no son `--gui 7000`
+—esa se ve a ojo la primera vez— sino el puerto 0, el 65536, el IPv6 sin
+corchetes y el corchete sin cerrar, que nadie escribe a mano en una prueba
+manual. Y un parseo que falla ahí **no da error**: se conecta a otro sitio, y
+eso se depura mal.
+
+### 8.2 Las seis formas, y las siete que se rechazan
+
+```
+--gui                 ->  localhost:3344
+--gui 7000            ->  localhost:7000
+--gui maquina         ->  maquina:3344
+--gui maquina:9000    ->  maquina:9000
+--gui=[::1]:5000      ->  [::1]:5000
+--gui=[::1]           ->  [::1]:3344
+```
+
+y los mensajes de las malas, que se han mirado uno a uno porque un mensaje de
+error es lo único que alguien lee cuando se equivoca:
+
+```
+--gui=host:99999  ->  --gui: '99999' no es un puerto (1..65535)
+--gui=host:0      ->  --gui: '0' no es un puerto (1..65535)
+--gui=::1:5000    ->  --gui: '::1:5000' parece IPv6: hacen falta corchetes, como en [::1]:3344
+--gui=[::1        ->  --gui: falta el corchete de cierre en '[::1'
+--gui=[]:80       ->  --gui: direccion IPv6 vacia en '[]:80'
+--gui=:5000       ->  --gui: falta el host antes de ':'
+--gui=host:       ->  --gui: falta el puerto despues de ':'
+```
+
+**El IPv6 exige corchetes, y no es capricho:** `::1:5000` es una dirección IPv6
+perfectamente válida, así que sin corchetes no hay forma de saber si esos dos
+puntos finales separan un puerto o son parte de la dirección. Se rechaza en vez
+de adivinar, y el error lo dice.
+
+**Y `--gui --ondas` sigue siendo la ventana por omisión y las ondas**, no un
+host llamado `--ondas`: lo que sigue al argumento se toma como destino solo si
+no empieza por guion. Es la misma regla que `--help` ya usaba.
+
+### 8.3 La política del host, que es una decisión
+
+`--gui otra-maquina:3344` **funciona** —hace falta para una GUI remota— pero
+saca un aviso por la salida de error:
+
+```
+AVISO: 'otra-maquina' no es la propia maquina. Este enlace NO esta
+       autenticado: quien lo alcance podra ver el estado de la simulacion y
+       accionar sus mandos. Los servidores de GDB de este programa solo
+       escuchan en bucle local por esto mismo.
+```
+
+`es_bucle_local()` mira el **nombre**, no resuelve: resolver es una operación de
+red y este fichero no hace red. La consecuencia está dicha y comprobada en T130:
+un alias del `hosts` que apunte a `127.0.0.1` **avisa de más**. Avisar de más es
+el lado bueno en el que equivocarse.
+
+### 8.4 Cómo se ha comprobado
+
+**T130 — «El argumento `--gui`: las formas buenas y las raras»**, 43
+comprobaciones, todas puras: siete formas buenas, los cinco límites del puerto,
+los seis casos malos con el texto de su error, ocho de `es_bucle_local()`, dos
+de cómo se vuelve a escribir un destino y seis de las constantes del protocolo
+—versión, puerto y los tamaños de `Cabecera`, `Orden` y `Muestra`—.
+
+Esas seis últimas compilan por `static_assert` de todos modos; están además en
+T130 porque **un número que solo vive en un `static_assert` no aparece en ningún
+informe de pruebas**, y el tamaño de `Orden` es justo el dato que, si cambia sin
+querer, desconecta los dos programas sin un solo error de compilación.
+
+**El resultado, medido:**
+
+| | Antes | Ahora |
+| :--- | ---: | ---: |
+| `make test407` | 2074 | **2117** *(+43)* |
+| Tiempo simulado del F407 | `2336217899213 ps` | **`2336217899213 ps`** |
+| `make test446` | 203, `1033367277932 ps` | igual |
+| `make test417` | 164, `718988288 ps` | igual |
+| `make red` | 13 | igual |
+| `make asan407` | limpio | **limpio**, 2117/2117 |
+| Placas que validan | 6, con 0 avisos | igual |
+
+**El invariante no se ha movido**, que era lo único que esta fase podía romper.
+No se ha movido porque las 43 comprobaciones nuevas son funciones puras sobre
+cadenas: no pasan por el bus, no despiertan un proceso y no piden tiempo. Es la
+misma doctrina con la que se escribieron las comprobaciones de las máscaras del
+RCC y las del catálogo de MCU.
+
+### 8.5 Lo que NO se ha hecho, que también es la fase 0
+
+Ni un socket. Ni un `Observable`. Ni una ventana con contenido. `--gui` hoy
+imprime una línea y sigue:
+
+```
+gui: hablaria con mcu-sim-gui en localhost:3344 (protocolo v1)
+     -- fase 0: todavia no se conecta
+```
+
+### 8.6 Lo que sigue sin verificar, y es el riesgo R-1
+
+La GUI **configura, compila, enlaza y arranca** en Linux con g++ 13 y Qt 6.4.2
+(con `QT_QPA_PLATFORM=offscreen`). En **Windows y macOS no se ha probado**, ni
+la GUI ni SystemC. Nada del esqueleto es específico de plataforma, pero eso no
+es una demostración, y sigue siendo el riesgo heredado más grande del proyecto.
+
+Un detalle del camino que vale como aviso: el `CMakeLists.txt` pedía **Qt 6.5**
+por costumbre y aquí solo hay 6.4.2. Se bajó a **6.3**, que es la versión desde
+la que existe `qt_standard_project_setup()` y por tanto el mínimo real. Pedir
+más versión de la que se usa no protege de nada: solo deja fuera máquinas que
+habrían funcionado.

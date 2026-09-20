@@ -4,8 +4,15 @@ La **contraparte de visualización gráfica de
 [`mcu-sim`](../mcu-sim)**, el modelo SystemC de microcontroladores STM32.
 `mcu-sim` simula; esto lo enseña y deja tocarlo.
 
-> **Estado: fase 0.** Hay un esqueleto que compila y abre una ventana vacía, el
-> protocolo escrito y el plan por fases. Todavía no habla con nadie.
+> **Estado: fase 0 EJECUTADA.** El esqueleto compila y abre una ventana; el
+> protocolo y el plan están escritos; y `mcu-sim` ya **reconoce
+> `--gui host:puerto`** —las seis formas, con sus errores— y lleva la copia
+> vendida de `protocolo.h`. Todavía no se abre ningún socket: eso es la fase 3.
+>
+> Lo que la fase 0 tenía que demostrar, demostrado: **sin `--gui` no ha
+> cambiado nada.** Las tres suites de `mcu-sim` siguen pasando —**2117** (43
+> nuevas, las del parseo), 203 y 164— y el invariante del F407 sigue en
+> `2336217899213 ps` **al picosegundo**.
 
 ---
 
@@ -111,7 +118,7 @@ una con qué deja hecho, cómo se comprueba y qué NO entra.
 
 | | Fase | Dónde toca |
 | :--- | :--- | :--- |
-| 0 | Los dos esqueletos y la cadena de herramientas | los dos |
+| **0** | ~~Los dos esqueletos y la cadena de herramientas~~ **HECHA** | los dos |
 | 1 | `Observable` / `Mando`, instantánea y cola de órdenes | `mcu-sim` |
 | 2 | La capa de transporte, probada sin SystemC | los dos |
 | 3 | El saludo y el arranque diferido | los dos |
