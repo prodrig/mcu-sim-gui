@@ -232,7 +232,7 @@ descarguen el simulador. Eso es trabajo de la **fase 9** y está anotado allí.
 | Plataforma | Estado |
 | :--- | :--- |
 | Linux, g++ 13, **Qt 6.4.2** | **Verificado**: configura, compila, enlaza y arranca (`QT_QPA_PLATFORM=offscreen`) |
-| Windows, MSYS2 / MinGW-w64 | **⚠ sin verificar todavía.** Dos intentos fallidos, los dos **por el entorno y no por el código**: el segundo se cerró al identificar que **ESET pone en cuarentena los ejecutables recién compilados**. Las tres trampas están arriba |
+| Windows, MSYS2 / MinGW-w64 | **⚠ sin verificar todavía**, pero el vecino sí: `mcu-sim.exe` se construye y **se ejecuta** allí. Los intentos de esta GUI fallaron **por el entorno y no por el código** —la causa era que **ESET pone en cuarentena los ejecutables recién compilados**—. Las tres trampas están arriba, y hay una cuarta que llega al repartirlo: las DLL (plan §8.8) |
 | macOS, clang, Qt 6 | **⚠ sin verificar** |
 
 Es la misma regla que sigue `mcu-sim` y por el mismo motivo: decir lo que se ha

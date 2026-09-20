@@ -497,7 +497,7 @@ en un Mac.
 
 | | Riesgo | Cómo se cierra | Cuándo se sabe |
 | :--- | :--- | :--- | :--- |
-| **R-1** | SystemC no se construye para MinGW, o el modelo no corre en Windows | Construirlo y ejecutar la suite allí. Es el riesgo heredado más grande del proyecto (`[AG]` §19.3) y no lo crea este plan. **Dos intentos, los dos fallidos por el ENTORNO y no por el código; la causa fue el antivirus: §8.7** | fase 0, **abierto** |
+| **R-1** | SystemC no se construye para MinGW, o el modelo no corre en Windows | **Medio cerrado, y por el lado bueno: SystemC 2.3.4 SÍ se construye para MinGW y `mcu-sim.exe` arranca y responde.** Queda pasar las suites allí, y `mcu-sim-gui` sigue sin compilarse en Windows. El relato, con los dos diagnósticos equivocados, en §8.7; la trampa de `libwinpthread`, en §8.8 | fase 0, **abierto a medias** |
 | **R-2** | Los procesos nuevos mueven el invariante del F407 | Que no despierten sin `--gui`. Probado en la fase 4 del plan del F415/F417 | fase 1 |
 | **R-3** | El socket solo se atiende si el tiempo simulado avanza, y en pausa no avanza | Rodajas cortas en pausa, como ya hace `sim_main.cpp` con un stub de GDB esperando | fase 6 |
 | **R-4** | La interactividad rompe el determinismo | No se puede evitar; se compensa grabando la sesión con sus instantes reales | fase 8 |
@@ -737,3 +737,49 @@ directorio de compilación—, y están escritas con su ruta de menús en el REA
 **Consecuencia para el producto, y no es una anécdota.** `mcu-sim-gui` se va a
 distribuir a alumnos como un `.exe` sin firmar, y lo que acaba de pasar aquí les
 va a pasar a ellos en sus máquinas. Es trabajo de la **fase 9**, anotado allí.
+
+
+---
+
+### 8.8 La trampa que espera al alumno: las DLL
+
+Saliendo de la §8.7 apareció algo que **no es de este plan pero decide la fase
+9**, y que se midió en la misma máquina.
+
+`mcu-sim.exe` —construido en MSYS2, 22,5 MB— hace esto según dónde se ejecute:
+
+| Dónde | Qué pasa |
+| :--- | :--- |
+| Terminal **MINGW64** | funciona |
+| **PowerShell** | no dice nada y no hace nada |
+| **`cmd.exe`** | *«No se encuentra el punto de entrada `clock_gettime64` en la biblioteca de vínculos dinámicos…»* |
+
+El mensaje **no dice que falte la DLL**: dice que la que ha encontrado no
+exporta ese símbolo. La encontró, y es la equivocada. El GCC de MSYS2 usa el
+modelo de hilos POSIX, así que `std::chrono` y SystemC arrastran una
+importación de `libwinpthread-1.dll`; en el shell MINGW64 el `PATH` lleva
+delante la buena, y fuera gana cualquier otra copia que haya por la máquina —de
+otro MinGW, de Qt, de un IDE—.
+
+Arreglado en `mcu-sim` con **`-static`** en el enlazado de Windows, que es lo
+que `-static-libgcc -static-libstdc++` no cubría. Está contado en
+`mcu-sim/doc/compilacion.md` §5.6.
+
+**Y aquí está lo que importa para este plan.** Ese fallo es *exactamente* el que
+tendrá el alumno que reciba el ejecutable: un programa que arranca en la máquina
+del profesor y no en la suya, con un mensaje sobre una DLL de la que nunca ha
+oído hablar, y que además **depende del orden de su `PATH`**, así que funciona
+en unas máquinas y en otras no, aparentemente al azar. Es la peor clase de
+incidencia de soporte que existe, y es justo el argumento de `[AG]` §18.2 —el
+tiempo del profesor es el recurso escaso— apareciendo por tercera vez.
+
+**Para `mcu-sim-gui` el problema es mayor**, no menor: además de las de MinGW
+hay que llevar las de **Qt** —`Qt6Core`, `Qt6Gui`, `Qt6Widgets`, `Qt6Network`,
+los complementos de plataforma—, y eso no lo arregla un `-static` porque un Qt
+dinámico es lo normal. La herramienta es `windeployqt`, y hay que usarla en la
+fase 9 y **probar el resultado en una máquina donde no haya Qt instalado**, que
+es la única prueba que vale.
+
+Dicho de otro modo: la fase 9 tiene ahora tres deberes, no uno. Firmar el
+ejecutable (§8.7), enlazar estáticamente lo que se pueda, y empaquetar con
+`windeployqt` lo que no.
