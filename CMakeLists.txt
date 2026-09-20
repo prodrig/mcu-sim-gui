@@ -22,32 +22,38 @@ project(mcu-sim-gui
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# --- Un aviso que ahorra una tarde ------------------------------------------
-# Compilar DENTRO de una carpeta sincronizada (Dropbox, OneDrive, Drive) falla
-# de una forma que no se parece en nada a su causa: el cliente de sincronizacion
-# -y el antivirus detras- abren cada `.exe` recien creado para subirlo, y
-# mientras lo tienen abierto CMake no puede leerlo ni borrarlo. El sintoma es
-# "Permission denied" sobre `CompilerIdCXX/a.exe` o sobre un `cmTC_*.exe`, y
-# como la deteccion del compilador REINTENTA, a veces acaba diciendo "works"
-# despues de haber fallado. Un fallo intermitente que ademas se contradice.
+# --- Dos avisos que ahorran una tarde ---------------------------------------
 #
-# La solucion no es apagar nada: es sacar el arbol de compilacion de ahi. Y de
-# paso se deja de sincronizar un directorio con miles de ficheros objeto.
+# 1. COMPILAR DENTRO DE UNA CARPETA SINCRONIZADA (Dropbox, OneDrive, Drive) es
+#    mala idea: se sincronizan miles de ficheros objeto que no le importan a
+#    nadie, y el cliente de sincronizacion abre cada fichero recien creado, lo
+#    que puede dar bloqueos esporadicos. No es fatal -hay quien compila ahi
+#    todos los dias- pero no cuesta nada evitarlo:
 #
-#   cmake -G Ninja -B C:/build/mcu-sim-gui -S .
+#      cmake -G Ninja -B C:/build/mcu-sim-gui -S .
 #
-# Esto no lo impide -hay quien tiene el antivirus configurado y le funciona-
-# pero lo dice antes de que el error aparezca y confunda.
+# 2. Y SI EL SINTOMA ES "Permission denied" SOBRE UN .exe RECIEN CREADO, o un
+#    ejecutable que aparece y luego DESAPARECE, no es la carpeta: es el
+#    ANTIVIRUS poniendo en cuarentena binarios recien compilados, que es
+#    exactamente la pinta que tiene lo que un antivirus heuristico busca. Un
+#    compilador produce ficheros nuevos, sin firmar y desconocidos. El README
+#    lo cuenta, con las exclusiones concretas.
+#
+#    Eso paso de verdad en este proyecto, con ESET, y costo dos diagnosticos
+#    equivocados -este aviso era el primero de ellos-. Por eso sigue aqui, pero
+#    diciendo lo que es: una molestia, no la causa de esa clase de error.
 foreach(_carpeta_nube "Dropbox" "OneDrive" "Google Drive" "GoogleDrive" "iCloud")
     string(FIND "${CMAKE_BINARY_DIR}" "${_carpeta_nube}" _pos_nube)
     if(NOT _pos_nube EQUAL -1)
         message(WARNING
             "El arbol de compilacion esta dentro de una carpeta de ${_carpeta_nube}:\n"
             "  ${CMAKE_BINARY_DIR}\n"
-            "El cliente de sincronizacion abre cada .exe recien creado y CMake no "
-            "puede leerlo ni borrarlo: sale 'Permission denied' sobre a.exe o "
-            "cmTC_*.exe. Compila fuera de la carpeta sincronizada:\n"
-            "  cmake -G Ninja -B C:/build/mcu-sim-gui -S .")
+            "Se van a sincronizar miles de ficheros objeto, y el cliente puede "
+            "bloquear ficheros recien creados. Mejor fuera:\n"
+            "  cmake -G Ninja -B C:/build/mcu-sim-gui -S .\n"
+            "Y si ves 'Permission denied' sobre un .exe recien creado, o un "
+            "ejecutable que desaparece, eso NO es esto: es el antivirus. "
+            "Vease el apartado de Windows del README.")
     endif()
 endforeach()
 

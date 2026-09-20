@@ -141,40 +141,17 @@ Si CMake no encuentra Qt, se le dice dónde está:
 cmake -B build -DCMAKE_PREFIX_PATH=/ruta/a/Qt/6.7.0/gcc_64
 ```
 
-### En Windows con MSYS2, dos cosas que hay que hacer bien
+### En Windows con MSYS2: tres trampas, y la tercera es la que muerde
 
-Las dos están comprobadas a base de tropezar con ellas, así que van aquí y no
-en un comentario que nadie lee.
+Las tres están comprobadas a base de tropezar con ellas. Van en el orden en que
+aparecieron, que no es el orden de importancia: **la que de verdad rompe la
+compilación es la tercera.**
 
-**1. No compiles dentro de la carpeta sincronizada.** Si el árbol de
-compilación está en Dropbox, OneDrive o Drive, el cliente de sincronización —y
-el antivirus detrás— abre cada `.exe` recién creado para subirlo, y mientras lo
-tiene abierto CMake no puede leerlo ni borrarlo. Sale esto:
-
-```
-file STRINGS file ".../CompilerIdCXX/a.exe" cannot be read.
-file failed to open for reading (Permission denied)
-The file ".../cmTC_32e80.exe" could not be removed: Permission denied
-```
-
-y como la detección del compilador **reintenta**, puede acabar diciendo
-`Check for working CXX compiler - works` **después** de haber fallado la
-detección de ABI. Un fallo intermitente que además se contradice, que es la
-peor clase. `CMakeLists.txt` avisa si detecta el caso, pero la solución es
-sacar el árbol de ahí —y de paso se deja de sincronizar un directorio con miles
-de ficheros objeto—:
-
-```bash
-cmake -G Ninja -B /c/build/mcu-sim-gui -S .
-cmake --build /c/build/mcu-sim-gui
-```
-
-**2. Usa el CMake de MinGW, no el de MSYS.** Si el error cita
+**1. Usa el CMake de MinGW, no el de MSYS.** Si el error cita
 `/usr/share/cmake/...` mientras el compilador es `/mingw64/bin/c++.exe`, están
-mezclados dos entornos distintos. MSYS2 lo dice en su documentación: *«When
-building projects for Windows with CMake […] make sure to install the MinGW
-version of CMake»*, y recomienda Ninja como generador. Desde el shell
-**MINGW64**:
+mezclados dos entornos distintos. MSYS2 lo documenta: *«When building projects
+for Windows with CMake […] make sure to install the MinGW version of CMake»*, y
+recomienda Ninja como generador. Desde el shell **MINGW64**:
 
 ```bash
 pacman -S --needed mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja \
@@ -182,15 +159,80 @@ pacman -S --needed mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja \
 which cmake     # tiene que decir /mingw64/bin/cmake
 ```
 
-Con el CMake correcto las rutas salen como `C:/Users/...` y no como
-`/c/Users/...`, que es la señal de que se está usando el de MSYS.
+**2. No compiles dentro de la carpeta sincronizada.** Un árbol de compilación
+dentro de Dropbox, OneDrive o Drive sincroniza miles de ficheros objeto que no
+le importan a nadie, y el cliente abre cada fichero recién creado. No es fatal,
+pero no cuesta nada evitarlo —y `CMakeLists.txt` avisa si lo detecta—:
+
+```bash
+cmake -G Ninja -B C:/build/mcu-sim-gui -S .
+cmake --build C:/build/mcu-sim-gui
+```
+
+**3. El antivirus pone en cuarentena lo que acabas de compilar.** Esta es la que
+para la compilación en seco, y la que no se parece en nada a su causa. El
+síntoma, en **ESET**, es este:
+
+```
+file STRINGS file ".../CompilerIdCXX/a.exe" cannot be read.
+file failed to open for reading (Permission denied)
+ninja: error: '.../testCXXCompiler.cxx', missing and no known rule to make it
+-- Check for working CXX compiler: /mingw64/bin/c++.exe - broken
+```
+
+Y la prueba que lo desenmascara no necesita CMake ninguno:
+
+```bash
+mkdir -p /c/build/hola && cd /c/build/hola
+printf 'int main(){return 0;}\n' > t.cpp
+g++ t.cpp -o t.exe && ls -la t.exe && ./t.exe
+ls -l                       # ¿sigue estando t.exe?
+```
+
+Si el `.exe` se crea, **no se deja ejecutar** («Permission denied») y unos
+segundos después **ha desaparecido del directorio**, no hay más que hablar: un
+fichero bloqueado da permiso denegado, pero un fichero que se esfuma está en
+cuarentena. La confirmación está en el propio antivirus —**ESET → Herramientas
+→ Cuarentena**, donde aparece el `t.exe`— y el registro dice qué módulo lo hizo.
+
+**Por qué pasa, y por qué no tiene arreglo desde el proyecto:** un compilador
+produce ejecutables **nuevos, sin firmar y desconocidos**, que es literalmente
+la definición de lo que un antivirus heurístico caza. Da igual el compilador,
+el generador o el IDE.
+
+**El arreglo** son dos exclusiones de rendimiento en ESET:
+
+> **Configuración avanzada** (`F5`) → **Motor de detección** → **Exclusiones** →
+> **Exclusiones de rendimiento** → **Editar** → **Agregar**
+
+```
+C:\msys64\*
+C:\build\*
+```
+
+Antes de tocar la configuración, si quieres confirmarlo sin compromiso: **pausa
+la protección diez minutos** desde el icono de ESET y repite la prueba de
+arriba. Si el `t.exe` sobrevive y se ejecuta, ya está identificado.
+
+Si después de las exclusiones sigue pasando, el que bloquea no es el escáner en
+tiempo real sino **HIPS** o **ESET LiveGuard** —el que manda a la nube los
+ejecutables desconocidos y los retiene hasta tener veredicto—; el registro de
+ESET dice cuál, y cada uno tiene su propia lista de exclusiones. Y si el equipo
+lo administra tu organización, esto es una petición de una línea para quien
+lleve la consola: desbloquea cualquier trabajo de compilación en esa máquina, no
+solo este proyecto.
+
+**Y una consecuencia para el producto, que no es una anécdota.** `mcu-sim-gui`
+se va a distribuir a alumnos como un `.exe` sin firmar. Lo que acaba de pasar
+aquí les va a pasar a ellos, en sus máquinas, con sus antivirus, el día que
+descarguen el simulador. Eso es trabajo de la **fase 9** y está anotado allí.
 
 ### Qué está verificado y qué no
 
 | Plataforma | Estado |
 | :--- | :--- |
 | Linux, g++ 13, **Qt 6.4.2** | **Verificado**: configura, compila, enlaza y arranca (`QT_QPA_PLATFORM=offscreen`) |
-| Windows, MSYS2 / MinGW-w64 | **⚠ sin verificar todavía.** Primer intento **fallido por el entorno, no por el código**: árbol de compilación dentro de Dropbox y el CMake de MSYS en vez del de MinGW. Las dos trampas, y su salida, están arriba |
+| Windows, MSYS2 / MinGW-w64 | **⚠ sin verificar todavía.** Dos intentos fallidos, los dos **por el entorno y no por el código**: el segundo se cerró al identificar que **ESET pone en cuarentena los ejecutables recién compilados**. Las tres trampas están arriba |
 | macOS, clang, Qt 6 | **⚠ sin verificar** |
 
 Es la misma regla que sigue `mcu-sim` y por el mismo motivo: decir lo que se ha

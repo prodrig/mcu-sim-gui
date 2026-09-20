@@ -470,7 +470,18 @@ La fase que salda la objeción de `[AG]` §18.2 del todo.
 la tabla de `doc/protocolo.md` §6 con una comprobación detrás. El empaquetado
 —un instalador por plataforma que lleve los dos ejecutables— y el mensaje de
 error para cuando no se encuentra `mcu-sim`, que tiene que decir dónde ha
-mirado. Y el modo inverso, `--gui-escucha puerto`, para engancharse a una
+mirado.
+
+**Y una decisión que la §8.7 acaba de convertir en obligatoria: la FIRMA de los
+ejecutables.** Un binario nuevo, sin firmar y desconocido es exactamente lo que
+un antivirus heurístico pone en cuarentena — le pasó a este proyecto en su
+propia máquina de desarrollo, con ESET, y le va a pasar a cada alumno que
+descargue el simulador. Las salidas son tres y hay que elegir una a propósito:
+firmar con un certificado de firma de código (cuesta dinero y hay que
+renovarlo), distribuir por un canal que dé reputación al binario, o **documentar
+la exclusión** y aceptar las incidencias de soporte que eso genera. La tercera
+es gratis y es la peor, porque consume el tiempo del profesor, que es el recurso
+escaso: exactamente el argumento de `[AG]` §18.2 reapareciendo por otra puerta. Y el modo inverso, `--gui-escucha puerto`, para engancharse a una
 simulación ya en marcha: es de profesor, no de alumno, pero es barato aquí y
 caro después.
 
@@ -486,7 +497,7 @@ en un Mac.
 
 | | Riesgo | Cómo se cierra | Cuándo se sabe |
 | :--- | :--- | :--- | :--- |
-| **R-1** | SystemC no se construye para MinGW, o el modelo no corre en Windows | Construirlo y ejecutar la suite allí. Es el riesgo heredado más grande del proyecto (`[AG]` §19.3) y no lo crea este plan. **Primer intento hecho y fallido por el ENTORNO, no por el código: §8.7** | fase 0, **abierto** |
+| **R-1** | SystemC no se construye para MinGW, o el modelo no corre en Windows | Construirlo y ejecutar la suite allí. Es el riesgo heredado más grande del proyecto (`[AG]` §19.3) y no lo crea este plan. **Dos intentos, los dos fallidos por el ENTORNO y no por el código; la causa fue el antivirus: §8.7** | fase 0, **abierto** |
 | **R-2** | Los procesos nuevos mueven el invariante del F407 | Que no despierten sin `--gui`. Probado en la fase 4 del plan del F415/F417 | fase 1 |
 | **R-3** | El socket solo se atiende si el tiempo simulado avanza, y en pausa no avanza | Rodajas cortas en pausa, como ya hace `sim_main.cpp` con un stub de GDB esperando | fase 6 |
 | **R-4** | La interactividad rompe el determinismo | No se puede evitar; se compensa grabando la sesión con sus instantes reales | fase 8 |
@@ -657,42 +668,72 @@ la que existe `qt_standard_project_setup()` y por tanto el mínimo real. Pedir
 más versión de la que se usa no protege de nada: solo deja fuera máquinas que
 habrían funcionado.
 
-### 8.7 El primer intento en Windows: dos trampas del entorno, ninguna del código
+### 8.7 Windows: dos diagnósticos equivocados y una causa real
 
-El riesgo **R-1** se puso a prueba antes de lo previsto, con MSYS2, y falló —
-pero **no por nada que este proyecto haya escrito**. Las dos causas quedan aquí
-porque las dos se van a repetir:
+El riesgo **R-1** se puso a prueba antes de lo previsto, con MSYS2, y **sigue
+abierto**: `mcu-sim-gui` todavía no se ha compilado en Windows. Pero el camino
+hasta saber por qué merece quedar escrito entero, incluidos los dos diagnósticos
+que no eran.
 
-**1. El árbol de compilación estaba dentro de Dropbox.** El síntoma:
+**El síntoma.** CMake no podía leer ni borrar el `a.exe` que acababa de escribir
+para identificar el compilador, y Ninja decía que un fichero **fuente** recién
+creado estaba *ausente*:
 
 ```
 file STRINGS file ".../CompilerIdCXX/a.exe" cannot be read.
 file failed to open for reading (Permission denied)
-The file ".../cmTC_32e80.exe" could not be removed: Permission denied
+ninja: error: '.../testCXXCompiler.cxx', missing and no known rule to make it
+-- Check for working CXX compiler: /mingw64/bin/c++.exe - broken
 ```
 
-El cliente de sincronización —y el antivirus detrás— abre cada `.exe` recién
-creado para subirlo, y mientras lo tiene abierto CMake no puede leerlo ni
-borrarlo. Lo peor no es que falle: es que la detección del compilador
-**reintenta**, así que la misma ejecución acaba diciendo
-`Check for working CXX compiler - works` después de haber fallado la detección
-de ABI. Un fallo intermitente que se contradice a sí mismo.
+**Diagnóstico 1, equivocado: Dropbox.** El árbol de compilación estaba dentro de
+la carpeta sincronizada, y eso explica los síntomas de manera perfectamente
+razonable —el cliente abre cada fichero recién creado para subirlo—. Sacarlo de
+ahí era buena idea de todos modos. **Y falló igual.**
 
-`CMakeLists.txt` lleva ahora un `message(WARNING)` que lo detecta —Dropbox,
-OneDrive, Drive e iCloud— y dice qué hacer, porque el error de CMake no se
-parece en nada a su causa. No lo impide: avisa. Y la salida es compilar fuera
-de la carpeta sincronizada, que además evita sincronizar miles de ficheros
-objeto.
+**Diagnóstico 2, incompleto: el CMake de MSYS con el compilador de MinGW.** La
+traza citaba `/usr/share/cmake/...` mientras el compilador era
+`/mingw64/bin/c++.exe`: dos entornos mezclados, un error de verdad que había que
+corregir. Corregido, **falló igual**, y esta vez peor: el compilador declarado
+`broken`.
 
-**2. El CMake de MSYS con el compilador de MinGW.** En la traza, las rutas de
-los módulos eran `/usr/share/cmake/...` mientras el compilador era
-`/mingw64/bin/c++.exe`: dos entornos distintos mezclados. MSYS2 lo dice en su
-documentación —instalar la versión **MinGW** de CMake para compilar programas
-de Windows, y Ninja como generador—. La señal rápida es la forma de las rutas:
-con el CMake correcto salen como `C:/Users/...`, y con el de MSYS como
-`/c/Users/...`.
+**La causa real: el antivirus.** La prueba que lo cerró no usa CMake:
 
-**Consecuencia para el plan:** R-1 sigue **abierto** —Windows no está
-verificado— pero baja de nivel: lo que ha fallado es el montaje del entorno, no
-el `CMakeLists.txt` ni el código. El apartado «En Windows con MSYS2» del README
-tiene las dos salidas escritas, con las órdenes exactas.
+```bash
+printf 'int main(){return 0;}\n' > t.cpp
+g++ t.cpp -o t.exe && ls -la t.exe && ./t.exe
+```
+
+El `.exe` **se creó** —32 KB, `g++` terminó sin una queja—, **no se dejó
+ejecutar** («Permission denied») y unos segundos después **había desaparecido
+del directorio**. Ahí se acaba la ambigüedad: un fichero bloqueado da permiso
+denegado; un fichero que se esfuma está **en cuarentena**.
+
+Y el dato que parecía descartarlo era justo el que lo confirmaba: Defender
+informaba `RealTimeProtectionEnabled: False`. Eso no quiere decir que no haya
+antivirus —quiere decir que **hay otro** que se ha registrado como el del
+sistema y Defender se ha apartado. Era **ESET**.
+
+**Por qué pasa, y por qué no tiene arreglo desde el proyecto.** Un compilador
+produce ejecutables **nuevos, sin firmar y desconocidos**, que es literalmente
+el perfil que un antivirus heurístico busca. No hay compilador, generador ni IDE
+que lo evite. La salida son dos exclusiones de rendimiento —`C:\msys64\*` y el
+directorio de compilación—, y están escritas con su ruta de menús en el README.
+
+**Las tres lecciones, que es para lo que sirve escribir esto.**
+
+1. **El primer diagnóstico razonable no es el correcto por ser razonable.**
+   Dropbox explicaba los síntomas y era falso. Lo que lo destapó fue bajar un
+   escalón: quitar CMake de en medio y probar el compilador a pelo. Cuando una
+   herramienta compleja falla de forma rara, la pregunta útil es *qué es lo más
+   simple que también debería funcionar*.
+2. **«El antivirus está desactivado» hay que leerlo dos veces.** Defender
+   apagado es un síntoma de que manda otro, no de que no mande nadie.
+3. **El fallo intermitente era una pista, no ruido.** En el primer intento la
+   misma ejecución llegó a decir `works` después de haber fallado la detección
+   de ABI. Un componente que se contradice consigo mismo casi siempre tiene a
+   alguien de fuera manipulándole los ficheros.
+
+**Consecuencia para el producto, y no es una anécdota.** `mcu-sim-gui` se va a
+distribuir a alumnos como un `.exe` sin firmar, y lo que acaba de pasar aquí les
+va a pasar a ellos en sus máquinas. Es trabajo de la **fase 9**, anotado allí.
