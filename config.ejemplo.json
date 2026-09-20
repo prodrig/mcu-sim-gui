@@ -1,0 +1,39 @@
+{
+  "_comentario": [
+    "Configuracion de ejemplo de mcu-sim-gui. Se copia a config.json -que no se",
+    "versiona, porque las rutas son de cada maquina- y se ajusta. Todo lo que hay",
+    "aqui se puede cambiar tambien desde el dialogo de lanzamiento de la ventana:",
+    "este fichero es para no tener que hacerlo cada vez, no la unica via."
+  ],
+
+  "mcu_sim": {
+    "_comentario": "Donde esta el ejecutable del simulador y con que se lanza.",
+    "ejecutable": "../mcu-sim/src/build/mcu-sim",
+    "directorio_de_trabajo": "../mcu-sim/src",
+    "placa": "placas/discovery_min.xml",
+    "firmware": "verif/fw/blinky/blinky.bin",
+    "ms": 0,
+    "mcu": "",
+    "ondas": false,
+    "tiempo_real": 1.0,
+    "gdb": "ninguno",
+    "puerto_gdb": 3333
+  },
+
+  "enlace": {
+    "_comentario": [
+      "Donde escucha la GUI. mcu-sim se conecta aqui: se le pasa en --gui.",
+      "Si el puerto esta cogido, la GUI toma otro y se lo dice al hijo; el",
+      "numero de aqui es una preferencia, no una exigencia."
+    ],
+    "host": "localhost",
+    "puerto": 3344
+  },
+
+  "vista": {
+    "_comentario": "periodo_ms es el de muestreo en tiempo SIMULADO.",
+    "ritmo": "real",
+    "periodo_ms": 16.7,
+    "solo_interesantes": true
+  }
+}

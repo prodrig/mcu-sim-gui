@@ -1,0 +1,49 @@
+# Artefactos de compilación
+build/
+build-*/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+*.o
+*.a
+*.so
+*.so.*
+*.dll
+*.exe
+
+# Lo que genera Qt
+moc_*.cpp
+moc_*.h
+ui_*.h
+qrc_*.cpp
+*.qmake.stash
+.qmake.cache
+Makefile
+*.pro.user
+*.pro.user.*
+
+# Editores e IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+compile_commands.json
+.cache/
+
+# Sistema operativo y Dropbox
+.DS_Store
+Thumbs.db
+desktop.ini
+*conflicted copy*
+*conflicto*
+
+# Residuos que dejo yo: el sandbox remoto no puede borrar ficheros.
+_to_delete/
+
+# Copias en disco de los ficheros que Claude entrega por la conversación.
+Claude outputs/
+
+# Configuración local del usuario: la ruta a mcu-sim y a las placas es de cada
+# máquina. El ejemplo versionado es `config.ejemplo.json`.
+config.json
