@@ -385,6 +385,12 @@ Y el caso que hay que decidir aquí y no después: `--valida --gui`.
 **Qué NO entra.** Instantáneas, órdenes, control. Al llegar `T_ARRANCA` el
 modelo simula su ventana como hoy y termina.
 
+> **Ejecutada el 2026-10-01** (§11). `--valida --gui` queda decidido: placa,
+> catálogo y `T_FIN`, sin `T_LISTO` y sin esperar (§11.2). Y destapó un fallo
+> de la fase 1 que nadie podía ver hasta juntar los dos XML: las piezas que no
+> son `sc_module` tenían en el catálogo un nombre distinto del de la placa
+> (§11.3).
+
 ---
 
 ### Fase 4 — Instantáneas, avisos y estado en marcha
@@ -550,7 +556,7 @@ en un Mac.
 
 | | Riesgo | Cómo se cierra | Cuándo se sabe |
 | :--- | :--- | :--- | :--- |
-| **R-1** | SystemC no se construye para MinGW, o el modelo no corre en Windows | **Medio cerrado, y por el lado bueno: SystemC 2.3.4 SÍ se construye para MinGW y `mcu-sim.exe` arranca y responde.** Queda pasar las suites allí, y `mcu-sim-gui` sigue sin compilarse en Windows. El relato, con los dos diagnósticos equivocados, en §8.7; la trampa de `libwinpthread`, en §8.8 | fase 0, **abierto a medias** |
+| **R-1** | SystemC no se construye para MinGW, o el modelo no corre en Windows | **Medio cerrado, y por el lado bueno: SystemC 2.3.4 SÍ se construye para MinGW y `mcu-sim.exe` arranca y responde.** Y desde el 2026-10-01 **el CI de los dos repositorios lo cierra en la práctica**: las suites de `mcu-sim` pasan en MSYS2 con los invariantes al picosegundo, y `mcu-sim-gui` compila y pasa `ctest` allí (§10.3). Lo que queda abierto es lo que el CI no ve: una ventana en una pantalla de Windows de verdad, y repartir el ejecutable (fase 9). El relato, con los dos diagnósticos equivocados, en §8.7; la trampa de `libwinpthread`, en §8.8 | fase 0; **cerrado por el CI** salvo lo que se ve a mano |
 | **R-2** | Los procesos nuevos mueven el invariante del F407 | Que no despierten sin `--gui`. Probado en la fase 4 del plan del F415/F417 | **cerrado en la fase 1**: con la frontera construida y sin activar, `test407` da 2118 y `resto` en `2240553274213 ps`, y `sim` los mismos deltas (§9.4) |
 | **R-3** | El socket solo se atiende si el tiempo simulado avanza, y en pausa no avanza | Rodajas cortas en pausa, como ya hace `sim_main.cpp` con un stub de GDB esperando | fase 6 |
 | **R-4** | La interactividad rompe el determinismo | No se puede evitar; se compensa grabando la sesión con sus instantes reales | fase 8 |
@@ -1086,3 +1092,126 @@ cada vez:
 Ni un mensaje con significado: nadie manda un `T_HOLA` de verdad todavía.
 `sim --gui` sigue imprimiendo una línea y nada más, y la ventana no usa la
 `Conexion`. Las dos cosas son la fase 3.
+
+---
+
+## 11. Fase 3, ejecutada
+
+### 11.1 Qué se ha escrito
+
+**En `mcu-sim`:**
+
+* **`common/gui_cliente.h`**, nuevo: `ClienteGui`, el saludo del lado del
+  modelo, **sin SystemC**. Conecta, manda `T_HOLA`, espera `T_VERSION` (10 s
+  como mucho), manda `T_PLACA`, `T_CATALOGO` y `T_LISTO`, y espera `T_ARRANCA`
+  sin plazo: contesta `T_PING`, acepta `T_PARA` e ignora `T_SUSCRIBE` y
+  `T_ORDENES`, que son de las fases 4 y 5. Y `fin()`, que manda `T_FIN` y
+  cierra.
+* **`top/sim_main.cpp`**: `saluda_gui()`, entre construir la placa y
+  `sc_start()`. `T_PLACA` es `Netlist::volcar_xml`, la placa declarada con los
+  `--serie` ya aplicados: el mismo volcado que `test407 --netlist`. `T_CATALOGO`
+  es el `Catalogo` de la fase 1, y con ese mismo catálogo se **activa la
+  frontera**, para que los índices de las fases 4 y 5 sean los que la ventana
+  ya tiene. Activarla no cuesta nada sin suscripciones ni órdenes. Al acabar la
+  ventana, `T_FIN` con el instante real; si `muere()`, `T_FIN` con `M_ERROR`.
+  `T_HOLA` lleva `protocolo_max`, `mcu_sim`, `pid`, `placa`, `mcu`, `firmware`,
+  `argumentos` y `modo`. El contenido de `T_ARRANCA` (ritmo, factor, ventana)
+  se lee y no se usa: es la fase 6.
+* `parts/part_base.h` y `parts/netlist.h`: `pon_id()` (§11.3).
+
+**En `mcu-sim-gui`:**
+
+* **`src/placa.h/.cpp`**: lee `T_CATALOGO` y `T_PLACA` y los junta por el `id`
+  de cada pieza en un `PlacaGui`: piezas con sus observables, sus mandos, sus
+  patillas y si están soldadas. Solo QtCore. Ni un tipo de C++ del modelo.
+* **`src/sesion.h/.cpp`**: `Sesion`, el saludo del lado de la ventana, encima
+  de `Conexion`. Elige la versión más alta que conocen los dos (o `protocolo=0`
+  y cierra), junta la placa, avisa con `listo()` y manda `T_ARRANCA` y `T_PARA`.
+* **`src/panel.h/.cpp`**: `construye_panel()`, la pantalla a partir de
+  `PlacaGui`: un recuadro por pieza con sus patillas, un indicador por
+  observable interesante (y cuántos no se pintan), y un control por mando según
+  su tipo —botón, casilla o deslizador—. Los indicadores dicen «—» y los
+  controles están desactivados hasta las fases 4 y 5. Cada widget lleva su
+  identificador del protocolo como `objectName`.
+* **`src/ventana_principal.*` y `main.cpp`**: la ventana escucha al abrirse
+  (`--puerto N`, por omisión 3344), construye el panel al llegar la placa, y
+  tiene «Arrancar» y «Parar».
+* `src/conexion.cpp`: **`cierra()` ahora es ordenado**. Usaba `abort()`, que
+  tira lo que quede por escribir, y lo último antes de un cierre suele ser lo
+  que lo explica: un `T_VERSION protocolo=0`. Lo cazó la prueba de la sesión.
+* `CMakeLists.txt`: tres bibliotecas por capas —`transporte`, `sesion`,
+  `pantalla`— y cuatro pruebas.
+
+### 11.2 `--valida --gui`, decidido
+
+Placa, catálogo y `T_FIN`, **sin `T_LISTO` y sin esperar**, y `modo=valida` en
+`T_HOLA` para que la ventana lo sepa desde el principio. Sirve para enseñar una
+placa sin simularla. Una placa con errores no llega a conectarse: `mcu-sim`
+muere antes, con código 2 y la explicación en la salida de error, que la
+ventana verá cuando sea ella quien lo lance (fase 7). Se descartaron dos
+alternativas: rechazar la combinación —quita un uso legítimo— y mandar los
+avisos de validación por `T_AVISO` —es la fase 4, y la salida de error ya los
+lleva—.
+
+### 11.3 Un fallo de la fase 1, destapado aquí
+
+El catálogo usaba `ExtPartBase::pieza()` como `id`. Las piezas que son
+`sc_module` (un `Led`) lo reciben en el constructor; **las que no** (`Crystal`,
+`Button`, `Rpull`) se quedaban con un nombre numerado. Resultado, en la placa de
+la Discovery: el catálogo hablaba de `Crystal_1` y `Button_3`, y la placa de
+`X2` y `B1`. La ventana no podía casarlos.
+
+Nadie lo veía porque hasta ahora nadie juntaba los dos XML: la fase 1 solo
+comprobaba que el catálogo se escribía bien. Se arregla en el origen:
+`Netlist::construye` le pone a cada pieza el `id` de su `<componente>`
+(`pon_id`), así que `X2` se llama `X2` en todas partes. Lo único que mostraba
+el nombre numerado era el volcado de diagnóstico `test407 --inventario`.
+`make gui-saludo` lo comprueba: **cada componente de la placa está en el
+catálogo con el mismo id y el mismo tipo**. Quitando el arreglo, cae.
+
+### 11.4 Cómo se ha comprobado
+
+**La prueba que pide el plan**, `make gui-saludo` (`verif/gui/saludo.py`, 22
+comprobaciones): el `mcu-sim` de verdad con `placas/discovery_min.xml` y el
+blinky, contra una ventana hecha en Python con **su propia implementación del
+marco** —no comparte `proto_io.h`, a propósito: un error en ese fichero no lo
+cazaría ninguno de los dos extremos de verdad—:
+
+| Grupo | Qué |
+| :--- | :--- |
+| S1 | `T_HOLA` con lo que tiene que decir; `T_PLACA`, `T_CATALOGO`, `T_LISTO`; los 11 componentes de la placa en el catálogo con su id y su tipo |
+| S2 | **sin `T_ARRANCA`, espera**: dos segundos después sigue vivo y ha gastado **0,000 s de CPU**; contesta `T_PING`; y a `T_PARA` contesta `T_FIN` con el tiempo simulado **en cero**. «Para siempre sin avanzar un picosegundo» |
+| S3 | con `T_ARRANCA` simula y manda `T_FIN` en **50 ms y 110 µs** —la ventana más el arranque eléctrico—, y la simulación es **la misma que sin `--gui`**: los mismos cuatro LEDs y los mismos **3186 deltas**, con un `T_SUSCRIBE` y un `T_ORDENES` de por medio |
+| S4 | `--valida --gui` |
+| S5 | nadie escuchando, ninguna versión común, la ventana cerrando antes de arrancar: código 2 y dicho |
+
+**`make gui-proto`**, que pasa de 40 a 58: la parte nueva, P4, es `ClienteGui`
+contra una GUI falsa en otro hilo —el camino bueno, `T_PARA`, `--valida`,
+`T_PING`, y ocho maneras de fallar, cada una con su mensaje—. Compilado también
+con MinGW y ejecutado bajo Wine: 58/58.
+
+**`ctest` en esta GUI**, cuatro pruebas:
+
+| Prueba | Comprobaciones | Qué |
+| :--- | ---: | :--- |
+| `conexion` | 16 | la de la fase 2, que sigue igual |
+| `sesion` | 24 | los dos XML juntos (y lo que no casa), el saludo contra un modelo falso, la versión, `T_ARRANCA`, `T_FIN`, y lo que no puede ser |
+| `ventana` | 15 | **con widgets de verdad y sin pantalla** (`offscreen`): el panel —cuatro recuadros, tres indicadores, un control, la pieza desoldada, las patillas, y un servo que la ventana no ha visto nunca saliendo igual— y la ventana entera contra un modelo falso, pulsando «Arrancar» |
+| `cruzada` | 12 | **la `Sesion` de verdad contra el `mcu-sim` de verdad**, con la placa de la Discovery: se construye entera, arranca y termina; y para sin simular. Necesita `MCU_SIM` y `MCU_SIM_SRC`; sin ellas se salta, como en el CI |
+
+Una mutación de comprobación: con `cierra()` volviendo a `abort()`, la prueba
+de la sesión falla, porque el `T_VERSION protocolo=0` no llega.
+
+Y **las cinco suites de `mcu-sim`, igual que antes**: 2118 / 204 / 165 / 189 /
+87 y los cinco invariantes al picosegundo, con `pon_id` cambiando el nombre de
+las piezas del banco. `test407 --netlist` sigue dando `placas/banco.xml` byte a
+byte, y la interoperabilidad del puente UART, 47/47.
+
+### 11.5 Lo que NO se ha hecho, que también es la fase 3
+
+Los indicadores no tienen valores ni los controles hacen nada: son las fases 4
+y 5. El contenido de `T_ARRANCA` no se usa: fase 6. La ventana no lanza el
+modelo: hoy se lanza a mano con `--gui`, y lanzarlo es la fase 7.
+
+No se ha probado en Windows ni en macOS más que lo que el CI diga: `gui-saludo`
+corre en los tres trabajos de `mcu-sim`, y `ctest` en los tres de este.

@@ -70,18 +70,26 @@ void Conexion::hay_datos()
 
 void Conexion::se_fue() { suelta(QString()); }
 
-void Conexion::suelta(const QString& motivo)
+void Conexion::suelta(const QString& motivo, bool ordenado)
 {
     if (!sock_) return;
     QTcpSocket* s = sock_;
     sock_ = nullptr;                       // antes de cerrar: se_fue() no repite
     s->disconnect(this);
-    s->abort();
-    s->deleteLater();
+    if (ordenado && s->state() == QAbstractSocket::ConnectedState) {
+        // Lo que quede por escribir se escribe ANTES de cerrar. `abort()` lo
+        // tiraria, y lo ultimo que se manda antes de un cierre es justo lo que
+        // explica el cierre: un `T_VERSION protocolo=0`, por ejemplo.
+        connect(s, &QAbstractSocket::disconnected, s, &QObject::deleteLater);
+        s->disconnectFromHost();
+    } else {
+        s->abort();
+        s->deleteLater();
+    }
     emit desconectado(motivo);
 }
 
-void Conexion::cierra() { suelta(QString()); }
+void Conexion::cierra() { suelta(QString(), true); }
 
 bool Conexion::envia(quint16 tipo, const QByteArray& cuerpo)
 {

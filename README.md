@@ -4,12 +4,20 @@ La **contraparte de visualización gráfica de
 [`mcu-sim`](../mcu-sim)**, el modelo SystemC de microcontroladores STM32.
 `mcu-sim` simula; esto lo enseña y deja tocarlo.
 
-> **Estado: fase 2.** Hay un esqueleto que compila y abre una ventana vacía, el
-> protocolo escrito y el plan por fases. Del lado de `mcu-sim` ya existe la
-> frontera —lo que cada pieza deja ver y tocar, el catálogo, el muestreador y el
-> aplicador—, probada sin GUI. Y los dos extremos ya saben mover bytes: aquí,
-> `Conexion` escucha y lee el marco con el mismo `proto_io.h` que usa el
-> modelo. Todavía no se dicen nada con significado: el saludo es la fase 3.
+> **Estado: fase 3.** La ventana escucha, `mcu-sim --gui` se conecta, se
+> saludan, y la ventana **se construye sola** a partir de la placa y el
+> catálogo que le manda el modelo: un recuadro por pieza, con sus patillas, un
+> indicador por cada cosa que la pieza sugiere mirar y un control por mando.
+> El modelo no simula hasta que se pulsa «Arrancar». Lo que falta: que los
+> indicadores tengan valores (fase 4) y que los controles hagan algo (fase 5).
+>
+> Para verlo, con las dos cosas compiladas:
+>
+> ```bash
+> ./build/mcu-sim-gui                                        # escucha en el 3344
+> # y en otra consola, desde mcu-sim/src:
+> ./build/mcu-sim placas/discovery_min.xml verif/fw/blinky/blinky.bin 1000 --gui
+> ```
 
 ---
 
@@ -237,8 +245,8 @@ descarguen el simulador. Eso es trabajo de la **fase 9** y está anotado allí.
 | Plataforma | Estado |
 | :--- | :--- |
 | Linux, g++ 13, **Qt 6.4.2** | **Verificado**: configura, compila, enlaza y arranca (`QT_QPA_PLATFORM=offscreen`) |
-| Windows, MSYS2 / MinGW-w64 | **⚠ sin verificar todavía**, pero el vecino sí: `mcu-sim.exe` se construye y **se ejecuta** allí. Los intentos de esta GUI fallaron **por el entorno y no por el código** —la causa era que **ESET pone en cuarentena los ejecutables recién compilados**—. Las tres trampas están arriba, y hay una cuarta que llega al repartirlo: las DLL (plan §8.8) |
-| macOS, clang, Qt 6 | **⚠ sin verificar** |
+| Windows, MSYS2 / MinGW-w64 | **Verificado por el CI** desde el 2026-10-01: compila con el Qt de MSYS2 y pasa `ctest`. **A mano, en una máquina, no**: los intentos fallaron **por el entorno y no por el código** —la causa era que **ESET pone en cuarentena los ejecutables recién compilados**—. Las tres trampas están arriba, y hay una cuarta que llega al repartirlo: las DLL (plan §8.8) |
+| macOS, clang, Qt 6 | **Verificado por el CI** desde el 2026-10-01, con el Qt de Homebrew: compila y pasa `ctest`. A mano, no |
 
 Es la misma regla que sigue `mcu-sim` y por el mismo motivo: decir lo que se ha
 probado y lo que no, en vez de dar por bueno lo que parece obvio.
@@ -246,8 +254,9 @@ probado y lo que no, en vez de dar por bueno lo que parece obvio.
 **La integración continua** (`.github/workflows/ci.yml`) compila y pasa las
 pruebas en las tres plataformas de esta tabla en cada push a `main` y en cada
 pull request: Linux con el Qt del sistema (Ubuntu 24.04), Windows con MSYS2 y
-macOS con Homebrew. Las dos filas «sin verificar» de arriba cambian en cuanto
-pase allí la primera vez; hasta entonces, se quedan como están.
+macOS con Homebrew. Pasó en las tres por primera vez el 2026-10-01, y de ahí
+las dos filas de arriba. Lo que el CI no ve es una ventana abierta en una
+pantalla de verdad: eso sigue siendo a mano.
 
 ---
 

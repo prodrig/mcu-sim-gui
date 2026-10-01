@@ -69,7 +69,8 @@ public:
     // La versión negociada en el saludo; hasta entonces, la 1.
     void fija_version(quint16 v);
 
-    // Cierra la conexión con el modelo, si la hay. Se sigue escuchando.
+    // Cierra la conexión con el modelo, si la hay, DESPUÉS de mandar lo que
+    // quedara por mandar. Se sigue escuchando.
     void cierra();
 
     quint64 desconocidos() const { return desconocidos_; }
@@ -87,7 +88,8 @@ private:
     void nueva();
     void hay_datos();
     void se_fue();
-    void suelta(const QString& motivo);
+    // `ordenado`: escribe lo pendiente antes de cerrar; si no, se corta en seco.
+    void suelta(const QString& motivo, bool ordenado = false);
 
     QTcpServer*      srv_  = nullptr;
     QTcpSocket*      sock_ = nullptr;

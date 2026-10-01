@@ -1,0 +1,133 @@
+// =============================================================================
+// comun.h — lo que comparten las pruebas: el contador, la espera con el bucle
+// de eventos en marcha, y un «modelo» falso sobre un QTcpSocket crudo que
+// escribe y lee con el mismo proto_io.h.
+// =============================================================================
+#ifndef MCU_SIM_GUI_PRUEBAS_COMUN_H
+#define MCU_SIM_GUI_PRUEBAS_COMUN_H
+
+#include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QHostAddress>
+#include <QTcpSocket>
+
+#include <cstdio>
+#include <functional>
+#include <string>
+#include <vector>
+
+#include "proto_io.h"
+
+namespace prueba {
+
+inline unsigned g_ok = 0, g_mal = 0;
+
+inline bool comprueba(bool c, const std::string& que) {
+    (c ? g_ok : g_mal)++;
+    std::printf("  [%s] %s\n", c ? "OK  " : "FALLO", que.c_str());
+    std::fflush(stdout);
+    return c;
+}
+
+inline int resultado() {
+    std::printf("RESULTADO %u ok, %u fallos\n", g_ok, g_mal);
+    return g_mal ? 1 : 0;
+}
+
+// Deja correr el bucle de eventos hasta que se cumpla `c` o pase el plazo.
+inline bool espera(const std::function<bool()>& c, int ms = 5000) {
+    QElapsedTimer t;
+    t.start();
+    while (!c() && t.elapsed() < ms)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    return c();
+}
+
+template <class T> std::string bytes(const T& t) {
+    return std::string(reinterpret_cast<const char*>(&t), sizeof t);
+}
+
+struct Recibido { quint16 tipo; QByteArray cuerpo; };
+
+// El «modelo»: lo que haría mcu-sim, a mano.
+struct ModeloFalso {
+    QTcpSocket                     s;
+    mcusim::proto::Emisor          e;
+    mcusim::proto::Lector          l{mcusim::proto::Origen::Pantalla};
+    std::vector<Recibido>          leido;
+
+    bool conecta(quint16 p) {
+        s.connectToHost(QHostAddress::LocalHost, p);
+        return s.waitForConnected(3000);
+    }
+    void manda(quint16 tipo, const std::string& cuerpo = std::string()) {
+        std::string d;
+        e.mensaje(d, tipo, cuerpo);
+        s.write(d.data(), qint64(d.size()));
+        s.flush();
+    }
+    void lee() {
+        const QByteArray d = s.readAll();
+        l.mete(d.constData(), std::size_t(d.size()));
+        mcusim::proto::Mensaje m;
+        while (l.saca(m) == mcusim::proto::Lector::LEC_MENSAJE)
+            leido.push_back({m.tipo, QByteArray(reinterpret_cast<const char*>(m.cuerpo),
+                                                int(m.longitud))});
+    }
+    // Espera a tener `n` mensajes leídos en total.
+    bool espera_leidos(std::size_t n, int ms = 5000) {
+        return espera([&] { lee(); return leido.size() >= n; }, ms);
+    }
+    void version(uint16_t v) { e.fija_version(v); l.fija_version(v); }
+};
+
+// Una placa parecida a la de la Discovery, en los dos XML del saludo. El
+// catálogo, con el formato de doc/protocolo.md §3.
+inline const char* PLACA_XML =
+    "<placa nombre=\"discovery\">\n"
+    "  <componente tipo=\"Crystal\" id=\"X3\" vdd=\"3.3\" conectada=\"no\">\n"
+    "    <pin nombre=\"osc_in\" nodo=\"PC14\"/>\n"
+    "  </componente>\n"
+    "  <componente tipo=\"Led\" id=\"LD4\" a_vss=\"si\" vf=\"2.0\" r=\"680\">\n"
+    "    <pin nombre=\"anodo\" nodo=\"PD12\"/>\n"
+    "  </componente>\n"
+    "  <componente tipo=\"Button\" id=\"B1\" v_cerrado=\"3.3\">\n"
+    "    <pin nombre=\"pin\" nodo=\"PA0\"/>\n"
+    "  </componente>\n"
+    "  <componente tipo=\"Rpull\" id=\"R35\" v=\"0\" r=\"100000\">\n"
+    "    <pin nombre=\"a\" nodo=\"PA0\"/>\n"
+    "  </componente>\n"
+    "</placa>\n";
+
+inline const char* CATALOGO_XML =
+    "<catalogo>\n"
+    "  <pieza idx=\"0\" id=\"X3\" tipo=\"Crystal\">\n"
+    "    <observable idx=\"0\" id_obs=\"0\" nombre=\"presente\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\"/>\n"
+    "  </pieza>\n"
+    "  <pieza idx=\"1\" id=\"LD4\" tipo=\"Led\">\n"
+    "    <observable idx=\"0\" id_obs=\"1\" nombre=\"encendido\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\"/>\n"
+    "    <observable idx=\"1\" id_obs=\"2\" nombre=\"corriente\" unidad=\"mA\" min=\"0\" max=\"25\" interesante=\"no\"/>\n"
+    "  </pieza>\n"
+    "  <pieza idx=\"2\" id=\"B1\" tipo=\"Button\">\n"
+    "    <observable idx=\"0\" id_obs=\"3\" nombre=\"pulsado\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\"/>\n"
+    "    <mando idx=\"0\" nombre=\"pulsar\" tipo=\"boton\" min=\"0\" max=\"1\"/>\n"
+    "  </pieza>\n"
+    "  <pieza idx=\"3\" id=\"R35\" tipo=\"Rpull\"/>\n"
+    "</catalogo>\n";
+
+// El saludo entero desde el lado del modelo, hasta T_LISTO incluido.
+inline bool saluda_hasta_listo(ModeloFalso& m) {
+    using namespace mcusim::proto;
+    m.manda(T_HOLA, "protocolo_max=1\nplaca=placas/discovery.xml\nmcu=STM32F407VG\n"
+                    "firmware=blinky.bin\n");
+    if (!m.espera_leidos(1) || m.leido[0].tipo != T_VERSION) return false;
+    m.version(1);
+    m.manda(T_PLACA, PLACA_XML);
+    m.manda(T_CATALOGO, CATALOGO_XML);
+    m.manda(T_LISTO);
+    return true;
+}
+
+} // namespace prueba
+
+#endif // MCU_SIM_GUI_PRUEBAS_COMUN_H

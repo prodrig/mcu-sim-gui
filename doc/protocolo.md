@@ -186,6 +186,30 @@ Tres cosas que merecen nombre propio:
 **`T_LISTO`** — sin cuerpo. Quiere decir: *la placa está construida, el catálogo
 es el que has recibido, y estoy parado esperándote.*
 
+**La espera hasta `T_ARRANCA`** no tiene plazo y no gasta CPU: es un `select`
+que duerme hasta que llega algo. Mientras tanto el modelo:
+
+* contesta **`T_PING`** con `T_PONG`;
+* acepta **`T_PARA`**: manda `T_FIN` con motivo `M_PARA` y el tiempo simulado
+  en cero, y termina **sin haber simulado nada**;
+* acepta **`T_SUSCRIBE`** y **`T_ORDENES`**, que es donde una secuencia
+  enviada antes de arrancar se vuelve reproducible (§5). *En la versión de
+  `mcu-sim` de la fase 3 se leen y se ignoran: las aplican las fases 4 y 5.*
+
+**Los ids casan.** El `id` de cada `<pieza>` del catálogo es el mismo que el del
+`<componente>` de la placa: lo pone la placa. Es lo que permite a la ventana
+juntar los dos XML sin conocer ningún tipo.
+
+**`T_HOLA` lleva `modo=`**: `simula`, o `valida` si `mcu-sim` se lanzó con
+`--valida`. Con `--valida` el saludo es más corto: tras `T_CATALOGO` llega
+`T_FIN`, sin `T_LISTO` y sin esperar a nada. Sirve para que la ventana enseñe
+una placa sin simularla. Una placa con errores no llega a conectarse: `mcu-sim`
+termina antes, con código 2 y la explicación en la salida de error.
+
+**Los plazos.** Hay uno solo, y lo pone el modelo: si la GUI no contesta a
+`T_HOLA` en **10 s**, termina con código 2. Una GUI que no contesta al saludo no
+va a contestar a nada.
+
 ---
 
 ## 4. En marcha
@@ -329,7 +353,11 @@ de la GUI en una tarde perdida mirando el modelo.
 | Situación | Qué hace `mcu-sim` | Qué hace `mcu-sim-gui` |
 | :--- | :--- | :--- |
 | No hay nadie escuchando en `host:puerto` | lo dice por la salida de error y **termina con código 2**. No reintenta: si la GUI lo lanzó, la GUI estaba escuchando | — |
+| La GUI no contesta a `T_HOLA` en 10 s, contesta `protocolo=0`, elige una versión que no se le ofreció o no empieza por `T_VERSION` | lo dice por la salida de error y **termina con código 2** | — |
+| El modelo ofrece una `protocolo_max` sin ninguna versión común | — | contesta `protocolo=0` y cierra |
+| La GUI cierra la conexión **antes** de `T_ARRANCA` | lo dice y **termina con código 2**, sin simular: ya no hay nadie que vaya a decir «arranca» | — |
 | La GUI cierra la conexión en marcha | **sigue simulando** hasta agotar su ventana y termina con normalidad. No se muere ni se queda colgado | — |
+| El modelo se rinde (`muere()`) con la GUI conectada | manda `T_FIN` con `M_ERROR` y código 2 antes de irse | lo enseña |
 | `mcu-sim` muere | — | lo ve por el `QProcess` y por el socket cerrado; enseña el código de salida y lo que quedara en la salida de error |
 | Magia mala, versión imposible, longitud > `CUERPO_MAX` | cierra diciendo por qué | igual |
 | Tipo de mensaje desconocido | se salta por longitud y sigue | igual |

@@ -62,8 +62,14 @@ find_package(Qt6 6.3 REQUIRED COMPONENTS Core Widgets Network)
 
 qt_standard_project_setup()
 
-# El transporte (fase 2): sin Widgets, para que las pruebas no necesiten
-# pantalla. La ventana lo enlaza; las pruebas, tambien.
+# Tres capas, de abajo arriba, y solo la ultima necesita pantalla:
+#
+#   transporte   mover bytes: el marco y el socket (fase 2)
+#   sesion       el significado: el saludo y los dos XML de la placa (fase 3)
+#   pantalla     construir los widgets a partir de esos XML (fase 3)
+#
+# Las pruebas enlazan la capa que prueban, y las dos primeras corren sin
+# pantalla ninguna.
 qt_add_library(transporte STATIC
     src/conexion.h
     src/conexion.cpp
@@ -73,13 +79,27 @@ qt_add_library(transporte STATIC
 target_include_directories(transporte PUBLIC src)
 target_link_libraries(transporte PUBLIC Qt6::Core Qt6::Network)
 
-qt_add_executable(mcu-sim-gui
-    src/main.cpp
+qt_add_library(sesion STATIC
+    src/placa.h
+    src/placa.cpp
+    src/sesion.h
+    src/sesion.cpp
+)
+target_link_libraries(sesion PUBLIC transporte)
+
+qt_add_library(pantalla STATIC
+    src/panel.h
+    src/panel.cpp
     src/ventana_principal.h
     src/ventana_principal.cpp
 )
+target_link_libraries(pantalla PUBLIC sesion Qt6::Widgets)
 
-target_link_libraries(mcu-sim-gui PRIVATE transporte Qt6::Widgets)
+qt_add_executable(mcu-sim-gui
+    src/main.cpp
+)
+
+target_link_libraries(mcu-sim-gui PRIVATE pantalla)
 
 # En Windows, sin consola detrás de la ventana.
 set_target_properties(mcu-sim-gui PROPERTIES WIN32_EXECUTABLE ON)
@@ -90,10 +110,26 @@ install(TARGETS mcu-sim-gui
 
 # --- Las pruebas -------------------------------------------------------------
 # Sin ventana: QtCore y QtNetwork. `ctest --test-dir build` las ejecuta.
+# `cruzada` necesita un mcu-sim de verdad: MCU_SIM=ejecutable y
+# MCU_SIM_SRC=su directorio src/. Sin ellas se salta (codigo 77).
 include(CTest)
 if(BUILD_TESTING)
-    qt_add_executable(prueba_conexion tests/prueba_conexion.cpp)
-    target_link_libraries(prueba_conexion PRIVATE transporte)
-    set_target_properties(prueba_conexion PROPERTIES WIN32_EXECUTABLE OFF MACOSX_BUNDLE OFF)
+    function(prueba nombre fuente capa)
+        qt_add_executable(${nombre} ${fuente} tests/comun.h)
+        target_link_libraries(${nombre} PRIVATE ${capa})
+        target_include_directories(${nombre} PRIVATE tests)
+        set_target_properties(${nombre} PROPERTIES WIN32_EXECUTABLE OFF MACOSX_BUNDLE OFF)
+    endfunction()
+
+    prueba(prueba_conexion tests/prueba_conexion.cpp transporte)
+    prueba(prueba_sesion   tests/prueba_sesion.cpp   sesion)
+    prueba(prueba_ventana  tests/prueba_ventana.cpp  pantalla)
+    prueba(prueba_cruzada  tests/prueba_cruzada.cpp  sesion)
+
     add_test(NAME conexion COMMAND prueba_conexion)
+    add_test(NAME sesion   COMMAND prueba_sesion)
+    add_test(NAME ventana  COMMAND prueba_ventana)
+    set_tests_properties(ventana PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_test(NAME cruzada  COMMAND prueba_cruzada)
+    set_tests_properties(cruzada PROPERTIES SKIP_RETURN_CODE 77)
 endif()

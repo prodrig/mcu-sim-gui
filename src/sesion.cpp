@@ -1,0 +1,122 @@
+#include "sesion.h"
+
+#include <algorithm>
+#include <cstring>
+
+#include <QCoreApplication>
+#include <QStringList>
+
+namespace mcusim {
+
+Sesion::Sesion(QObject* padre) : QObject(padre)
+{
+    connect(&cx_, &Conexion::conectado, this, [this] {
+        cambia(Estado::Saludando);
+        version_ = 0;
+        hola_.clear();
+        placa_xml_.clear();
+        placa_ = PlacaGui();
+        emit conectado();
+    });
+    connect(&cx_, &Conexion::mensaje, this, &Sesion::llega);
+    connect(&cx_, &Conexion::desconectado, this, [this](const QString& m) {
+        if (estado_ != Estado::Terminada) cambia(Estado::Terminada);
+        emit desconectado(m);
+    });
+}
+
+bool Sesion::escucha(const QHostAddress& dir, quint16 puerto)
+{
+    return cx_.escucha(dir, puerto);
+}
+
+quint16 Sesion::elige_version(long protocolo_max)
+{
+    if (protocolo_max < 1) return 0;
+    return quint16(std::min<long>(protocolo_max, proto::VERSION_PROTO));
+}
+
+QHash<QString, QString> Sesion::claves(const QByteArray& texto)
+{
+    QHash<QString, QString> h;
+    for (const QString& l : QString::fromUtf8(texto).split(QLatin1Char('\n'))) {
+        const int i = l.indexOf(QLatin1Char('='));
+        if (i > 0) h.insert(l.left(i), l.mid(i + 1).trimmed());
+    }
+    return h;
+}
+
+void Sesion::llega(quint16 tipo, const QByteArray& cuerpo)
+{
+    using namespace proto;
+    switch (tipo) {
+    case T_HOLA: {
+        hola_ = claves(cuerpo);
+        bool ok = false;
+        const long max = hola_.value(QStringLiteral("protocolo_max")).toLong(&ok);
+        version_ = ok ? elige_version(max) : 0;
+        const QString gui = QCoreApplication::applicationVersion().isEmpty()
+                                ? QStringLiteral("0.1.0")
+                                : QCoreApplication::applicationVersion();
+        cx_.envia(T_VERSION, QStringLiteral("protocolo=%1\ngui=%2\n")
+                                 .arg(version_).arg(gui).toUtf8());
+        if (version_ == 0) {
+            emit problema(tr("el modelo ofrece el protocolo hasta la version '%1', y "
+                             "esta ventana solo habla desde la 1 hasta la %2")
+                              .arg(hola_.value(QStringLiteral("protocolo_max")))
+                              .arg(VERSION_PROTO));
+            cx_.cierra();
+            return;
+        }
+        cx_.fija_version(version_);
+        emit hola_recibido();
+        break;
+    }
+    case T_PLACA:
+        placa_xml_ = cuerpo;
+        break;
+    case T_CATALOGO: {
+        QVector<PiezaGui> cat;
+        QString e;
+        if (!lee_catalogo(cuerpo, cat, e) || !junta_placa(placa_xml_, cat, placa_, e)) {
+            emit problema(tr("no se puede leer lo que manda el modelo: %1").arg(e));
+            cx_.cierra();
+            return;
+        }
+        for (const QString& a : placa_.avisos) emit problema(a);
+        emit placa_lista();
+        break;
+    }
+    case T_LISTO:
+        cambia(Estado::Lista);
+        emit listo();
+        break;
+    case T_FIN: {
+        Fin f{};
+        if (cuerpo.size() == int(sizeof f)) std::memcpy(&f, cuerpo.constData(), sizeof f);
+        cambia(Estado::Terminada);
+        emit fin(f.motivo, f.codigo, f.t_sim_ns);
+        break;
+    }
+    default:
+        // T_INSTANTANEA, T_AVISO, T_ESTADO, T_ORDEN_HECHA, T_PONG: fases 4 a 6.
+        break;
+    }
+}
+
+bool Sesion::arranca()
+{
+    if (estado_ != Estado::Lista) return false;
+    if (!cx_.envia_pod(proto::T_ARRANCA, proto::Arranca{proto::RIT_LIBRE, 1.f, 0}))
+        return false;
+    cambia(Estado::Corriendo);
+    return true;
+}
+
+bool Sesion::para()
+{
+    if (estado_ != Estado::Lista && estado_ != Estado::Corriendo) return false;
+    return cx_.envia(proto::T_PARA);
+}
+
+} // namespace mcusim
