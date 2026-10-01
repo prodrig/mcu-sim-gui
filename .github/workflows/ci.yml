@@ -23,6 +23,13 @@ on:
   pull_request:
   workflow_dispatch:
 
+# LAS ACCIONES, EN Node.js 24. actions/checkout pasa de la v4 a la v5, que es
+# la PRIMERA que corre con Node.js 24 (`runs.using: node24` en su action.yml),
+# no la ultima: es el salto mas corto, y el unico cambio de la v5 es ese.
+# msys2/setup-msys2@v2 ya corria con Node.js 24 y se queda. Comprobado el
+# 2026-10-01 en el action.yml de cada etiqueta.
+#
+# Piden un runner 2.327.1 o posterior, que los de GitHub ya tienen.
 permissions:
   contents: read
 
@@ -44,7 +51,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Qt 6, CMake y Ninja
         run: |
@@ -87,7 +94,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: msys2/setup-msys2@v2
         with:
@@ -118,7 +125,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Qt 6 y Ninja
         run: |
