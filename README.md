@@ -264,3 +264,19 @@ repos/
 Dos repositorios a propósito: `mcu-sim` tiene que seguir clonándose y
 compilándose sin Qt en cualquier máquina, que es lo que hace que su suite de
 2 074 comprobaciones valga en todas partes.
+
+---
+
+## Licencia
+
+**GNU Affero General Public License, versión 3** (`LICENSE`), la misma que
+[`mcu-sim`](../mcu-sim).
+
+Puedes usarlo, estudiarlo, modificarlo y repartirlo libremente, y si lo haces
+**tus cambios tienen que quedar disponibles bajo esta misma licencia**, también
+cuando el programa se ofrezca por la red en lugar de distribuirse. Las razones
+son las de `mcu-sim` y están explicadas en su README.
+
+**Qt conserva la suya.** Se enlaza bajo LGPLv3, que es compatible con AGPLv3
+en esta dirección: el conjunto se reparte como AGPLv3 y las bibliotecas de Qt
+siguen siendo sustituibles por el usuario.
