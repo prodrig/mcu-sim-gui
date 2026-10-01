@@ -23,7 +23,13 @@
 //   T_ESTADO      -> `estado_modelo()`, con los dos relojes;
 //   `suscribe()`  -> T_SUSCRIBE.
 //
-// Los ecos de órdenes (fase 5) se reciben y se ignoran todavía.
+// Y desde la fase 5, las órdenes (`doc/protocolo.md` §5):
+//
+//   `ordena()`    -> T_ORDENES. La primera orden es un instante ABSOLUTO si se
+//                    manda antes de arrancar, y relativa al instante en que el
+//                    modelo la lee si ya corre; las demás, deltas;
+//   T_ORDEN_HECHA -> `orden_hecha()`, con el instante REAL en que se aplicó y
+//                    el resultado. Uno por orden: ninguna se calla.
 // =============================================================================
 #ifndef MCU_SIM_GUI_SESION_H
 #define MCU_SIM_GUI_SESION_H
@@ -69,6 +75,14 @@ public:
     // T_SUSCRIBE: qué observables, y cada cuánto tiempo SIMULADO. Reemplaza a
     // la anterior; vacía, las apaga. false si no hay un modelo saludado.
     bool suscribe(quint64 periodo_ns, const QVector<quint16>& ids);
+    // T_ORDENES. Antes de arrancar (Lista) o en marcha (Corriendo); false si
+    // no, o si no hay ninguna. La comprobación de pieza, mando y rango la
+    // hace el modelo, y lo dice en el eco: esta ventana no la duplica.
+    bool ordena(const QVector<proto::Orden>& ordenes);
+    // Una sola, «ahora»: en t = 0 si aún no ha arrancado, en el instante en
+    // que el modelo la lea si ya corre.
+    bool ordena(quint16 pieza, quint16 mando, float valor);
+    quint64 ecos() const { return ecos_; }
 
     // Instantáneas que el modelo dice haber tirado porque esto no leía.
     quint64 perdidas() const { return perdidas_; }
@@ -92,6 +106,9 @@ signals:
     void muestra(quint16 id_obs, float valor);
     void aviso(quint32 nivel, quint64 t_sim_ns, const QString& origen, const QString& texto);
     void estado_modelo(quint32 fase, quint64 t_sim_ns, double t_pared_s, quint64 deltas);
+    // Fase 5
+    void orden_hecha(quint64 t_sim_ns, quint16 pieza, quint16 mando, float valor,
+                     quint32 resultado);
 
 private:
     void llega(quint16 tipo, const QByteArray& cuerpo);
@@ -104,6 +121,7 @@ private:
     QByteArray              placa_xml_;
     PlacaGui                placa_;
     quint64                 perdidas_ = 0;
+    quint64                 ecos_ = 0;
 };
 
 } // namespace mcusim

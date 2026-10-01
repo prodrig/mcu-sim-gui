@@ -10,7 +10,9 @@
 //   G3  un modelo que no habla ninguna versión que esto conozca, y uno que
 //       manda un catálogo que no se puede leer;
 //   G4  (fase 4) los avisos de placa durante el saludo, T_SUSCRIBE, y las
-//       instantáneas, los avisos y los estados en marcha.
+//       instantáneas, los avisos y los estados en marcha;
+//   G5  (fase 5) las órdenes: `ordena()` -> T_ORDENES, antes de arrancar y en
+//       marcha, y T_ORDEN_HECHA -> `orden_hecha()`.
 // =============================================================================
 #include <QCoreApplication>
 
@@ -225,6 +227,57 @@ int main(int argc, char** argv)
         comprueba(avs[1].n == N_ERROR && avs[1].t == 7000000ull && avs[1].o == "/stm32" &&
                   avs[1].x == "algo",
                   "y un aviso en marcha, con su nivel, su instante, su origen y su texto");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("G5 La fase 5: ordenes y sus ecos\n");
+    {
+        Sesion s;
+        comprueba(!s.ordena(2, 0, 1.f), "sin un modelo saludado, ordena() no manda nada");
+        s.escucha(QHostAddress::LocalHost, 0);
+        struct Eco { quint64 t; quint16 p, m; float v; quint32 r; };
+        std::vector<Eco> ecos;
+        QStringList problemas;
+        QObject::connect(&s, &Sesion::orden_hecha,
+                         [&](quint64 t, quint16 p, quint16 md, float v, quint32 r) {
+                             ecos.push_back({t, p, md, v, r});
+                         });
+        QObject::connect(&s, &Sesion::problema, [&](const QString& t) { problemas << t; });
+        ModeloFalso m;
+        m.conecta(s.puerto());
+        comprueba(saluda_hasta_listo(m) &&
+                      espera([&] { return s.estado() == Sesion::Estado::Lista; }),
+                  "saludo hasta T_LISTO");
+        // El ejemplo de doc/protocolo.md §5, antes de arrancar
+        const QVector<Orden> ej{{1000000000ull, 2, 0, 1.f}, {500000000ull, 2, 0, 0.f},
+                                {2500000000ull, 2, 0, 1.f}, {220000000ull, 2, 0, 0.f}};
+        comprueba(s.ordena(ej) && !s.ordena(QVector<Orden>{}),
+                  "con el modelo esperando, ordena() manda; sin ninguna orden, no");
+        comprueba(m.espera_leidos(2) && m.leido[1].tipo == T_ORDENES &&
+                  m.leido[1].cuerpo == QByteArray::fromStdString(
+                      bytes(ej[0]) + bytes(ej[1]) + bytes(ej[2]) + bytes(ej[3])),
+                  "el modelo recibe UN T_ORDENES con las cuatro, tal cual: 64 bytes");
+        s.arranca();
+        comprueba(s.ordena(2, 0, 1.f) && m.espera_leidos(4) && m.leido[3].tipo == T_ORDENES &&
+                  m.leido[3].cuerpo == QByteArray::fromStdString(bytes(Orden{0, 2, 0, 1.f})),
+                  "en marcha, ordena(pieza, mando, valor) es una sola orden con delta 0: "
+                  "\"ahora\"");
+        m.manda(T_ORDEN_HECHA, bytes(OrdenHecha{1000000000ull, 2, 0, 1.f, RES_OK, 0}));
+        m.manda(T_ORDEN_HECHA, bytes(OrdenHecha{1500000000ull, 7, 0, 0.f, RES_PIEZA, 0}));
+        comprueba(espera([&] { return ecos.size() == 2; }) && s.ecos() == 2 &&
+                  ecos[0].t == 1000000000ull && ecos[0].p == 2 && ecos[0].m == 0 &&
+                  ecos[0].v == 1.f && ecos[0].r == RES_OK &&
+                  ecos[1].p == 7 && ecos[1].r == RES_PIEZA,
+                  "cada T_ORDEN_HECHA es un orden_hecha(), con el instante real, la pieza, "
+                  "el mando, el valor aplicado y el resultado");
+        m.manda(T_ORDEN_HECHA, "corto");
+        comprueba(espera([&] { return !problemas.isEmpty(); }) && ecos.size() == 2 &&
+                  problemas.last().contains("eco de orden"),
+                  "un eco que no mide lo que debe no se inventa: se dice como problema");
+        m.manda(T_FIN, bytes(Fin{M_VENTANA, 0, 5000110000ull}));
+        comprueba(espera([&] { return s.estado() == Sesion::Estado::Terminada; }) &&
+                  !s.ordena(2, 0, 0.f),
+                  "y con el modelo terminado, ordena() ya no manda nada");
     }
 
     return resultado();

@@ -13,11 +13,21 @@
 //   * un control por MANDO, según su tipo: un botón, una casilla o un
 //     deslizador.
 //
-// Los indicadores dicen «—» hasta que llega la primera muestra (fase 4), y los
-// controles están DESACTIVADOS hasta que las órdenes salgan (fase 5). Cada
-// widget lleva un `objectName` con su identificador del protocolo
-// -`obs:<id_obs>`, `mando:<pieza>:<idx>`- que es como lo encuentran las
-// pruebas.
+// Los indicadores dicen «—» hasta que llega la primera muestra (fase 4). Los
+// controles nacen DESACTIVADOS, y `activa_mandos()` los enciende cuando el
+// modelo está esperando o corriendo (fase 5). Cada widget lleva un
+// `objectName` con su identificador del protocolo -`obs:<id_obs>`,
+// `mando:<pieza>:<idx>`- que es como lo encuentran las pruebas.
+//
+// QUÉ ORDENA CADA CONTROL, también sin conocer un tipo: lo dice el TIPO del
+// mando y su rango declarado.
+//
+//   * boton:       el máximo al hundirlo y el mínimo al soltarlo. Es un dedo:
+//                  la pulsación dura lo que dura el ratón abajo;
+//   * interruptor: el máximo marcado, el mínimo desmarcado;
+//   * continuo:    la posición del deslizador, de mínimo a máximo.
+//
+// El panel no habla con el modelo: emite `orden()`, y quien lo monta decide.
 //
 // CÓMO SE ESCRIBE UN VALOR, sin conocer un tipo: lo decide la DECLARACIÓN del
 // observable, no la pieza. Uno de 0 a 1 sin unidad es un sí o un no, y se
@@ -51,10 +61,20 @@ public:
 
     static QString texto_de(const ObservableGui& o, float valor);
 
+    // Enciende o apaga TODOS los controles: con el modelo esperando o
+    // corriendo, sí; antes del saludo o con el modelo terminado, no.
+    void activa_mandos(bool si);
+    bool mandos_activos() const { return activos_; }
+
+signals:
+    void orden(quint16 pieza, quint16 mando, float valor);
+
 private:
     struct Indicador { QLabel* etiqueta; ObservableGui obs; };
     QHash<quint16, Indicador> ind_;
     QVector<quint16>          pintados_;
+    QVector<QWidget*>         controles_;
+    bool                      activos_ = false;
 };
 
 Panel* construye_panel(const PlacaGui& placa, QWidget* padre = nullptr);

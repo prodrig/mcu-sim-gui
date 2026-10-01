@@ -1341,8 +1341,100 @@ observada se repite lo comprueba M2.
 
 ### 12.6 Lo que NO se ha hecho, que también es la fase 4
 
-Los mandos no hacen nada —los ecos de órdenes se reciben y se ignoran—: fase
-5. El ritmo de `T_ARRANCA`, la pausa y parar en marcha: fase 6. Y las
+Los mandos no hacían nada —los ecos de órdenes se recibían y se ignoraban—:
+era la fase 5, §13. El ritmo de `T_ARRANCA`, la pausa y parar en marcha: fase 6. Y las
 instantáneas de la ventana van a 60 Hz **simulados**, que sin ritmo pueden ser
 cientos por segundo de pared: qué se pinta y cada cuánto, cuando el ritmo
 exista.
+
+---
+
+## 13. Fase 5, ejecutada
+
+### 13.1 Qué se ha escrito
+
+**En `mcu-sim`:**
+
+* **`parts/enlace_gui.h`**: el enlace lee `T_ORDENES` y lo encola en la
+  frontera con el instante en que lo lee —el «sacarla de la cola» de
+  `protocolo.md` §5—; `ordenes(cuerpo, en_marcha)` es la misma puerta para los
+  que llegaron antes de arrancar. Y vacía hacia la ventana los **ecos** que deja
+  el aplicador de la fase 1, un `T_ORDEN_HECHA` por orden, mezclados con los
+  avisos por su instante simulado —a igual instante, primero el eco—. **Los
+  ecos no se tiran**: son lo único que dice cuándo se aplicó de verdad una
+  orden, y lo que la fase 8 grabará. Esperan en la cola de la frontera, con el
+  mismo máximo que los avisos y la misma salida si se llena.
+* **La validación sin silencios**: la de pieza, mando y rango ya la hacía el
+  catálogo de la fase 1 al aplicar; lo nuevo es que el recorte de rango lleva
+  **un `T_AVISO` justo detrás de su eco**, que nombra la pieza y el mando, dice
+  de qué lado se salió, qué se aplicó y el rango. Y que un `T_ORDENES` mal
+  formado —vacío, o que no es un múltiplo de 16 bytes— no se aplica ni a
+  medias, y lo dice.
+* **`common/gui_cliente.h`**: guarda **todos** los `T_ORDENES` de antes de
+  `T_ARRANCA`, en orden —no el último, como la suscripción—.
+* **`top/sim_main.cpp`**: los encola antes de `sc_start()`, detrás de la
+  suscripción previa. Son instantes absolutos: la secuencia es reproducible.
+* **`common/gui_mensajes.h`**: el cuerpo de `T_ORDENES`, de ida y de vuelta.
+
+**En `mcu-sim-gui`:** `Sesion::ordena()` manda `T_ORDENES` —antes de arrancar
+y en marcha— y `T_ORDEN_HECHA` es la señal `orden_hecha()`. Los controles del
+`Panel` dejan de estar muertos: nacen apagados, `activa_mandos()` los enciende
+con `T_LISTO` y los apaga con `T_FIN`, y cada uno emite `orden()` según el
+**tipo del mando y su rango declarado**, sin saber qué pieza es: el botón, el
+máximo al hundirlo y el mínimo al soltarlo; la casilla, su máximo o su mínimo;
+el deslizador, su posición. La ventana manda cada toque al momento, y pone en
+la lista de avisos los ecos que no son `RES_OK`, menos el de rango, que ya
+avisa el modelo.
+
+### 13.2 Cómo se ha comprobado
+
+**La prueba que pide el plan**, `make gui-ordenes` (`verif/gui/ordenes.py`, 23
+comprobaciones), con la ventana en Python de las fases 3 y 4 y sin GUI:
+
+| Grupo | Qué |
+| :--- | :--- |
+| O1 | **El ejemplo del enunciado** sobre B1 de `discovery_min.xml`, en un solo `T_ORDENES` antes de `T_ARRANCA`: **los cuatro ecos en exactamente 1,000000000 / 1,500000000 / 4,000000000 / 4,220000000 s**, con `RES_OK`; llegan **a medida que se aplican**, cada uno justo detrás de la instantánea de 10 ms antes; y `pulsado`, muestreado cada 10 ms, vale 1 justo en [1,00, 1,50) y [4,00, 4,22) —la muestra de 1,00 ya ve la pulsación—. Sin un aviso |
+| O2 | otra ejecución igual: los mismos ecos y las mismas 500 instantáneas, intercaladas en el mismo orden |
+| O3 | en cinco mensajes antes de arrancar —cada uno con su primer instante absoluto— y uno malformado: pieza inexistente → `RES_PIEZA`; un LED, que no tiene mandos, y un mando 7 → `RES_MANDO`; 5 y −2 → recortados a 1 y 0, `RES_RANGO` y **cada uno con su `T_AVISO` justo detrás**; **delta 0 → pulsa y suelta en el mismo instante, en el orden del mensaje**, y la muestra de ese instante ve lo último; 20 bytes → un `T_AVISO`, y ninguna orden |
+| O4 | en marcha, con `--tiempo-real`: la primera orden cae 100 ms después de un instante que la ventana no conoce —nunca antes de lo último que vio más 100 ms—, y las demás guardan sus deltas **exactos** |
+
+**`testgui`**, G13 contra el canal en memoria (114 → 126 comprobaciones, y
+`75300000000 ps`): la orden relativa a la vuelta que la lee, al microsegundo;
+el primer eco que sale antes de que se apliquen las demás; delta 0; los cuatro
+resultados con el aviso detrás de los de rango; dos `T_ORDENES` malformados;
+doce ecos que esperan con el canal atascado y llegan en orden, **y detrás** el
+aviso que se produjo después; y veinte que cierran la conexión, con la orden
+aceptada aplicándose igual. **Cinco mutaciones del enlace**, una a una, y las
+cinco caen; y quitar el encolado de las órdenes previas en `sim` tumba
+`gui-ordenes`.
+`gui-proto` P4 (61 → 64): los `T_ORDENES` de antes de arrancar se guardan
+todos y enteros, y el cuerpo de ida y vuelta.
+
+**`test407` no cambia**, ni en picosegundos ni en recuento: 2118 y `resto` en
+`2240553274213 ps`. Las otras tres suites tampoco, `gui-saludo` 22/22 y
+`gui-marcha` 24/24.
+
+**En esta ventana**, con `ctest`: `sesion` 41 (G5: `ordena()` antes de arrancar,
+en marcha y terminada; los ecos; uno que no mide lo que debe), `ventana` 31
+(lo que ordena cada tipo de control; los mandos se encienden con `T_LISTO` y se
+apagan con `T_FIN`; un toque antes de arrancar y otro en marcha; qué ecos van a
+la lista de avisos) y `cruzada` 16 contra el `mcu-sim` de verdad: **B1 pulsado
+de 200 a 250 ms con dos ecos en esos instantes exactos, y uno con `RES_PIEZA`,
+mientras el blinky parpadea igual**.
+
+### 13.3 Un fallo de la prueba cruzada, destapado aquí
+
+`QProcess::waitForFinished()` devuelve `false` si el proceso **ya** ha
+terminado, y `mcu-sim` termina en cuanto manda `T_FIN`: si lo hacía mientras la
+prueba esperaba con el bucle de eventos en marcha, «termina con código 0»
+fallaba sin que nadie hubiera hecho nada mal. Con las órdenes esa ventana de
+tiempo creció, y falló dos de cada tres veces; sin ellas no falló en tres
+ejecuciones, pero la carrera era la misma. Ahora se mira
+primero si el proceso sigue vivo.
+
+### 13.4 Lo que NO se ha hecho, que también es la fase 5
+
+La grabación de sesiones: es la fase 8, y los ecos con su instante real son lo
+que grabará. El control de la simulación —ritmo, pausa, parar en marcha—: fase
+6. Y la ventana no refleja el eco en el control: una casilla marcada cuya orden
+se recortó sigue marcada; lo que el modelo aplicó lo enseñan los indicadores.

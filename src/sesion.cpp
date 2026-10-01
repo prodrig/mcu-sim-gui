@@ -131,8 +131,19 @@ void Sesion::llega(quint16 tipo, const QByteArray& cuerpo)
         emit estado_modelo(e.fase, e.t_sim_ns, e.t_pared_s, e.deltas);
         break;
     }
+    case T_ORDEN_HECHA: {
+        OrdenHecha h{};
+        if (cuerpo.size() != int(sizeof h)) {
+            emit problema(tr("un eco de orden de %1 bytes no mide lo que dice").arg(cuerpo.size()));
+            break;
+        }
+        std::memcpy(&h, cuerpo.constData(), sizeof h);
+        ++ecos_;
+        emit orden_hecha(h.t_sim_ns, h.pieza, h.mando, h.valor, h.resultado);
+        break;
+    }
     default:
-        // T_ORDEN_HECHA (fase 5) y T_PONG.
+        // T_PONG, y lo que esta version no conozca: se salta.
         break;
     }
 }
@@ -160,6 +171,20 @@ bool Sesion::suscribe(quint64 periodo_ns, const QVector<quint16>& ids)
     QByteArray b(reinterpret_cast<const char*>(&c), int(sizeof c));
     for (quint16 id : ids) b.append(reinterpret_cast<const char*>(&id), 2);
     return cx_.envia(proto::T_SUSCRIBE, b);
+}
+
+bool Sesion::ordena(const QVector<proto::Orden>& ordenes)
+{
+    if (ordenes.isEmpty()) return false;
+    if (estado_ != Estado::Lista && estado_ != Estado::Corriendo) return false;
+    return cx_.envia(proto::T_ORDENES,
+                     QByteArray(reinterpret_cast<const char*>(ordenes.constData()),
+                                int(ordenes.size() * sizeof(proto::Orden))));
+}
+
+bool Sesion::ordena(quint16 pieza, quint16 mando, float valor)
+{
+    return ordena(QVector<proto::Orden>{proto::Orden{0, pieza, mando, valor}});
 }
 
 } // namespace mcusim

@@ -20,9 +20,18 @@
 //   * y una lista de avisos: los de la placa, que llegan antes de arrancar, y
 //     los del modelo, en marcha.
 //
-// Lo que acabará teniendo y aún no tiene: los mandos activos (fase 5), parar,
-// pausar y el ritmo (fase 6), y lanzar el modelo ella misma (fase 7). Hoy el
-// modelo se lanza a mano, desde una consola, con `--gui`.
+// Desde la fase 5, los mandos:
+//
+//   * se activan con T_LISTO -lo que se toca antes de arrancar se aplica en
+//     t = 0- y se apagan cuando el modelo termina o se va;
+//   * cada control manda su orden al momento (`Sesion::ordena`);
+//   * los ecos que no son RES_OK van a la lista de avisos: una orden a una
+//     pieza o un mando que no existen lo dice aquí, y una fuera de rango la
+//     dice ya el modelo con su propio T_AVISO, así que no se repite.
+//
+// Lo que acabará teniendo y aún no tiene: parar, pausar y el ritmo (fase 6), y
+// lanzar el modelo ella misma (fase 7). Hoy el modelo se lanza a mano, desde
+// una consola, con `--gui`.
 // =============================================================================
 #ifndef MCU_SIM_GUI_VENTANA_PRINCIPAL_H
 #define MCU_SIM_GUI_VENTANA_PRINCIPAL_H
@@ -59,6 +68,9 @@ private:
     void pon_aviso(quint32 nivel, quint64 t_sim_ns, const QString& origen,
                    const QString& texto);
     void pon_relojes(quint64 t_sim_ns, double t_pared_s, quint64 deltas);
+    void pon_eco(quint64 t_sim_ns, quint16 pieza, quint16 mando, float valor,
+                 quint32 resultado);
+    void apaga_mandos() { if (panel_) panel_->activa_mandos(false); }
 
     Sesion        ses_;
     quint16       puerto_;

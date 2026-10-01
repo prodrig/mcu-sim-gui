@@ -13,29 +13,45 @@ namespace mcusim {
 
 namespace {
 
-const char* const AUN_NO =
-    "Todavia no hace nada: las ordenes llegan al modelo en la fase 5 del plan.";
-
-QWidget* control_de(const PiezaGui& p, const MandoGui& m, QWidget* padre)
+// El control de un mando, y lo que ordena. Nace desactivado.
+QWidget* control_de(Panel* panel, const PiezaGui& p, const MandoGui& m, QWidget* padre)
 {
+    const quint16 pz = quint16(p.idx), md = quint16(m.idx);
+    const float lo = float(m.min), hi = float(m.max);
     QWidget* w = nullptr;
+    QString ayuda;
     if (m.tipo == QLatin1String("interruptor")) {
-        w = new QCheckBox(m.nombre, padre);
+        auto* c = new QCheckBox(m.nombre, padre);
+        QObject::connect(c, &QCheckBox::toggled, panel,
+                         [=](bool si) { emit panel->orden(pz, md, si ? hi : lo); });
+        ayuda = QObject::tr("Marcado ordena %1; desmarcado, %2.").arg(hi).arg(lo);
+        w = c;
     } else if (m.tipo == QLatin1String("continuo")) {
         auto* s = new QSlider(Qt::Horizontal, padre);
         s->setRange(0, 1000);               // de min a max, en milésimas
+        QObject::connect(s, &QSlider::valueChanged, panel, [=](int v) {
+            emit panel->orden(pz, md, lo + (hi - lo) * float(v) / 1000.f);
+        });
+        ayuda = QObject::tr("%1: de %2 a %3.").arg(m.nombre).arg(lo).arg(hi);
         w = s;
     } else {                                // "boton", y lo que no se conozca
-        w = new QPushButton(m.nombre, padre);
+        auto* b = new QPushButton(m.nombre, padre);
+        QObject::connect(b, &QPushButton::pressed, panel,
+                         [=] { emit panel->orden(pz, md, hi); });
+        QObject::connect(b, &QPushButton::released, panel,
+                         [=] { emit panel->orden(pz, md, lo); });
+        ayuda = QObject::tr("Mientras esta hundido ordena %1; al soltarlo, %2.")
+                    .arg(hi).arg(lo);
+        w = b;
     }
     w->setObjectName(QStringLiteral("mando:%1:%2").arg(p.idx).arg(m.idx));
     w->setEnabled(false);
-    w->setToolTip(QString::fromUtf8(AUN_NO));
+    w->setToolTip(ayuda);
     return w;
 }
 
-QGroupBox* recuadro_de(const PiezaGui& p, QWidget* padre,
-                       QHash<quint16, QLabel*>& etiquetas)
+QGroupBox* recuadro_de(Panel* panel, const PiezaGui& p, QWidget* padre,
+                       QHash<quint16, QLabel*>& etiquetas, QVector<QWidget*>& controles)
 {
     QString titulo = QStringLiteral("%1 · %2").arg(p.id, p.tipo);
     if (!p.conectada) titulo += QStringLiteral(" (desoldada)");
@@ -58,7 +74,11 @@ QGroupBox* recuadro_de(const PiezaGui& p, QWidget* padre,
         if (!o.unidad.isEmpty()) nombre += QStringLiteral(" (%1)").arg(o.unidad);
         f->addRow(QStringLiteral("<b>%1</b>").arg(nombre), l);
     }
-    for (const MandoGui& m : p.mandos) f->addRow(control_de(p, m, g));
+    for (const MandoGui& m : p.mandos) {
+        QWidget* c = control_de(panel, p, m, g);
+        controles.push_back(c);
+        f->addRow(c);
+    }
     if (ocultos > 0) {
         auto* l = new QLabel(QObject::tr("+%n observable(s) sin pintar", nullptr, ocultos), g);
         l->setObjectName(QStringLiteral("ocultos:%1").arg(p.idx));
@@ -77,7 +97,8 @@ Panel::Panel(const PlacaGui& placa, QWidget* padre) : QWidget(padre)
     const int columnas = 3;
     QHash<quint16, QLabel*> etiquetas;
     for (int i = 0; i < placa.piezas.size(); ++i)
-        rejilla->addWidget(recuadro_de(placa.piezas[i], this, etiquetas), i / columnas,
+        rejilla->addWidget(recuadro_de(this, placa.piezas[i], this, etiquetas, controles_),
+                           i / columnas,
                            i % columnas, Qt::AlignTop);
     rejilla->setRowStretch(int((placa.piezas.size() + columnas - 1) / columnas), 1);
     for (const PiezaGui& p : placa.piezas)
@@ -103,6 +124,12 @@ void Panel::pon_valor(quint16 id_obs, float valor)
     if (it == ind_.constEnd()) return;
     const QString t = texto_de(it->obs, valor);
     if (it->etiqueta->text() != t) it->etiqueta->setText(t);
+}
+
+void Panel::activa_mandos(bool si)
+{
+    activos_ = si;
+    for (QWidget* w : controles_) w->setEnabled(si);
 }
 
 Panel* construye_panel(const PlacaGui& placa, QWidget* padre)

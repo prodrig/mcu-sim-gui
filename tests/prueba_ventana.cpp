@@ -14,7 +14,13 @@
 //   G3  (fase 4) cómo se escribe un valor sin conocer un tipo, y la ventana en
 //       marcha: se suscribe al recibir T_LISTO a lo que pinta, y pone en su
 //       sitio las muestras, los relojes, las pérdidas y los avisos.
+//   G4  (fase 5) los mandos: qué ordena cada tipo de control, que se activan
+//       con T_LISTO y se apagan con T_FIN, que antes de arrancar y en marcha
+//       cada toque sale como T_ORDENES, y que los ecos que no son RES_OK -salvo
+//       el de rango, que ya avisa el modelo- van a la lista de avisos.
 // =============================================================================
+#include <cmath>
+
 #include <QApplication>
 #include <QCheckBox>
 #include <QGroupBox>
@@ -76,7 +82,8 @@ int main(int argc, char** argv)
                   "los indicadores dicen '—' hasta que haya muestras (fase 4)");
         QPushButton* pulsar = w->findChild<QPushButton*>("mando:2:0");
         comprueba(pulsar && pulsar->text() == "pulsar" && !pulsar->isEnabled(),
-                  "un mando de tipo boton es un boton, desactivado hasta la fase 5");
+                  "un mando de tipo boton es un boton, desactivado hasta que haya un "
+                  "modelo esperando");
         comprueba(cuantos_con_prefijo(w, "mando:") == p.n_mandos(),
                   "un control por mando, ni uno mas");
         QGroupBox* x3 = w->findChild<QGroupBox*>("pieza:0");
@@ -100,6 +107,28 @@ int main(int argc, char** argv)
                   w2->findChild<QCheckBox*>("mando:0:1"),
                   "un tipo que esta ventana no conoce -un servo- sale igual: un "
                   "deslizador para lo continuo y una casilla para el interruptor");
+
+        // Fase 5: que ordena cada control, sin conocer un tipo
+        auto* panel = qobject_cast<Panel*>(w2);
+        struct Ord { quint16 p, m; float v; };
+        std::vector<Ord> ords;
+        QObject::connect(panel, &Panel::orden,
+                         [&](quint16 p, quint16 m, float v) { ords.push_back({p, m, v}); });
+        auto* consigna = w2->findChild<QSlider*>("mando:0:0");
+        auto* habilita = w2->findChild<QCheckBox*>("mando:0:1");
+        comprueba(!panel->mandos_activos() && !consigna->isEnabled() && !habilita->isEnabled(),
+                  "los controles nacen apagados");
+        panel->activa_mandos(true);
+        comprueba(panel->mandos_activos() && consigna->isEnabled() && habilita->isEnabled(),
+                  "activa_mandos() los enciende todos");
+        consigna->setValue(500);
+        habilita->setChecked(true);
+        habilita->setChecked(false);
+        comprueba(ords.size() == 3 && ords[0].p == 0 && ords[0].m == 0 &&
+                      std::fabs(ords[0].v - 90.f) < 1e-4f &&
+                      ords[1].m == 1 && ords[1].v == 1.f && ords[2].m == 1 && ords[2].v == 0.f,
+                  "el deslizador a la mitad ordena la mitad de su rango -90 grados- y la "
+                  "casilla, su maximo marcada y su minimo desmarcada");
         delete w;
         delete w2;
     }
@@ -150,9 +179,21 @@ int main(int argc, char** argv)
                                                 bytes(uint16_t(3))),
                   "con T_LISTO, y ANTES de arrancar, se suscribe a los tres observables "
                   "que pinta, a 60 Hz simulados");
+        // Fase 5: con T_LISTO los mandos se activan, y lo que se toque antes de
+        // arrancar sale ya: el modelo lo aplicara en t = 0
+        auto* pulsar = v.findChild<QPushButton*>("mando:2:0");
+        comprueba(pulsar && pulsar->isEnabled(),
+                  "con T_LISTO los mandos se activan, antes de arrancar");
+        pulsar->animateClick();
+        comprueba(m.espera_leidos(4) && m.leido[2].tipo == T_ORDENES &&
+                  m.leido[2].cuerpo == QByteArray::fromStdString(bytes(Orden{0, 2, 0, 1.f})) &&
+                  m.leido[3].tipo == T_ORDENES &&
+                  m.leido[3].cuerpo == QByteArray::fromStdString(bytes(Orden{0, 2, 0, 0.f})),
+                  "hundir el boton manda pulsar = 1 y soltarlo pulsar = 0: un T_ORDENES "
+                  "cada vez, con delta 0");
         auto* parar = v.findChild<QPushButton*>("parar");
         arrancar->click();
-        comprueba(m.espera_leidos(3) && m.leido[2].tipo == T_ARRANCA && !arrancar->isEnabled() &&
+        comprueba(m.espera_leidos(5) && m.leido[4].tipo == T_ARRANCA && !arrancar->isEnabled() &&
                   !parar->isEnabled(),
                   "pulsar Arrancar manda T_ARRANCA; Arrancar se desactiva, y Parar tambien "
                   "(en marcha es la fase 6)");
@@ -181,10 +222,42 @@ int main(int argc, char** argv)
                   avisos->item(0)->text().contains("6.000 ms") &&
                   avisos->item(0)->text().contains("/stm32/: un error"),
                   "un T_AVISO va a la lista de avisos: nivel, instante, origen y texto");
+
+        std::printf("G4 Los mandos en marcha, y los ecos\n");
+        pulsar->animateClick();
+        comprueba(pulsar->isEnabled() && m.espera_leidos(7) && m.leido[5].tipo == T_ORDENES &&
+                  m.leido[6].tipo == T_ORDENES &&
+                  m.leido[6].cuerpo == QByteArray::fromStdString(bytes(Orden{0, 2, 0, 0.f})),
+                  "en marcha siguen activos, y cada toque sale igual");
+        m.manda(T_ORDEN_HECHA, bytes(OrdenHecha{7000000ull, 2, 0, 1.f, RES_OK, 0}));
+        m.manda(T_ORDEN_HECHA, bytes(OrdenHecha{7000000ull, 2, 0, 1.f, RES_RANGO, 0}));
+        m.manda(T_ORDEN_HECHA, bytes(OrdenHecha{8000000ull, 9, 0, 1.f, RES_PIEZA, 0}));
+        m.manda(T_ORDEN_HECHA, bytes(OrdenHecha{9000000ull, 1, 0, 1.f, RES_MANDO, 0}));
+        m.manda(T_ORDEN_HECHA, bytes(OrdenHecha{9500000ull, 2, 0, 0.f, RES_TARDE, 0}));
+        comprueba(espera([&] { return v.sesion().ecos() == 5 && avisos->count() == 4; }),
+                  "de cinco ecos, tres van a la lista de avisos: RES_OK se ve en los "
+                  "indicadores, y RES_RANGO ya lo avisa el modelo");
+        if (avisos->count() == 4) {
+            comprueba(avisos->item(1)->text().contains("pieza 9") &&
+                          avisos->item(1)->text().contains("no existe esa pieza") &&
+                          avisos->item(1)->text().contains("8.000 ms"),
+                      "una pieza que no existe, con su instante: \"" +
+                          avisos->item(1)->text().toStdString() + "\"");
+            comprueba(avisos->item(2)->text().contains("LD4, mando 0") &&
+                          avisos->item(2)->text().contains("no tiene ese mando"),
+                      "un mando que no existe, nombrando la pieza por su id: \"" +
+                          avisos->item(2)->text().toStdString() + "\"");
+            comprueba(avisos->item(3)->text().startsWith("[info]") &&
+                          avisos->item(3)->text().contains("B1.pulsar") &&
+                          avisos->item(3)->text().contains("tarde"),
+                      "y una que llego tarde, como informacion: \"" +
+                          avisos->item(3)->text().toStdString() + "\"");
+        }
         m.manda(T_FIN, bytes(Fin{M_VENTANA, 0, 50110000ull}));
         comprueba(espera([&] { return v.statusBar()->currentMessage().contains("50.110"); }),
                   "T_FIN se ve en la barra de estado, con el instante: \"" +
                   v.statusBar()->currentMessage().toStdString() + "\"");
+        comprueba(!pulsar->isEnabled(), "y con T_FIN los mandos se apagan");
     }
 
     return resultado();

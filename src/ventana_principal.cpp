@@ -74,9 +74,12 @@ VentanaPrincipal::VentanaPrincipal(quint16 puerto, QWidget* padre)
             ses_.suscribe(PERIODO_NS, panel_->pintados());
         arrancar_->setEnabled(true);
         parar_->setEnabled(true);
+        // Lo que se toque desde ya se aplica en t = 0 (doc/protocolo.md §5)
+        if (panel_) panel_->activa_mandos(true);
         statusBar()->showMessage(tr("el modelo esta construido y esperando: pulsa Arrancar"));
     });
     connect(&ses_, &Sesion::fin, this, &VentanaPrincipal::termina);
+    connect(&ses_, &Sesion::orden_hecha, this, &VentanaPrincipal::pon_eco);
     connect(&ses_, &Sesion::muestra, this, [this](quint16 id, float v) {
         if (panel_) panel_->pon_valor(id, v);
     });
@@ -86,6 +89,7 @@ VentanaPrincipal::VentanaPrincipal(quint16 puerto, QWidget* padre)
     connect(&ses_, &Sesion::desconectado, this, [this](const QString& m) {
         arrancar_->setEnabled(false);
         parar_->setEnabled(false);
+        apaga_mandos();
         if (!m.isEmpty())
             statusBar()->showMessage(tr("conexion cerrada: %1").arg(m));
     });
@@ -132,6 +136,11 @@ void VentanaPrincipal::pon_placa()
         texto += tr(" &nbsp; <b>(solo validacion: no se simulara)</b>");
     resumen_->setText(texto);
     panel_ = construye_panel(p);
+    connect(panel_, &Panel::orden, this, [this](quint16 pieza, quint16 mando, float v) {
+        if (!ses_.ordena(pieza, mando, v))
+            statusBar()->showMessage(tr("no se puede ordenar: el modelo no esta esperando "
+                                        "ni corriendo"));
+    });
     centro_->setWidget(panel_);
 }
 
@@ -161,10 +170,34 @@ void VentanaPrincipal::pon_relojes(quint64 t_sim_ns, double t_pared_s, quint64 d
     relojes_->setText(t);
 }
 
+void VentanaPrincipal::pon_eco(quint64 t_sim_ns, quint16 pieza, quint16 mando, float valor,
+                               quint32 resultado)
+{
+    // RES_OK no se dice: se ve en los indicadores. RES_RANGO tampoco: el
+    // modelo ya manda su propio T_AVISO, con lo que pidio y lo que aplico.
+    if (resultado == proto::RES_OK || resultado == proto::RES_RANGO) return;
+    QString quien = tr("pieza %1, mando %2").arg(pieza).arg(mando);
+    const PlacaGui& p = ses_.placa();
+    if (pieza < p.piezas.size()) {
+        const PiezaGui& pz = p.piezas[pieza];
+        quien = pz.id;
+        if (mando < pz.mandos.size()) quien += QStringLiteral(".") + pz.mandos[mando].nombre;
+        else                          quien += tr(", mando %1").arg(mando);
+    }
+    const QString por =
+        resultado == proto::RES_PIEZA ? tr("no existe esa pieza")
+      : resultado == proto::RES_MANDO ? tr("esa pieza no tiene ese mando")
+      : resultado == proto::RES_TARDE ? tr("llego tarde: se aplico al recibirla")
+                                      : tr("resultado %1").arg(resultado);
+    pon_aviso(resultado == proto::RES_TARDE ? proto::N_INFO : proto::N_AVISO, t_sim_ns,
+              tr("ventana"), tr("orden a %1 (%2): %3").arg(quien).arg(valor).arg(por));
+}
+
 void VentanaPrincipal::termina(quint32 motivo, qint32 codigo, quint64 t_sim_ns)
 {
     arrancar_->setEnabled(false);
     parar_->setEnabled(false);
+    apaga_mandos();
     const QString por =
         motivo == proto::M_VENTANA ? tr("se agoto la ventana de simulacion")
       : motivo == proto::M_PARA    ? tr("se pidio parar")

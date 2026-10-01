@@ -195,8 +195,10 @@ que duerme hasta que llega algo. Mientras tanto el modelo:
 * acepta **`T_SUSCRIBE`** y **`T_ORDENES`**, que es donde una secuencia
   enviada antes de arrancar se vuelve reproducible (§5). Del `T_SUSCRIBE` vale
   el último, y se aplica **antes de `sc_start()`**: la secuencia de
-  instantáneas se repite entonces al picosegundo de una ejecución a otra.
-  *`T_ORDENES` se lee y se ignora hasta la fase 5.*
+  instantáneas se repite entonces al picosegundo de una ejecución a otra. De
+  los `T_ORDENES` valen **todos**, en el orden en que llegan, y también se
+  encolan antes de `sc_start()`: la primera orden de cada uno es un instante
+  absoluto (§5).
 
 **Los avisos de la placa** —lo que `mcu-sim` encuentra al validar lo eléctrico
 y los puentes serie— llegan como `T_AVISO` **entre `T_CATALOGO` y `T_LISTO`**,
@@ -280,7 +282,10 @@ de `T_FIN`.
 las instantáneas se quedan en la cola del muestreador, que cuando se llena tira
 las nuevas y las cuenta en `perdidas`; los avisos esperan en la suya.
 
-**`T_ORDEN_HECHA`** — véase §5.
+**`T_ORDEN_HECHA`** — uno por orden, a medida que se aplican; véase §5. **No
+se tira ninguno**, como los avisos: esperan en la cola de la frontera, con el
+mismo máximo de 1000. Avisos y ecos salen ordenados por su instante simulado;
+a igual instante, primero el eco.
 
 **`T_FIN`** — motivo y código de salida. Después de mandarlo el modelo cierra.
 
@@ -293,8 +298,14 @@ vuelta, escribe lo del sentido contrario. Es un proceso más con la simulación
 en marcha, así que con `--gui` hay más deltas que sin él; el modelo hace lo
 mismo. Sin `--gui` el enlace se construye y no despierta nunca.
 
-**`T_ORDENES`, `T_PAUSA`, `T_SIGUE`, `T_PASO` y `T_PARA` en marcha** se leen
-enteros y se ignoran hasta las fases 5 y 6.
+**`T_ORDENES`** se encola en el instante simulado en que el enlace lo lee: ese
+es el «instante en que el modelo la saca de la cola» de §5. Como el enlace
+lee cada 100 µs simulados, una orden en marcha aterriza en el primer múltiplo
+de 100 µs —contados desde que se activó el enlace— posterior a su llegada,
+más su delta.
+
+**`T_PAUSA`, `T_SIGUE`, `T_PASO` y `T_PARA` en marcha** se leen enteros y se
+ignoran hasta la fase 6.
 
 **Y eso trae la trampa de siempre, escrita aquí para que no sorprenda:** ese
 proceso solo corre **si el tiempo simulado avanza**. Con la simulación en pausa
@@ -380,6 +391,33 @@ valor se sale del rango declarado **no se descarta en silencio**: se contesta co
 recorta y además se manda un `T_AVISO`. El silencio es lo que convierte un error
 de la GUI en una tarde perdida mirando el modelo.
 
+Las reglas exactas, desde la fase 5:
+
+* se valida **al aplicarla**, en su instante, no al recibirla: el resultado va
+  en su eco, y el eco lleva el instante real y el valor **aplicado** —el
+  recortado, si se recortó—;
+* el `T_AVISO` del recorte va **justo detrás de su eco**, con el mismo
+  instante, nivel `N_AVISO` y origen `mcu-sim/gui`, y dice la pieza y el mando
+  por su nombre, de qué lado se salió, qué se aplicó y el rango:
+  *«orden fuera de rango para B1.pulsar en t = 150000000 ns: lo pedido pasa del
+  maximo; se aplica 1 (rango 0 a 1)»*. Un NaN no está en ningún rango: se
+  lleva al mínimo;
+* un `T_ORDENES` vacío o cuyo cuerpo no es un múltiplo de 16 bytes **no se
+  aplica ni a medias**: un `T_AVISO` dice cuántos bytes traía, y ninguna orden
+  tiene eco, porque no hay ninguna orden que leer;
+* `RES_TARDE` no puede darse con esta semántica —un instante absoluto antes de
+  arrancar nunca ha pasado, y uno relativo en marcha tampoco—, pero el modelo
+  lo sabe dar, y la ventana lo enseña como información;
+* si la ventana se va, las órdenes **ya aceptadas se siguen aplicando** en su
+  instante: el modelo hace lo que se le dijo. Sus ecos ya no van a ninguna
+  parte.
+
+**En la ventana**, el control de cada mando ordena según el tipo del mando y
+su rango declarado, sin conocer la pieza: un **botón** manda el máximo al
+hundirlo y el mínimo al soltarlo, una **casilla** su máximo o su mínimo, y un
+**deslizador** su posición entre los dos. Cada toque es un `T_ORDENES` de una
+orden con delta 0: «ahora», que antes de arrancar es t = 0.
+
 ---
 
 ## 6. Qué pasa cuando algo va mal
@@ -397,6 +435,10 @@ de la GUI en una tarde perdida mirando el modelo.
 | Tipo de mensaje desconocido | se salta por longitud y sigue | igual |
 | El socket no traga instantáneas | las **tira** y cuenta cuántas en `perdidas` | enseña que va por detrás |
 | El socket no traga avisos | cola de 1000; si se llena, `T_FIN` con `M_ERROR`, cierra **y sigue simulando** | — |
+| El socket no traga ecos de órdenes | igual que con los avisos: 1000 en cola, y luego `T_FIN` con `M_ERROR`, cierra y sigue simulando —con las órdenes ya aceptadas— | — |
+| Una orden a una pieza o un mando que no existen | eco con `RES_PIEZA` o `RES_MANDO`; no se aplica | lo pone en la lista de avisos |
+| Una orden fuera de rango | la recorta, la aplica, eco con `RES_RANGO` y un `T_AVISO` detrás | enseña el aviso del modelo, sin repetirlo |
+| Un `T_ORDENES` que no es un múltiplo de 16 bytes | un `T_AVISO`, y no aplica ninguna | — |
 | `host` no es de bucle local | **avisa por la salida de error** y se conecta igual | — |
 
 Y una regla general que vale para los dos lados: **el modelo nunca se bloquea
