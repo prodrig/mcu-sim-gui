@@ -1,0 +1,135 @@
+# =============================================================================
+# ci.yml — mcu-sim-gui en las tres plataformas
+#
+# Compila la ventana y el transporte, y ejecuta las pruebas con `ctest`, en
+# Linux, Windows y macOS. Es la mitad de R-1 que seguía abierta
+# (`doc/plan_dos_procesos.md` §5): que esto compile en Windows. La otra mitad
+# -que `mcu-sim` corra allí- ya la cierra el CI de `mcu-sim`.
+#
+# Lo que NO hace, porque ya lo hace el otro: comparar las cabeceras que los dos
+# repositorios comparten por copia (`protocolo.h` y `proto_io.h`). Eso lo
+# comprueba `make gui-proto` en el CI de `mcu-sim`, que clona este repositorio
+# para hacerlo. La copia de referencia es la de aquí.
+#
+# Las pruebas no necesitan pantalla: solo usan QtCore y QtNetwork. La ventana
+# se arranca además con la plataforma `offscreen` en Linux, para saber que no
+# se cae al abrirse.
+# =============================================================================
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un push nuevo a la misma rama o al mismo pull request cancela el anterior:
+# aquí nada se publica, y lo único que interesa es el último.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Linux, con el Qt del sistema. ubuntu-24.04 y no ubuntu-latest a secas,
+  # porque la versión importa: 22.04 trae Qt 6.2.4, y CMakeLists.txt pide 6.3
+  # (qt_standard_project_setup no existe antes). 24.04 trae 6.4.2, que es
+  # también la versión con la que se escribió la fase 2.
+  # ---------------------------------------------------------------------------
+  linux:
+    name: Linux (Qt del sistema)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Qt 6, CMake y Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt6-base-dev cmake ninja-build
+          dpkg -l qt6-base-dev | tail -1
+
+      - name: Compilar
+        run: |
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Las pruebas
+        run: ctest --test-dir build --output-on-failure
+
+      - name: La ventana abre y no se cae
+        # Tres segundos con la plataforma `offscreen`, que no necesita pantalla.
+        # Si sale antes, es que se ha caído: `timeout` devuelve 124 solo si
+        # tuvo que matarla.
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          rc=0
+          timeout 3 ./build/mcu-sim-gui || rc=$?
+          if [ "$rc" != "124" ]; then
+            echo "  [FALLO] la ventana termino sola con codigo $rc"
+            exit 1
+          fi
+          echo "  [OK  ] la ventana abre y sigue abierta"
+
+  # ---------------------------------------------------------------------------
+  # Windows, con MSYS2 y MinGW-w64: la misma cadena que se usa para `mcu-sim`
+  # en Windows (su `doc/compilacion.md` §5), con el Qt que empaqueta MSYS2.
+  # ---------------------------------------------------------------------------
+  windows:
+    name: Windows (MSYS2 / MinGW-w64)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          pacboy: toolchain:p cmake:p ninja:p qt6-base:p
+
+      - name: Compilar
+        run: |
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Las pruebas
+        # Las DLL de Qt están en /mingw64/bin, que el shell de MSYS2 ya tiene
+        # en el PATH. Fuera de él harían falta al lado del .exe, y eso es la
+        # fase 9 (windeployqt), no esto.
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Que se ha generado
+        run: ls -la build/*.exe
+
+  # ---------------------------------------------------------------------------
+  # macOS, con el Qt de Homebrew. Una sola arquitectura, Apple Silicon: aquí
+  # no hay código que dependa de ella, a diferencia del Makefile de mcu-sim.
+  # ---------------------------------------------------------------------------
+  macos:
+    name: macOS (Qt de Homebrew)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Qt 6 y Ninja
+        run: |
+          brew install qt ninja
+          brew list --versions qt
+
+      - name: Compilar
+        run: |
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
+          cmake --build build
+
+      - name: Las pruebas
+        run: ctest --test-dir build --output-on-failure

@@ -1072,9 +1072,14 @@ cada vez:
   falta uno.
 * `macos` y `windows` pasan `make red gui-proto`, sin comparar copias, que ya se
   comparan en `rapidas`.
-* Este repositorio sigue **sin CI propio**. La prueba de la GUI se ejecuta a
-  mano con `ctest`. Montarlo es poco —`apt install qt6-base-dev` en Ubuntu— y
-  cerraría la mitad de R-1 que sigue abierta: que esto compile en Windows.
+* Y este repositorio tiene **CI propio** desde el mismo día:
+  `.github/workflows/ci.yml` compila y pasa `ctest` en Linux (Qt 6.4.2 del
+  sistema, Ubuntu 24.04: la 22.04 trae la 6.2, por debajo de la 6.3 que pide
+  `CMakeLists.txt`), en Windows (MSYS2 y el Qt de MinGW-w64) y en macOS (el Qt
+  de Homebrew); en Linux, además, arranca la ventana con `offscreen` y
+  comprueba que no se cae. No compara las copias compartidas: eso ya lo hace el
+  CI de `mcu-sim`. Es lo que cerrará la mitad de **R-1** que sigue abierta,
+  que esto compile en Windows, en cuanto pase allí la primera vez.
 
 ### 10.4 Lo que NO se ha hecho, que también es la fase 2
 

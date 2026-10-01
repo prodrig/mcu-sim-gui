@@ -243,6 +243,12 @@ descarguen el simulador. Eso es trabajo de la **fase 9** y está anotado allí.
 Es la misma regla que sigue `mcu-sim` y por el mismo motivo: decir lo que se ha
 probado y lo que no, en vez de dar por bueno lo que parece obvio.
 
+**La integración continua** (`.github/workflows/ci.yml`) compila y pasa las
+pruebas en las tres plataformas de esta tabla en cada push a `main` y en cada
+pull request: Linux con el Qt del sistema (Ubuntu 24.04), Windows con MSYS2 y
+macOS con Homebrew. Las dos filas «sin verificar» de arriba cambian en cuanto
+pase allí la primera vez; hasta entonces, se quedan como están.
+
 ---
 
 ## Configuración
