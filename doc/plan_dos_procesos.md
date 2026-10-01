@@ -265,8 +265,11 @@ class ExtPartBase {
 };
 ```
 
-Con valores por omisión **las 21 piezas que hay hoy compilan sin tocarlas**, que
-es lo que permite que esta fase no sea un terremoto. Se implementan las tres que
+Con valores por omisión **las 22 piezas que hay hoy compilan sin tocarlas**, que
+es lo que permite que esta fase no sea un terremoto. Eran 21 al escribir el
+plan; la 22.ª es `PuenteSerie`, la del puente UART (P-14). El catálogo al día
+está en `mcu-sim/doc/parts.md`, y `mcu-sim --help` lista las piezas que conoce
+la factoría. Se implementan las tres que
 el enunciado necesita de verdad: `Led` (`encendido`, `corriente`), `Button`
 (`pulsado`, y el mando `pulsar`) y `Crystal` (`frecuencia`).
 
