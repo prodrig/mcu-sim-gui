@@ -4,8 +4,11 @@ La **contraparte de visualización gráfica de
 [`mcu-sim`](../mcu-sim)**, el modelo SystemC de microcontroladores STM32.
 `mcu-sim` simula; esto lo enseña y deja tocarlo.
 
-> **Estado: fase 0.** Hay un esqueleto que compila y abre una ventana vacía, el
-> protocolo escrito y el plan por fases. Todavía no habla con nadie.
+> **Estado: fase 1.** Hay un esqueleto que compila y abre una ventana vacía, el
+> protocolo escrito y el plan por fases. Del lado de `mcu-sim` ya existe la
+> frontera —lo que cada pieza deja ver y tocar, el catálogo, el muestreador y el
+> aplicador—, probada sin GUI. Todavía no habla con nadie: la conexión llega
+> con las fases 2 y 3.
 
 ---
 

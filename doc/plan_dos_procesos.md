@@ -316,6 +316,12 @@ mueve, la fase no está cerrada. `testserie` está en la lista porque
 `StepperDriver`, `DcMotor`): son `[AG]` §8, son la parte grande y van después de
 todo esto.
 
+> **Ejecutada el 2026-10-01** (§9), con dos desviaciones de lo de arriba, las
+> dos a propósito: `Crystal` declara `presente` y no `frecuencia`, porque la
+> pieza no tiene frecuencia (§9.2); y **ninguna comprobación va en `test407`**:
+> todas están en un banco aparte, `testgui`, y la de `test407` es que su línea
+> de `invariantes.txt` no cambie ni en el recuento (§9.3).
+
 ---
 
 ### Fase 2 — La capa de transporte, probada sin SystemC
@@ -539,7 +545,7 @@ en un Mac.
 | | Riesgo | Cómo se cierra | Cuándo se sabe |
 | :--- | :--- | :--- | :--- |
 | **R-1** | SystemC no se construye para MinGW, o el modelo no corre en Windows | **Medio cerrado, y por el lado bueno: SystemC 2.3.4 SÍ se construye para MinGW y `mcu-sim.exe` arranca y responde.** Queda pasar las suites allí, y `mcu-sim-gui` sigue sin compilarse en Windows. El relato, con los dos diagnósticos equivocados, en §8.7; la trampa de `libwinpthread`, en §8.8 | fase 0, **abierto a medias** |
-| **R-2** | Los procesos nuevos mueven el invariante del F407 | Que no despierten sin `--gui`. Probado en la fase 4 del plan del F415/F417 | fase 1 |
+| **R-2** | Los procesos nuevos mueven el invariante del F407 | Que no despierten sin `--gui`. Probado en la fase 4 del plan del F415/F417 | **cerrado en la fase 1**: con la frontera construida y sin activar, `test407` da 2118 y `resto` en `2240553274213 ps`, y `sim` los mismos deltas (§9.4) |
 | **R-3** | El socket solo se atiende si el tiempo simulado avanza, y en pausa no avanza | Rodajas cortas en pausa, como ya hace `sim_main.cpp` con un stub de GDB esperando | fase 6 |
 | **R-4** | La interactividad rompe el determinismo | No se puede evitar; se compensa grabando la sesión con sus instantes reales | fase 8 |
 | **R-5** | La lista de argumentos envejece en la GUI | `mcu-sim --argumentos`: el programa se describe a sí mismo | fase 7 |
@@ -824,3 +830,129 @@ es la única prueba que vale.
 Dicho de otro modo: la fase 9 tiene ahora tres deberes, no uno. Firmar el
 ejecutable (§8.7), enlazar estáticamente lo que se pueda, y empaquetar con
 `windeployqt` lo que no.
+
+---
+
+## 9. Fase 1, ejecutada
+
+Todo en `mcu-sim`, en la rama `gui`. Este repositorio solo cambia en su
+documentación: este plan, el README y dos reglas nuevas de `doc/protocolo.md`.
+
+### 9.1 Qué se ha escrito
+
+* **`parts/part_base.h`**: `Observable`, `Mando` y los seis métodos virtuales
+  de `ExtPartBase`, con valores por omisión. Las diecinueve piezas que no
+  declaran nada compilan sin tocarlas.
+* **`parts/ext_parts.h`**: las tres piezas. `Led` declara `encendido` (el que
+  sugiere pintar) y `corriente` en mA; `Button`, `pulsado` y el mando `pulsar`,
+  que es exactamente `press()`/`release()`; `Crystal`, `presente`.
+* **`parts/frontera_gui.h`**, nuevo:
+  * `Catalogo`, sobre una copia del inventario. Numera los observables con un
+    `id_obs` plano, valida una orden sin aplicarla y escribe el XML de
+    `T_CATALOGO` con el formato de `doc/protocolo.md` §3;
+  * `FronteraGui`, el módulo con los dos `SC_THREAD`: el **muestreador** y el
+    **aplicador**. Sus salidas son dos colas que vaciarán la fase 4
+    (instantáneas) y la 5 (ecos de órdenes). Hasta que alguien llame a
+    `activa()`, los dos esperan sobre un evento que nadie notifica.
+* **`top/sim_main.cpp`**: la frontera se construye siempre y no se activa. La
+  activará el saludo de la fase 3.
+* **`top/sc_main.cpp`**: la misma frontera, sin activar, en el banco del F407.
+  Ningún grupo nuevo (§9.3).
+* **`top/sc_main_gui.cpp`**, nuevo: el banco **`testgui`** (§9.3).
+* `Makefile.mcu-sim`, `ci/pasa_suites.sh`, los tres bucles del workflow y
+  `verif/invariantes.txt`, para que `testgui` sea una suite más.
+
+### 9.2 `Crystal` no tiene frecuencia, y no se le ha inventado
+
+El plan pedía que `Crystal` declarase `frecuencia`. La pieza no la tiene, y su
+ficha de `--help` dice que es a propósito: «NO LLEVA LA FRECUENCIA, y no es un
+olvido: la del HSE es un dato del árbol de reloj y se configura en el RCC». Darle
+un atributo para poder publicarlo duplicaría un dato del RCC y contradiría esa
+ficha; y publicar un número que la pieza no tiene sería el modelo diciendo lo
+que no sabe, que es peor que la GUI calculando lo que sí sabe (R-7). Así que
+declara lo que sí sabe: si está soldado (`presente`). Si un día
+hace falta enseñar la frecuencia del HSE, es un observable del RCC, no del
+cristal.
+
+### 9.3 Todas las comprobaciones, en un banco aparte
+
+El plan pedía un grupo nuevo en `test407` con lo que no gasta tiempo. **Se
+escribió, pasó, y se sacó de allí**, porque choca con una decisión posterior a
+este plan: la **D-12** del puente UART (`mcu-sim/doc/analisis_puente_serie.md`
+§10), que dice que lo que no necesita el banco del F407 no va en él, ni
+siquiera para mover su recuento, porque T130 lo movió en la fase 0. Así que en
+`test407` hay una frontera construida y sin activar, y **ninguna comprobación**:
+la prueba es que su línea de `invariantes.txt` no ha cambiado.
+
+Y el muestreador y el aplicador **solo hacen cosas en el tiempo**: dejarlos sin
+probar hasta la fase 4 era dejar sin probar justo lo que esta fase escribe. Las
+dos cosas van a un quinto banco, **`testgui`**, con su propia línea en
+`invariantes.txt`, sobre una placa mínima sin chip: un LED, un pulsador que lo
+enciende, un pulsador normalmente cerrado, dos resistencias y un cristal. Sus
+87 comprobaciones:
+
+| Grupo | Qué |
+| :--- | :--- |
+| G0 | sin gastar tiempo: lo que declara cada pieza, que `acciona()` hace lo mismo que `press()`/`release()` (también en el NC, donde `pulsado` es el dedo y no el contacto), el catálogo y su XML, la validación (`RES_PIEZA`, `RES_MANDO`, `RES_RANGO`, un NaN) y una frontera sin activar que no acepta nada |
+| G1 | el catálogo de esa placa; antes de activar no se acepta nada |
+| G2 | el ejemplo de `doc/protocolo.md` §5 a escala de ms: cuatro órdenes con deltas enviadas **antes de arrancar**, aplicadas en 1,00 / 1,50 / 4,00 / 4,22 ms, y siete instantáneas que las ven pasar |
+| G3 | órdenes **en marcha**: la primera, relativa al instante en que se encola; un delta de 0, en el mismo instante y en su orden |
+| G4 | una orden y una muestra en el **mismo instante**: la muestra ve la orden. Y la corriente del LED contra el nodo resuelto a mano |
+| G5 | `RES_TARDE`, `RES_PIEZA`, `RES_MANDO` y `RES_RANGO`: siete órdenes, siete ecos |
+| G6 | la suscripción: se rechaza entera si un id no existe, periodo 0 la apaga, las muestras caen en la rejilla desde t = 0 |
+| G7 | el atasco: con la cola llena se tiran las nuevas, y la primera que entra después dice cuántas |
+| G8 | una orden **anterior** que llega mientras el aplicador espera a otra; y la frontera sin activar, que no ha hecho nada en todo el banco |
+
+**Y se ha comprobado que pueden fallar.** Seis mutaciones de
+`frontera_gui.h`, una a una, y las seis rompen lo que tienen que romper:
+
+| Mutación | Lo que cae |
+| :--- | :--- |
+| quitar el delta de espera del muestreador | G4: la muestra se adelanta a la orden |
+| tratar las órdenes en marcha como absolutas | G3, G4, G5 y G8 (10 comprobaciones) |
+| no marcar nunca `RES_TARDE` | G5 |
+| tirar las instantáneas viejas en vez de las nuevas | G7 (2) |
+| contar el periodo desde la suscripción y no desde t = 0 | G6 y G7 (3) |
+| no volver a mirar la cola cuando llega una orden anterior | G8 (2) |
+
+La primera es la que justifica una decisión que el protocolo no tomaba: **las
+órdenes de un instante van antes que la muestra de ese instante.** Sin el
+delta de espera, con SystemC 2.3.4, la muestra se tomaba antes de aplicar la
+orden; con otra versión podría ser al revés, porque la norma no fija en qué
+orden despierta dos procesos en el mismo instante. Está escrito ahora en
+`doc/protocolo.md` §4.1.
+
+### 9.4 Cómo se ha comprobado
+
+Con SystemC 2.3.4 y g++ 13 en Linux, que es la combinación del trabajo de Linux
+del CI; las otras tres plataformas lo dirán en el primer push del pull request.
+
+| | Antes | Ahora |
+| :--- | ---: | ---: |
+| `test407` | 2118 | **2118** |
+| `resto` del F407 | `2240553274213 ps` | **`2240553274213 ps`** |
+| total del F407 | `2337219149213 ps` | **`2337219149213 ps`** |
+| `test446` | 204, `1033367277932 ps` | igual |
+| `test417` | 165, `718988288 ps` | igual |
+| `testserie` | 189, `400677589564 ps` | igual |
+| `testgui` | — | **87**, `26500000000 ps` |
+
+Las cinco con `ci/pasa_suites.sh` y `ci/comprueba_invariante.sh`, como el CI.
+Además:
+
+* **`sim` simula lo mismo con y sin la frontera.** Las diez placas de
+  `placas/` validan con la misma salida que el `mcu-sim` de antes, y cinco
+  simulaciones (el blinky en dos placas, la Nucleo-F446RE, el VCP en memoria y
+  una con `--gui`) dan la misma salida **y el mismo número de deltas**. Solo
+  cambia, con `--gui`, la línea que dice que todavía no se conecta.
+* **El netlist del banco no cambia**: `test407 --netlist` sigue dando
+  `placas/banco.xml` byte a byte. La frontera no es una pieza.
+* **`testgui` con ASan y UBSan, limpio.** Sin LeakSanitizer, que no funciona
+  bajo `ptrace` en el entorno donde se probó.
+
+### 9.5 Lo que NO se ha hecho, que también es la fase 1
+
+Ni un socket. Nadie activa la frontera fuera de `testgui`, y `--gui` sigue
+imprimiendo una línea y nada más. Las otras diecinueve piezas no declaran
+observables ni mandos: se irán añadiendo cuando la GUI las necesite, y sin tocar
+nada más, porque el catálogo recorre el inventario.

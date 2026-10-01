@@ -191,7 +191,22 @@ sobre la simulación no es medible.
 El campo `perdidas` es la parte honesta: si el socket no traga, **las
 instantáneas se tiran** —son muestras, la siguiente dice lo mismo y mejor— y
 aquí se cuenta cuántas, para que la GUI pueda enseñar que va por detrás en vez
-de mentir con una gráfica continua.
+de mentir con una gráfica continua. Se tiran las **nuevas**, no las viejas: la
+primera que vuelve a entrar lleva en `perdidas` cuántas faltan justo delante de
+ella, y eso solo es verdad si lo que falta es lo de después.
+
+**En qué instantes.** En los múltiplos del periodo contados **desde t = 0**, no
+desde el instante en que llegó la suscripción. Así dos ejecuciones con la misma
+suscripción muestrean en los mismos instantes aunque la suscripción llegue en
+momentos distintos.
+
+**Y qué ve una instantánea de su propio instante.** Si una orden y una muestra
+caen en el mismo instante simulado, **la muestra ve la orden aplicada**. No ve
+necesariamente su consecuencia eléctrica —un LED que se enciende porque se
+pulsó un botón tarda deltas en enterarse—; esa la verá la siguiente. Hace falta
+decirlo porque SystemC no fija el orden en que despierta dos procesos en el
+mismo instante: sin una regla, la respuesta dependería de la versión de la
+biblioteca. El modelo la cumple con un delta de espera antes de muestrear.
 
 **`T_AVISO`** — `CabAviso` + el `id` de `SC_REPORT` + el texto. Es la tubería por
 la que sale todo lo que hoy va a la consola: los avisos de «esto no está
@@ -225,7 +240,10 @@ ya hace `sim_main.cpp` hoy con `for (;;) espera(sc_time(1, SC_MS));` cuando hay
 un stub de GDB esperando.
 
 **`T_SUSCRIBE`** puede llegar tantas veces como quiera: reemplaza a la anterior.
-Cambiar de pestaña en la GUI es volver a suscribirse.
+Cambiar de pestaña en la GUI es volver a suscribirse. Si trae un `id_obs` que no
+existe se rechaza **entera** y la anterior sigue en pie: una suscripción a
+medias es peor que ninguna, porque la pantalla creería estar viendo lo que
+pidió.
 
 **`T_PASO`** solo tiene sentido con `RIT_DEMANDA`. Con cualquier otro ritmo se
 contesta con un `T_AVISO` de nivel `N_AVISO` y se ignora.
