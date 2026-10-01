@@ -8,7 +8,9 @@
 //   G2  la `Sesion` contra un modelo falso: T_HOLA -> T_VERSION, la placa, el
 //       catálogo, T_LISTO, arranca() -> T_ARRANCA, y T_FIN;
 //   G3  un modelo que no habla ninguna versión que esto conozca, y uno que
-//       manda un catálogo que no se puede leer.
+//       manda un catálogo que no se puede leer;
+//   G4  (fase 4) los avisos de placa durante el saludo, T_SUSCRIBE, y las
+//       instantáneas, los avisos y los estados en marcha.
 // =============================================================================
 #include <QCoreApplication>
 
@@ -161,6 +163,68 @@ int main(int argc, char** argv)
         comprueba(espera([&] { return m.s.state() == QAbstractSocket::UnconnectedState; }) &&
                   dicho.contains("idx"),
                   "un catalogo que no se puede leer: se cierra, y se dice por que");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("G4 La fase 4: avisos, suscripcion e instantaneas\n");
+    {
+        Sesion s;
+        comprueba(!s.suscribe(1000000, {1}), "sin un modelo saludado, suscribe() no manda nada");
+        s.escucha(QHostAddress::LocalHost, 0);
+        struct Av { quint32 n; quint64 t; QString o, x; };
+        std::vector<Av> avs;
+        std::vector<std::pair<quint64, quint32>> insts;
+        std::vector<std::pair<quint16, float>> muestras;
+        quint64 t_est = 0; double pared = 0; quint64 deltas = 0; quint32 fase = 9;
+        QObject::connect(&s, &Sesion::aviso, [&](quint32 n, quint64 t, const QString& o,
+                                                 const QString& x) { avs.push_back({n, t, o, x}); });
+        QObject::connect(&s, &Sesion::instantanea,
+                         [&](quint64 t, quint32 p) { insts.push_back({t, p}); });
+        QObject::connect(&s, &Sesion::muestra,
+                         [&](quint16 i, float v) { muestras.push_back({i, v}); });
+        QObject::connect(&s, &Sesion::estado_modelo, [&](quint32 f, quint64 t, double p, quint64 d) {
+            fase = f; t_est = t; pared = p; deltas = d;
+        });
+        ModeloFalso m;
+        m.conecta(s.puerto());
+        m.manda(T_HOLA, "protocolo_max=1\n");
+        m.espera_leidos(1);
+        m.version(1);
+        m.manda(T_PLACA, PLACA_XML);
+        m.manda(T_CATALOGO, CATALOGO_XML);
+        m.manda(T_AVISO, bytes(CabAviso{N_AVISO, 5, 0}) + "placa" +
+                         "nodo suelto: conducen a la vez RA.a y RB.a");
+        m.manda(T_LISTO);
+        comprueba(espera([&] { return s.estado() == Sesion::Estado::Lista; }) &&
+                  avs.size() == 1 && avs[0].n == N_AVISO && avs[0].o == "placa" &&
+                  avs[0].x.contains("conducen a la vez"),
+                  "un aviso de placa entre T_CATALOGO y T_LISTO llega como aviso(), antes "
+                  "de arrancar");
+        comprueba(s.suscribe(16666667ull, {1, 3}), "suscribe() con el modelo esperando");
+        CabSuscribe c{};
+        comprueba(m.espera_leidos(2) && m.leido[1].tipo == T_SUSCRIBE &&
+                  m.leido[1].cuerpo.size() == int(sizeof c + 4) &&
+                  (std::memcpy(&c, m.leido[1].cuerpo.constData(), sizeof c), true) &&
+                  c.periodo_ns_lo == 16666667u && c.periodo_ns_hi == 0 && c.n == 2,
+                  "y el modelo recibe un T_SUSCRIBE con el periodo y los dos ids");
+        s.arranca();
+        comprueba(!s.para(), "en marcha, para() no manda nada: es la fase 6");
+        std::string in = bytes(CabInstantanea{7000000ull, 2, 4});
+        in += bytes(Muestra{1, 0, 1.f}) + bytes(Muestra{3, 0, 0.f});
+        m.manda(T_INSTANTANEA, in);
+        m.manda(T_ESTADO, bytes(Estado{F_CORRIENDO, 0, 7000000ull, 0.5, 99ull}));
+        m.manda(T_AVISO, bytes(CabAviso{N_ERROR, 6, 7000000ull}) + "/stm32" + "algo");
+        comprueba(espera([&] { return avs.size() == 2; }) && insts.size() == 1 &&
+                  insts[0].first == 7000000ull && insts[0].second == 4 && s.perdidas() == 4,
+                  "una instantanea: su instante y sus perdidas, que se acumulan");
+        comprueba(muestras.size() == 2 && muestras[0].first == 1 && muestras[0].second == 1.f &&
+                  muestras[1].first == 3 && muestras[1].second == 0.f,
+                  "y una muestra() por observable, con su id y su valor");
+        comprueba(fase == F_CORRIENDO && t_est == 7000000ull && pared == 0.5 && deltas == 99,
+                  "T_ESTADO: la fase, los dos relojes y los deltas");
+        comprueba(avs[1].n == N_ERROR && avs[1].t == 7000000ull && avs[1].o == "/stm32" &&
+                  avs[1].x == "algo",
+                  "y un aviso en marcha, con su nivel, su instante, su origen y su texto");
     }
 
     return resultado();

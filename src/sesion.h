@@ -14,8 +14,16 @@
 //                  T_ARRANCA; `para()`, T_PARA;
 //   T_FIN       -> se acabó, con motivo, código e instante.
 //
-// Lo de las fases 4 a 6 —instantáneas, avisos, estado, ecos de órdenes— se
-// recibe y se ignora todavía.
+// Y desde la fase 4, el sentido modelo -> pantalla en marcha:
+//
+//   T_INSTANTANEA -> `instantanea()` con el instante y las perdidas, y una
+//                    `muestra()` por observable;
+//   T_AVISO       -> `aviso()`. Los de la placa llegan durante el saludo, entre
+//                    T_CATALOGO y T_LISTO; los del modelo, en marcha;
+//   T_ESTADO      -> `estado_modelo()`, con los dos relojes;
+//   `suscribe()`  -> T_SUSCRIBE.
+//
+// Los ecos de órdenes (fase 5) se reciben y se ignoran todavía.
 // =============================================================================
 #ifndef MCU_SIM_GUI_SESION_H
 #define MCU_SIM_GUI_SESION_H
@@ -55,8 +63,15 @@ public:
     // T_ARRANCA, con ritmo libre y ventana indefinida: el contenido lo usa la
     // fase 6. false si el modelo no está esperando.
     bool arranca();
-    // T_PARA: antes de arrancar, termina sin simular; en marcha, es la fase 6.
+    // T_PARA: antes de arrancar, termina sin simular. En marcha es la fase 6,
+    // y hasta entonces no se manda: false.
     bool para();
+    // T_SUSCRIBE: qué observables, y cada cuánto tiempo SIMULADO. Reemplaza a
+    // la anterior; vacía, las apaga. false si no hay un modelo saludado.
+    bool suscribe(quint64 periodo_ns, const QVector<quint16>& ids);
+
+    // Instantáneas que el modelo dice haber tirado porque esto no leía.
+    quint64 perdidas() const { return perdidas_; }
 
     // La versión que elige la ventana ante un `protocolo_max`: la más alta que
     // conocen los dos, o 0 si no hay ninguna. Pública porque se prueba sola.
@@ -72,6 +87,11 @@ signals:
     void fin(quint32 motivo, qint32 codigo, quint64 t_sim_ns);
     void desconectado(const QString& motivo);
     void problema(const QString& texto);   // algo que la persona tiene que saber
+    // Fase 4
+    void instantanea(quint64 t_sim_ns, quint32 perdidas);
+    void muestra(quint16 id_obs, float valor);
+    void aviso(quint32 nivel, quint64 t_sim_ns, const QString& origen, const QString& texto);
+    void estado_modelo(quint32 fase, quint64 t_sim_ns, double t_pared_s, quint64 deltas);
 
 private:
     void llega(quint16 tipo, const QByteArray& cuerpo);
@@ -83,6 +103,7 @@ private:
     QHash<QString, QString> hola_;
     QByteArray              placa_xml_;
     PlacaGui                placa_;
+    quint64                 perdidas_ = 0;
 };
 
 } // namespace mcusim

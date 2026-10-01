@@ -417,6 +417,12 @@ necesita ventana.
 **Qué NO entra.** Órdenes y control: esto es el sentido modelo → pantalla
 entero, y nada más.
 
+> **Ejecutada el 2026-10-01** (§12). Tres cosas que el plan no decía: el
+> enlace no habla con un socket sino con un **canal**, para que `testgui`
+> pruebe la contrapresión sin sockets (§12.1); los avisos de **placa** salen
+> en el saludo, antes de arrancar (§12.2); y destapó un fallo de
+> `--tiempo-real` con ventana finita, que ya estaba en `mcu-sim` (§12.3).
+
 ---
 
 ### Fase 5 — Las órdenes
@@ -1215,3 +1221,128 @@ modelo: hoy se lanza a mano con `--gui`, y lanzarlo es la fase 7.
 
 No se ha probado en Windows ni en macOS más que lo que el CI diga: `gui-saludo`
 corre en los tres trabajos de `mcu-sim`, y `ctest` en los tres de este.
+
+---
+
+## 12. Fase 4, ejecutada
+
+### 12.1 Qué se ha escrito
+
+**En `mcu-sim`:**
+
+* **`parts/enlace_gui.h`**, nuevo: `EnlaceGui`, un `SC_THREAD` que despierta
+  cada 100 µs simulados —el patrón del GDB— y en cada vuelta lee lo que manda
+  la ventana (`T_SUSCRIBE` a la frontera, `T_PING` con su `T_PONG`; lo de las
+  fases 5 y 6, leído e ignorado), escribe lo que se quedara atascado, pasa a la
+  salida los avisos y las instantáneas, y pone un `T_ESTADO` detrás de cada
+  tanda o, cada 250 ms de pared sin ninguno, uno suelto. **No sabe de
+  sockets**: habla con un `CanalGui`. En `sim` el canal es el socket; en
+  `testgui`, un búfer en memoria que se atasca a voluntad. Así la
+  contrapresión se prueba sin un socket y de forma determinista, que es lo
+  único que la hace probable: el sistema operativo amortigua megas.
+* **La contrapresión**, como la escribía el plan: la salida no pasa de 256 kB;
+  las instantáneas que no caben se quedan en la cola del muestreador, que tira
+  las nuevas y las cuenta; los avisos esperan en la suya y, si llegan a 1000,
+  `T_FIN` con `M_ERROR` va delante de todo, la conexión se cierra **y la
+  simulación sigue**.
+* **El desvío de `SC_REPORT`**: el enlace pone su manejador al activarse,
+  encadenado al de antes —la consola sigue igual—, y lo quita al perder la
+  conexión. Va a la ventana lo que se ve en la consola; lo silenciado no; el
+  «Simulation stopped by user» del núcleo, tampoco.
+* **`common/gui_mensajes.h`**, nuevo: el `CanalGui`, y los cuerpos de
+  `T_AVISO` y `T_SUSCRIBE`. No va en `proto_io.h`, que es el mismo fichero en
+  los dos repositorios.
+* **`common/gui_cliente.h`**: el saludo manda los avisos de placa, guarda el
+  último `T_SUSCRIBE` de antes de arrancar y, con `T_ARRANCA`, le **entrega**
+  la conexión al enlace —un `CanalSocket`— con el emisor y el lector tal como
+  quedaron.
+* **`top/sim_main.cpp`**: el enlace se construye siempre y se activa al
+  arrancar; la suscripción previa se aplica antes de `sc_start()`; al acabar,
+  `termina()` vacía lo pendiente, manda un `T_ESTADO` final y `T_FIN`.
+* **`top/sc_main.cpp`**: `test407` lleva un `EnlaceGui` construido y sin
+  activar.
+
+**En `mcu-sim-gui`:** `Sesion` lee `T_INSTANTANEA`, `T_AVISO` y `T_ESTADO` y
+manda `T_SUSCRIBE`; el panel pasa a ser una clase, `Panel`, que pone cada
+muestra en su indicador; y la ventana se suscribe al recibir `T_LISTO` —antes
+de arrancar— a lo que pinta, a 60 Hz simulados, enseña los dos relojes y las
+instantáneas perdidas, y tiene una lista de avisos. «Parar» se desactiva en
+marcha: parar en marcha es la fase 6.
+
+**Cómo se escribe un valor, sin conocer un tipo:** lo decide la declaración
+del observable. Uno de 0 a 1 sin unidad es un sí o un no, y se pinta ● / ○;
+cualquier otro, el número con su unidad.
+
+### 12.2 Los avisos de placa, en el saludo
+
+El plan decía que el desvío de `SC_REPORT` pondría «delante del alumno los
+avisos de placa que hoy solo ve quien ejecuta `--valida`». Pero esos avisos no
+son de `SC_REPORT`: los imprime `sim` al montar la placa, antes de que exista
+la simulación. Así que van por otro camino, y en otro momento: como `T_AVISO`
+de origen `placa` **entre `T_CATALOGO` y `T_LISTO`**, también con `--valida`.
+Es cuando sirven: antes de pulsar «arranca», que es cuando un aviso todavía
+ahorra tiempo.
+
+### 12.3 Un fallo de `--tiempo-real` que ya estaba
+
+Con una ventana finita, `sim --tiempo-real` hacía una sola espera de toda la
+ventana: simulaba los segundos de golpe, en centésimas, y luego dormía lo que
+faltaba. El total cuadraba con el reloj de pared, y en la consola no se notaba
+—solo se ve cómo acaba cada LED—. Con una ventana mirando es lo primero que se
+ve: todo llega en una ráfaga, y luego nada.
+
+Ahora va en rodajas de 1 ms, como ya iba el bucle de GDB y de los puentes. Y al
+medirlo apareció un segundo defecto: el freno se calculaba rodaja a rodaja, y
+lo que cada `sleep_for` se pasaba se iba sumando, **un 10 % de retraso** a los
+pocos segundos. Ahora se mide contra un ancla, y si el modelo va por detrás más
+de 50 ms el ancla se mueve: no se acumula deuda. Medido con el blinky: los
+flancos de 100 ms simulados llegan cada 100 ms de pared, con un desfase fijo
+de unos 50 ms del arranque.
+
+### 12.4 Cómo se ha comprobado
+
+**La prueba que pide el plan**, `make gui-marcha` (`verif/gui/marcha.py`, 24
+comprobaciones), con la misma ventana en Python de la fase 3:
+
+| Grupo | Qué |
+| :--- | :--- |
+| M1 | `discovery_min.xml` con el blinky, suscrito desde antes de arrancar a `encendido` y `corriente` de LD4 cada 1 ms: **mil instantáneas sin un hueco ni una pérdida, y el LED parpadea en ellas: seis flancos en 3, 103, 203, 303, 403 y 503 ms, separados 100 ms**, que es lo que programa el firmware. La corriente acompaña (1,77 mA encendido). Los `T_ESTADO`, sin retroceder, y el último, `TERMINADA` y en el instante del `T_FIN` |
+| M2 | otra ejecución igual: **las mil instantáneas idénticas**, instante a instante y valor a valor |
+| M3 | una placa con un conflicto eléctrico: el aviso llega entre `T_CATALOGO` y `T_LISTO`, con y sin `--valida`, y la consola lo sigue diciendo |
+| M4 | en marcha, con `--tiempo-real`: el latido sin suscripción, una suscripción nueva que da muestras desde el siguiente múltiplo del periodo, `T_PING`, una suscripción a un id que no existe (aviso, y la anterior sigue) y una vacía que las apaga |
+| M5 | la ventana se va en marcha: `sim` lo dice, simula su ventana entera y sale con 0 |
+
+**`testgui`**, G9 a G12 contra el canal en memoria (87 → 114 comprobaciones, y
+`70550000000 ps`): instantáneas con su `T_ESTADO`, `T_PING`, el latido con un
+reloj de pared falso, los avisos que se ven y los que no, las suscripciones
+malas; el atasco —la salida a su tope, la cola llena, 14 instantáneas tiradas
+y **dichas exactamente** por la primera que llega, y las que llegan más las que
+faltan son todas las tomadas—, tres avisos que esperan y llegan en orden, el
+sexto que cierra con `T_FIN` delante; la ventana que se va; y `termina()`.
+**Seis mutaciones del enlace**, una a una, y las seis caen.
+
+**`test407` no cambia**, ni en picosegundos ni en recuento, con el enlace
+construido dentro: 2118 y `resto` en `2240553274213 ps`. Las otras tres suites
+tampoco, `banco.xml` sale igual, la interoperabilidad del puente UART da 47/47,
+`gui-saludo` 22/22 y `gui-proto` 61/61.
+
+**En esta ventana**, con `ctest`: `sesion` 33, `ventana` 20 —con el formato de
+los valores, la suscripción al recibir `T_LISTO`, las muestras en los
+indicadores, los relojes, las pérdidas y los avisos— y `cruzada` 14 contra el
+`mcu-sim` de verdad: **700 muestras, y el LED parpadea en ellas con flancos
+cada 100 ms**.
+
+### 12.5 Lo que cambió de la fase 3
+
+Con `--gui`, `sim` ya no da los mismos deltas que sin él: el enlace es un
+proceso que despierta. `gui-saludo` compara ahora los LEDs —tensión y
+corriente— y el instante final, que siguen siendo iguales; que la secuencia
+observada se repite lo comprueba M2.
+
+### 12.6 Lo que NO se ha hecho, que también es la fase 4
+
+Los mandos no hacen nada —los ecos de órdenes se reciben y se ignoran—: fase
+5. El ritmo de `T_ARRANCA`, la pausa y parar en marcha: fase 6. Y las
+instantáneas de la ventana van a 60 Hz **simulados**, que sin ritmo pueden ser
+cientos por segundo de pared: qué se pinta y cada cuánto, cuando el ritmo
+exista.

@@ -13,21 +13,51 @@
 //   * un control por MANDO, según su tipo: un botón, una casilla o un
 //     deslizador.
 //
-// Los indicadores dicen «—» y los controles están DESACTIVADOS: las muestras
-// llegan en la fase 4 y las órdenes salen en la 5. Cada widget lleva un
-// `objectName` con su identificador del protocolo -`obs:<id_obs>`,
-// `mando:<pieza>:<idx>`- que es como lo encontrarán esas fases, y las pruebas.
+// Los indicadores dicen «—» hasta que llega la primera muestra (fase 4), y los
+// controles están DESACTIVADOS hasta que las órdenes salgan (fase 5). Cada
+// widget lleva un `objectName` con su identificador del protocolo
+// -`obs:<id_obs>`, `mando:<pieza>:<idx>`- que es como lo encuentran las
+// pruebas.
+//
+// CÓMO SE ESCRIBE UN VALOR, sin conocer un tipo: lo decide la DECLARACIÓN del
+// observable, no la pieza. Uno de 0 a 1 sin unidad es un sí o un no, y se
+// pinta ● / ○; cualquier otro, el número con su unidad. Así un LED se ve
+// encendido y una corriente se lee en mA, y un observable de una pieza que
+// esta ventana no ha visto nunca se ve igual de bien.
 // =============================================================================
 #ifndef MCU_SIM_GUI_PANEL_H
 #define MCU_SIM_GUI_PANEL_H
 
+#include <QHash>
+#include <QWidget>
+
 #include "placa.h"
 
-class QWidget;
+class QLabel;
 
 namespace mcusim {
 
-QWidget* construye_panel(const PlacaGui& placa, QWidget* padre = nullptr);
+class Panel : public QWidget {
+    Q_OBJECT
+public:
+    explicit Panel(const PlacaGui& placa, QWidget* padre = nullptr);
+
+    // Una muestra. Un id_obs que no está pintado se ignora: la suscripción
+    // puede pedir más de lo que se ve.
+    void pon_valor(quint16 id_obs, float valor);
+
+    // Los observables que la ventana pinta, que son los que se suscriben.
+    QVector<quint16> pintados() const { return pintados_; }
+
+    static QString texto_de(const ObservableGui& o, float valor);
+
+private:
+    struct Indicador { QLabel* etiqueta; ObservableGui obs; };
+    QHash<quint16, Indicador> ind_;
+    QVector<quint16>          pintados_;
+};
+
+Panel* construye_panel(const PlacaGui& placa, QWidget* padre = nullptr);
 
 } // namespace mcusim
 

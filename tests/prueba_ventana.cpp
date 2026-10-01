@@ -11,11 +11,15 @@
 //   G2  la VentanaPrincipal entera contra un modelo falso: espera, se
 //       construye al llegar la placa, «Arrancar» se habilita con T_LISTO y,
 //       pulsado, el modelo recibe T_ARRANCA; T_FIN lo deshabilita todo.
+//   G3  (fase 4) cómo se escribe un valor sin conocer un tipo, y la ventana en
+//       marcha: se suscribe al recibir T_LISTO a lo que pinta, y pone en su
+//       sitio las muestras, los relojes, las pérdidas y los avisos.
 // =============================================================================
 #include <QApplication>
 #include <QCheckBox>
 #include <QGroupBox>
 #include <QLabel>
+#include <QListWidget>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSlider>
@@ -100,6 +104,18 @@ int main(int argc, char** argv)
         delete w2;
     }
 
+    {
+        ObservableGui si{0, 0, "encendido", "", 0, 1, true};
+        ObservableGui ma{1, 1, "corriente", "mA", 0, 25, false};
+        ObservableGui gr{0, 2, "angulo", "grados", 0, 180, true};
+        comprueba(Panel::texto_de(si, 1.f) == QString::fromUtf8("●") &&
+                  Panel::texto_de(si, 0.f) == QString::fromUtf8("○") &&
+                  Panel::texto_de(ma, 1.7734f) == "1.773 mA" &&
+                  Panel::texto_de(gr, 90.f) == "90 grados",
+                  "un valor se escribe segun su DECLARACION: de 0 a 1 sin unidad, ● u ○; "
+                  "lo demas, el numero con su unidad");
+    }
+
     // -------------------------------------------------------------------------
     std::printf("G2 La ventana entera, contra un modelo falso\n");
     {
@@ -123,9 +139,48 @@ int main(int argc, char** argv)
                   resumen->text().contains("blinky.bin"),
                   "y la ventana tiene su panel: cuatro piezas, y arriba la placa, el MCU "
                   "y el firmware");
+        // Fase 4: con T_LISTO, la ventana se suscribe a lo que pinta
+        CabSuscribe cs{};
+        comprueba(m.espera_leidos(2) && m.leido[1].tipo == T_SUSCRIBE &&
+                  m.leido[1].cuerpo.size() == int(sizeof cs + 3 * 2) &&
+                  (std::memcpy(&cs, m.leido[1].cuerpo.constData(), sizeof cs), true) &&
+                  cs.periodo_ns_lo == VentanaPrincipal::PERIODO_NS && cs.n == 3 &&
+                  m.leido[1].cuerpo.mid(int(sizeof cs)) ==
+                      QByteArray::fromStdString(bytes(uint16_t(0)) + bytes(uint16_t(1)) +
+                                                bytes(uint16_t(3))),
+                  "con T_LISTO, y ANTES de arrancar, se suscribe a los tres observables "
+                  "que pinta, a 60 Hz simulados");
+        auto* parar = v.findChild<QPushButton*>("parar");
         arrancar->click();
-        comprueba(m.espera_leidos(2) && m.leido[1].tipo == T_ARRANCA && !arrancar->isEnabled(),
-                  "pulsar Arrancar manda T_ARRANCA, y el boton se desactiva");
+        comprueba(m.espera_leidos(3) && m.leido[2].tipo == T_ARRANCA && !arrancar->isEnabled() &&
+                  !parar->isEnabled(),
+                  "pulsar Arrancar manda T_ARRANCA; Arrancar se desactiva, y Parar tambien "
+                  "(en marcha es la fase 6)");
+
+        std::printf("G3 La ventana en marcha\n");
+        auto* led = v.findChild<QLabel*>("obs:1");
+        auto* btn = v.findChild<QLabel*>("obs:3");
+        std::string inst = bytes(CabInstantanea{5000000ull, 2, 3});
+        inst += bytes(Muestra{1, 0, 1.f}) + bytes(Muestra{3, 0, 0.f}) ;
+        m.manda(T_INSTANTANEA, inst);
+        comprueba(espera([&] { return led->text() == QString::fromUtf8("●"); }) &&
+                  btn->text() == QString::fromUtf8("○"),
+                  "una instantanea pone cada muestra en su indicador: el LED encendido, "
+                  "el pulsador suelto");
+        m.manda(T_ESTADO, bytes(Estado{F_CORRIENDO, 0, 5000000ull, 0.75, 1234ull}));
+        auto* relojes = v.findChild<QLabel*>("relojes");
+        comprueba(espera([&] { return relojes->text().contains("5.000 ms"); }) &&
+                  relojes->text().contains("0.75 s") && relojes->text().contains("1234") &&
+                  relojes->text().contains("3 instantaneas perdidas"),
+                  "T_ESTADO pone los dos relojes y los deltas, y como la instantanea decia "
+                  "3 perdidas, que va por detras: \"" + relojes->text().toStdString() + "\"");
+        m.manda(T_AVISO, bytes(CabAviso{N_ERROR, 7, 6000000ull}) + "/stm32/" + "un error");
+        auto* avisos = v.findChild<QListWidget*>("avisos");
+        comprueba(espera([&] { return avisos->count() == 1; }) &&
+                  avisos->item(0)->text().contains("error") &&
+                  avisos->item(0)->text().contains("6.000 ms") &&
+                  avisos->item(0)->text().contains("/stm32/: un error"),
+                  "un T_AVISO va a la lista de avisos: nivel, instante, origen y texto");
         m.manda(T_FIN, bytes(Fin{M_VENTANA, 0, 50110000ull}));
         comprueba(espera([&] { return v.statusBar()->currentMessage().contains("50.110"); }),
                   "T_FIN se ve en la barra de estado, con el instante: \"" +

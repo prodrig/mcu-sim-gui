@@ -2,6 +2,7 @@
 
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QListWidget>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QStatusBar>
@@ -30,7 +31,10 @@ VentanaPrincipal::VentanaPrincipal(quint16 puerto, QWidget* padre)
     arrancar_->setObjectName(QStringLiteral("arrancar"));
     parar_ = new QPushButton(tr("Parar"), cuerpo);
     parar_->setObjectName(QStringLiteral("parar"));
+    relojes_ = new QLabel(cuerpo);
+    relojes_->setObjectName(QStringLiteral("relojes"));
     fila->addWidget(resumen_, 1);
+    fila->addWidget(relojes_);
     fila->addWidget(arrancar_);
     fila->addWidget(parar_);
     caja->addLayout(fila);
@@ -38,11 +42,19 @@ VentanaPrincipal::VentanaPrincipal(quint16 puerto, QWidget* padre)
     centro_ = new QScrollArea(cuerpo);
     centro_->setWidgetResizable(true);
     caja->addWidget(centro_, 1);
+
+    avisos_ = new QListWidget(cuerpo);
+    avisos_->setObjectName(QStringLiteral("avisos"));
+    avisos_->setMaximumHeight(120);
+    caja->addWidget(avisos_);
     setCentralWidget(cuerpo);
 
     connect(arrancar_, &QPushButton::clicked, this, [this] {
         if (ses_.arranca()) {
             arrancar_->setEnabled(false);
+            // Parar en marcha es la fase 6: hasta entonces, no se ofrece.
+            parar_->setEnabled(false);
+            parar_->setToolTip(tr("Parar con la simulacion en marcha llega en la fase 6 del plan."));
             statusBar()->showMessage(tr("simulando"));
         }
     });
@@ -51,15 +63,26 @@ VentanaPrincipal::VentanaPrincipal(quint16 puerto, QWidget* padre)
     });
 
     connect(&ses_, &Sesion::conectado, this, [this] {
+        avisos_->clear();
+        relojes_->clear();
         statusBar()->showMessage(tr("mcu-sim conectado; saludando"));
     });
     connect(&ses_, &Sesion::placa_lista, this, &VentanaPrincipal::pon_placa);
     connect(&ses_, &Sesion::listo, this, [this] {
+        // Antes de arrancar: asi la secuencia se repite al picosegundo
+        if (panel_ && !panel_->pintados().isEmpty())
+            ses_.suscribe(PERIODO_NS, panel_->pintados());
         arrancar_->setEnabled(true);
         parar_->setEnabled(true);
         statusBar()->showMessage(tr("el modelo esta construido y esperando: pulsa Arrancar"));
     });
     connect(&ses_, &Sesion::fin, this, &VentanaPrincipal::termina);
+    connect(&ses_, &Sesion::muestra, this, [this](quint16 id, float v) {
+        if (panel_) panel_->pon_valor(id, v);
+    });
+    connect(&ses_, &Sesion::aviso, this, &VentanaPrincipal::pon_aviso);
+    connect(&ses_, &Sesion::estado_modelo, this,
+            [this](quint32, quint64 t, double p, quint64 d) { pon_relojes(t, p, d); });
     connect(&ses_, &Sesion::desconectado, this, [this](const QString& m) {
         arrancar_->setEnabled(false);
         parar_->setEnabled(false);
@@ -108,7 +131,34 @@ void VentanaPrincipal::pon_placa()
     if (h.value(QStringLiteral("modo")) == QLatin1String("valida"))
         texto += tr(" &nbsp; <b>(solo validacion: no se simulara)</b>");
     resumen_->setText(texto);
-    centro_->setWidget(construye_panel(p));
+    panel_ = construye_panel(p);
+    centro_->setWidget(panel_);
+}
+
+void VentanaPrincipal::pon_aviso(quint32 nivel, quint64 t_sim_ns, const QString& origen,
+                                 const QString& texto)
+{
+    static const char* const nombre[] = {"info", "aviso", "error", "fatal"};
+    const QString n = QString::fromLatin1(nivel < 4 ? nombre[nivel] : "?");
+    auto* it = new QListWidgetItem(QStringLiteral("[%1] t = %2 ms · %3: %4")
+                                       .arg(n)
+                                       .arg(double(t_sim_ns) / 1e6, 0, 'f', 3)
+                                       .arg(origen, texto),
+                                   avisos_);
+    if (nivel >= proto::N_ERROR) it->setForeground(Qt::red);
+    else if (nivel == proto::N_AVISO) it->setForeground(QColor(0xB0, 0x6A, 0x00));
+    avisos_->scrollToBottom();
+}
+
+void VentanaPrincipal::pon_relojes(quint64 t_sim_ns, double t_pared_s, quint64 deltas)
+{
+    QString t = tr("t = %1 ms · pared %2 s · %3 deltas")
+                    .arg(double(t_sim_ns) / 1e6, 0, 'f', 3)
+                    .arg(t_pared_s, 0, 'f', 2)
+                    .arg(deltas);
+    if (ses_.perdidas() > 0)
+        t += tr(" · <b>va por detras: %1 instantaneas perdidas</b>").arg(ses_.perdidas());
+    relojes_->setText(t);
 }
 
 void VentanaPrincipal::termina(quint32 motivo, qint32 codigo, quint64 t_sim_ns)

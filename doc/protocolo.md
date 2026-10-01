@@ -193,8 +193,15 @@ que duerme hasta que llega algo. Mientras tanto el modelo:
 * acepta **`T_PARA`**: manda `T_FIN` con motivo `M_PARA` y el tiempo simulado
   en cero, y termina **sin haber simulado nada**;
 * acepta **`T_SUSCRIBE`** y **`T_ORDENES`**, que es donde una secuencia
-  enviada antes de arrancar se vuelve reproducible (§5). *En la versión de
-  `mcu-sim` de la fase 3 se leen y se ignoran: las aplican las fases 4 y 5.*
+  enviada antes de arrancar se vuelve reproducible (§5). Del `T_SUSCRIBE` vale
+  el último, y se aplica **antes de `sc_start()`**: la secuencia de
+  instantáneas se repite entonces al picosegundo de una ejecución a otra.
+  *`T_ORDENES` se lee y se ignora hasta la fase 5.*
+
+**Los avisos de la placa** —lo que `mcu-sim` encuentra al validar lo eléctrico
+y los puentes serie— llegan como `T_AVISO` **entre `T_CATALOGO` y `T_LISTO`**,
+con origen `placa` y `t_sim_ns` = 0, también con `--valida`. Es cuando sirven:
+antes de pulsar «arranca».
 
 **Los ids casan.** El `id` de cada `<pieza>` del catálogo es el mismo que el del
 `<componente>` de la placa: lo pone la placa. Es lo que permite a la ventana
@@ -249,10 +256,29 @@ tira uno**: van a una cola acotada, y si esa cola se llena la conexión se cierr
 con un `T_FIN` de motivo `M_ERROR`. Perder un aviso es peor que perder la
 conexión, porque un aviso perdido se parece mucho a un modelo que funciona.
 
-**`T_ESTADO`** — los dos relojes, el simulado y el de pared, y el factor entre
-ellos. Va con cada instantánea o cada 250 ms, lo que primero ocurra. Es lo que
+Las reglas exactas, desde la fase 4:
+
+* va a la ventana **lo que iría a la consola**: lo que lleva `SC_DISPLAY`, y
+  los errores y fatales. Lo silenciado (`SC_DO_NOTHING`) sigue silenciado. Y la
+  consola lo sigue enseñando: el aviso se **añade**, no se desvía;
+* menos los informativos del propio núcleo de SystemC —«Simulation stopped by
+  user»—, que no son del modelo: para eso está `T_FIN`;
+* la cola es de **1000**. Si se llena, `T_FIN` con `M_ERROR` va **delante** de
+  todo lo que no ha salido, se cierra la conexión y **la simulación sigue**
+  hasta su ventana, como si la ventana se hubiera ido. El código del `T_FIN` es
+  0: el proceso no termina por esto.
+
+**`T_ESTADO`** — los dos relojes, el simulado y el de pared desde `T_ARRANCA`,
+la fase y los deltas; el factor entre ellos lo calcula quien lo lea. Va
+**detrás de cada tanda de instantáneas**, y si en **250 ms de reloj de pared**
+no ha salido ninguno —sin suscripción, por ejemplo—, uno suelto. Es lo que
 contesta a «¿se ha colgado?» en el único caso donde la respuesta es no
-[`analisis_gui.md` §3.4].
+[`analisis_gui.md` §3.4]. Al terminar, uno último con `F_TERMINADA` justo antes
+de `T_FIN`.
+
+**El atasco, en números.** Lo que no ha salido no pasa de **256 kB**. Por encima,
+las instantáneas se quedan en la cola del muestreador, que cuando se llena tira
+las nuevas y las cuenta en `perdidas`; los avisos esperan en la suya.
 
 **`T_ORDEN_HECHA`** — véase §5.
 
@@ -260,9 +286,15 @@ contesta a «¿se ha colgado?» en el único caso donde la respuesta es no
 
 ### 4.2 De la pantalla al modelo
 
-Las atiende **otro** `SC_THREAD`, que lee el socket sin bloquear cada 100 µs de
-tiempo simulado — exactamente el mismo patrón que los servidores de GDB
-(`common/gdb_rsp.h`), que lleva dos fases funcionando.
+Las atiende el **enlace** (`parts/enlace_gui.h` en `mcu-sim`), un `SC_THREAD`
+que lee el socket sin bloquear cada 100 µs de tiempo simulado —exactamente el
+mismo patrón que los servidores de GDB (`common/gdb_rsp.h`)— y que, en la misma
+vuelta, escribe lo del sentido contrario. Es un proceso más con la simulación
+en marcha, así que con `--gui` hay más deltas que sin él; el modelo hace lo
+mismo. Sin `--gui` el enlace se construye y no despierta nunca.
+
+**`T_ORDENES`, `T_PAUSA`, `T_SIGUE`, `T_PASO` y `T_PARA` en marcha** se leen
+enteros y se ignoran hasta las fases 5 y 6.
 
 **Y eso trae la trampa de siempre, escrita aquí para que no sorprenda:** ese
 proceso solo corre **si el tiempo simulado avanza**. Con la simulación en pausa
@@ -276,7 +308,9 @@ un stub de GDB esperando.
 Cambiar de pestaña en la GUI es volver a suscribirse. Si trae un `id_obs` que no
 existe se rechaza **entera** y la anterior sigue en pie: una suscripción a
 medias es peor que ninguna, porque la pantalla creería estar viendo lo que
-pidió.
+pidió. El rechazo se dice con un `T_AVISO` que nombra el id que no existe, y lo
+mismo un `T_SUSCRIBE` que no mide lo que dice. Una suscripción vacía apaga las
+instantáneas.
 
 **`T_PASO`** solo tiene sentido con `RIT_DEMANDA`. Con cualquier otro ritmo se
 contesta con un `T_AVISO` de nivel `N_AVISO` y se ignora.
@@ -362,7 +396,7 @@ de la GUI en una tarde perdida mirando el modelo.
 | Magia mala, versión imposible, longitud > `CUERPO_MAX` | cierra diciendo por qué | igual |
 | Tipo de mensaje desconocido | se salta por longitud y sigue | igual |
 | El socket no traga instantáneas | las **tira** y cuenta cuántas en `perdidas` | enseña que va por detrás |
-| El socket no traga avisos | cola acotada; si se llena, `T_FIN` con `M_ERROR` | — |
+| El socket no traga avisos | cola de 1000; si se llena, `T_FIN` con `M_ERROR`, cierra **y sigue simulando** | — |
 | `host` no es de bucle local | **avisa por la salida de error** y se conecta igual | — |
 
 Y una regla general que vale para los dos lados: **el modelo nunca se bloquea

@@ -4,19 +4,24 @@ La **contraparte de visualización gráfica de
 [`mcu-sim`](../mcu-sim)**, el modelo SystemC de microcontroladores STM32.
 `mcu-sim` simula; esto lo enseña y deja tocarlo.
 
-> **Estado: fase 3.** La ventana escucha, `mcu-sim --gui` se conecta, se
+> **Estado: fase 4.** La ventana escucha, `mcu-sim --gui` se conecta, se
 > saludan, y la ventana **se construye sola** a partir de la placa y el
 > catálogo que le manda el modelo: un recuadro por pieza, con sus patillas, un
 > indicador por cada cosa que la pieza sugiere mirar y un control por mando.
-> El modelo no simula hasta que se pulsa «Arrancar». Lo que falta: que los
-> indicadores tengan valores (fase 4) y que los controles hagan algo (fase 5).
+> El modelo no simula hasta que se pulsa «Arrancar», y **con la simulación en
+> marcha los indicadores enseñan lo que pasa**: el LED se enciende y se apaga,
+> arriba van los dos relojes, y abajo los avisos —los de la placa, antes de
+> arrancar, y los del modelo—. Lo que falta: que los controles hagan algo
+> (fase 5) y el ritmo, la pausa y parar en marcha (fase 6). Con `--tiempo-real`
+> el parpadeo se ve a su velocidad; sin él, la simulación va todo lo deprisa
+> que puede.
 >
 > Para verlo, con las dos cosas compiladas:
 >
 > ```bash
 > ./build/mcu-sim-gui                                        # escucha en el 3344
 > # y en otra consola, desde mcu-sim/src:
-> ./build/mcu-sim placas/discovery_min.xml verif/fw/blinky/blinky.bin 1000 --gui
+> ./build/mcu-sim placas/discovery_min.xml verif/fw/blinky/blinky.bin 2000 --gui --tiempo-real
 > ```
 
 ---

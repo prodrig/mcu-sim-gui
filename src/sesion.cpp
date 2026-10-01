@@ -98,8 +98,41 @@ void Sesion::llega(quint16 tipo, const QByteArray& cuerpo)
         emit fin(f.motivo, f.codigo, f.t_sim_ns);
         break;
     }
+    case T_INSTANTANEA: {
+        CabInstantanea c{};
+        if (cuerpo.size() < int(sizeof c)) break;
+        std::memcpy(&c, cuerpo.constData(), sizeof c);
+        if (cuerpo.size() != int(sizeof c + c.n * sizeof(Muestra))) {
+            emit problema(tr("una instantanea de %1 bytes no mide lo que dice").arg(cuerpo.size()));
+            break;
+        }
+        perdidas_ += c.perdidas;
+        emit instantanea(c.t_sim_ns, c.perdidas);
+        for (quint32 i = 0; i < c.n; ++i) {
+            Muestra m{};
+            std::memcpy(&m, cuerpo.constData() + sizeof c + i * sizeof m, sizeof m);
+            emit muestra(m.id, m.valor);
+        }
+        break;
+    }
+    case T_AVISO: {
+        CabAviso c{};
+        if (cuerpo.size() < int(sizeof c)) break;
+        std::memcpy(&c, cuerpo.constData(), sizeof c);
+        const QByteArray resto = cuerpo.mid(int(sizeof c));
+        emit aviso(c.nivel, c.t_sim_ns, QString::fromUtf8(resto.left(int(c.origen_len))),
+                   QString::fromUtf8(resto.mid(int(c.origen_len))));
+        break;
+    }
+    case T_ESTADO: {
+        proto::Estado e{};
+        if (cuerpo.size() != int(sizeof e)) break;
+        std::memcpy(&e, cuerpo.constData(), sizeof e);
+        emit estado_modelo(e.fase, e.t_sim_ns, e.t_pared_s, e.deltas);
+        break;
+    }
     default:
-        // T_INSTANTANEA, T_AVISO, T_ESTADO, T_ORDEN_HECHA, T_PONG: fases 4 a 6.
+        // T_ORDEN_HECHA (fase 5) y T_PONG.
         break;
     }
 }
@@ -115,8 +148,18 @@ bool Sesion::arranca()
 
 bool Sesion::para()
 {
-    if (estado_ != Estado::Lista && estado_ != Estado::Corriendo) return false;
+    if (estado_ != Estado::Lista) return false;
     return cx_.envia(proto::T_PARA);
+}
+
+bool Sesion::suscribe(quint64 periodo_ns, const QVector<quint16>& ids)
+{
+    if (estado_ != Estado::Lista && estado_ != Estado::Corriendo) return false;
+    proto::CabSuscribe c{quint32(periodo_ns & 0xFFFFFFFFu), quint32(periodo_ns >> 32),
+                         quint32(ids.size()), 0u};
+    QByteArray b(reinterpret_cast<const char*>(&c), int(sizeof c));
+    for (quint16 id : ids) b.append(reinterpret_cast<const char*>(&id), 2);
+    return cx_.envia(proto::T_SUSCRIBE, b);
 }
 
 } // namespace mcusim
