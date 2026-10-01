@@ -4,11 +4,12 @@ La **contraparte de visualización gráfica de
 [`mcu-sim`](../mcu-sim)**, el modelo SystemC de microcontroladores STM32.
 `mcu-sim` simula; esto lo enseña y deja tocarlo.
 
-> **Estado: fase 1.** Hay un esqueleto que compila y abre una ventana vacía, el
+> **Estado: fase 2.** Hay un esqueleto que compila y abre una ventana vacía, el
 > protocolo escrito y el plan por fases. Del lado de `mcu-sim` ya existe la
 > frontera —lo que cada pieza deja ver y tocar, el catálogo, el muestreador y el
-> aplicador—, probada sin GUI. Todavía no habla con nadie: la conexión llega
-> con las fases 2 y 3.
+> aplicador—, probada sin GUI. Y los dos extremos ya saben mover bytes: aquí,
+> `Conexion` escucha y lee el marco con el mismo `proto_io.h` que usa el
+> modelo. Todavía no se dicen nada con significado: el saludo es la fase 3.
 
 ---
 
@@ -136,6 +137,7 @@ C++17. Nada más: ni SystemC, ni una sola cabecera de `mcu-sim`.
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ./build/mcu-sim-gui
+ctest --test-dir build --output-on-failure      # las pruebas, sin ventana
 ```
 
 Si CMake no encuentra Qt, se le dice dónde está:

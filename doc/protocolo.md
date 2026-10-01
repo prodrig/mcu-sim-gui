@@ -4,11 +4,14 @@ Versión **1**. La definición ejecutable está en `src/protocolo.h`; esto es lo
 que ese fichero no puede decir: el porqué, la máquina de estados y qué pasa
 cuando algo va mal.
 
-> **La copia vendida.** `mcu-sim` lleva su propia copia del `.h` en
-> `src/common/protocolo.h`. Las dos tienen que ser idénticas byte a byte y hay
-> una comprobación en la suite que lo exige. Un protocolo cuyos dos extremos
-> discrepan en un `uint16_t` no falla al compilar: falla en marcha y sin decir
-> por qué.
+> **Las copias vendidas.** `mcu-sim` lleva su propia copia de `src/protocolo.h`
+> y de `src/proto_io.h` —el código que escribe y lee el marco— en
+> `src/common/`. Tienen que ser idénticas byte a byte, y `make gui-proto` lo
+> exige en el CI de `mcu-sim`. Un protocolo cuyos dos extremos discrepan en un
+> `uint16_t` no falla al compilar: falla en marcha y sin decir por qué. Y con
+> el lector compartido, un error al leer el marco no puede estar en un extremo
+> solo. Por eso un cambio aquí se sube primero a este repositorio y después a
+> `mcu-sim`.
 
 ---
 
@@ -70,6 +73,12 @@ por el mismo motivo. Si `--gui` apunta a un host que no es de bucle local,
   **cierra la conexión**: no intenta resincronizar. Es el caso de «alguien
   apuntó su navegador al puerto», y seguir leyendo solo prolonga el malentendido.
 * `version` es la que está **en uso en esta conexión**, no la máxima que se sabe.
+  **Antes de negociarla es la 1**, en los dos sentidos: es la versión en la
+  que viaja el saludo (`VERSION_SALUDO` en `proto_io.h`). Así un extremo nuevo
+  puede ofrecer `protocolo_max=2` a uno viejo sin que el viejo rechace el
+  mensaje que se lo ofrece por traer un 2 en la cabecera. Negociada en
+  `T_VERSION`, los dos pasan a la elegida, y desde entonces un mensaje con otra
+  es un error.
 * `longitud` ≤ `CUERPO_MAX` (8 MiB). Más que eso se trata como corrupción y se
   cierra: sin ese techo, una longitud corrupta es una petición de memoria de dos
   gigas.

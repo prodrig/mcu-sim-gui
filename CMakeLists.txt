@@ -2,12 +2,13 @@
 # mcu-sim-gui — la contraparte de visualización de mcu-sim
 #
 # Qt 6 y CMake. Nada más: ni SystemC, ni una cabecera de mcu-sim. Lo único que
-# los dos programas comparten es `src/protocolo.h`, y lo comparten por copia
-# —hay una comprobación en la suite de mcu-sim que exige que las dos sean
-# idénticas byte a byte— y no por inclusión cruzada de árboles.
+# los dos programas comparten es `src/protocolo.h` y `src/proto_io.h`, y lo
+# comparten por copia —`make gui-proto` en mcu-sim exige que las dos copias
+# sean idénticas byte a byte— y no por inclusión cruzada de árboles.
 #
 #   cmake -B build -DCMAKE_BUILD_TYPE=Release
 #   cmake --build build
+#   ctest --test-dir build --output-on-failure      # las pruebas, sin ventana
 #
 # Si CMake no encuentra Qt, se le dice dónde está:
 #   cmake -B build -DCMAKE_PREFIX_PATH=/ruta/a/Qt/6.7.0/gcc_64
@@ -57,18 +58,28 @@ foreach(_carpeta_nube "Dropbox" "OneDrive" "Google Drive" "GoogleDrive" "iCloud"
     endif()
 endforeach()
 
-find_package(Qt6 6.3 REQUIRED COMPONENTS Widgets Network)
+find_package(Qt6 6.3 REQUIRED COMPONENTS Core Widgets Network)
 
 qt_standard_project_setup()
+
+# El transporte (fase 2): sin Widgets, para que las pruebas no necesiten
+# pantalla. La ventana lo enlaza; las pruebas, tambien.
+qt_add_library(transporte STATIC
+    src/conexion.h
+    src/conexion.cpp
+    src/proto_io.h
+    src/protocolo.h
+)
+target_include_directories(transporte PUBLIC src)
+target_link_libraries(transporte PUBLIC Qt6::Core Qt6::Network)
 
 qt_add_executable(mcu-sim-gui
     src/main.cpp
     src/ventana_principal.h
     src/ventana_principal.cpp
-    src/protocolo.h
 )
 
-target_link_libraries(mcu-sim-gui PRIVATE Qt6::Widgets Qt6::Network)
+target_link_libraries(mcu-sim-gui PRIVATE transporte Qt6::Widgets)
 
 # En Windows, sin consola detrás de la ventana.
 set_target_properties(mcu-sim-gui PROPERTIES WIN32_EXECUTABLE ON)
@@ -76,3 +87,13 @@ set_target_properties(mcu-sim-gui PROPERTIES WIN32_EXECUTABLE ON)
 install(TARGETS mcu-sim-gui
         BUNDLE  DESTINATION .
         RUNTIME DESTINATION bin)
+
+# --- Las pruebas -------------------------------------------------------------
+# Sin ventana: QtCore y QtNetwork. `ctest --test-dir build` las ejecuta.
+include(CTest)
+if(BUILD_TESTING)
+    qt_add_executable(prueba_conexion tests/prueba_conexion.cpp)
+    target_link_libraries(prueba_conexion PRIVATE transporte)
+    set_target_properties(prueba_conexion PROPERTIES WIN32_EXECUTABLE OFF MACOSX_BUNDLE OFF)
+    add_test(NAME conexion COMMAND prueba_conexion)
+endif()

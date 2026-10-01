@@ -350,6 +350,12 @@ SystemC ni Qt, así que cruza a Windows y a macOS con el resto de `make red`.
 
 **Qué NO entra.** Mensajes con significado. Esta fase mueve bytes.
 
+> **Ejecutada el 2026-10-01** (§10). Una cosa más de lo que pedía: el lector y
+> el emisor del marco no están escritos dos veces, una con sockets de Berkeley
+> y otra con Qt. Son **el mismo fichero**, `proto_io.h`, copiado en los dos
+> repositorios como `protocolo.h`; cada extremo pone encima su manera de mover
+> bytes (§10.1).
+
 ---
 
 ### Fase 3 — El saludo y el arranque diferido
@@ -549,7 +555,7 @@ en un Mac.
 | **R-3** | El socket solo se atiende si el tiempo simulado avanza, y en pausa no avanza | Rodajas cortas en pausa, como ya hace `sim_main.cpp` con un stub de GDB esperando | fase 6 |
 | **R-4** | La interactividad rompe el determinismo | No se puede evitar; se compensa grabando la sesión con sus instantes reales | fase 8 |
 | **R-5** | La lista de argumentos envejece en la GUI | `mcu-sim --argumentos`: el programa se describe a sí mismo | fase 7 |
-| **R-6** | Las dos copias de `protocolo.h` divergen | Una comprobación en la suite que las compara byte a byte | fase 2 |
+| **R-6** | Las dos copias de `protocolo.h` divergen | Una comprobación en la suite que las compara byte a byte | **cerrado en la fase 2**: `make gui-proto` compara `protocolo.h` y `proto_io.h` con las de este repositorio, y el CI de `mcu-sim` lo clona para eso (§10.3) |
 | **R-7** | La tentación de meter lógica en el cliente, «que es como estos diseños se pudren» (`[AG]` §6.3) | La regla: la GUI no calcula nada que el modelo pueda decir. Se revisa en cada fase | siempre |
 
 ---
@@ -956,3 +962,122 @@ Ni un socket. Nadie activa la frontera fuera de `testgui`, y `--gui` sigue
 imprimiendo una línea y nada más. Las otras diecinueve piezas no declaran
 observables ni mandos: se irán añadiendo cuando la GUI las necesite, y sin tocar
 nada más, porque el catálogo recorre el inventario.
+
+---
+
+## 10. Fase 2, ejecutada
+
+### 10.1 Qué se ha escrito
+
+**El marco, una sola vez.** `proto_io.h` tiene el `Emisor` y el `Lector` del
+marco: el emisor añade cabecera y cuerpo a un búfer; al lector se le meten los
+bytes que hayan llegado, en los trozos que sea, y devuelve mensajes completos.
+No sabe de sockets ni de lo que significa un mensaje. Comprueba lo que manda
+`doc/protocolo.md` §2: la magia, la versión, la longitud (con la cabecera sola:
+4 GB se rechazan sin esperar a que lleguen) y el sentido. Ante cualquiera de
+esas cuatro se queda roto y no intenta resincronizar. Un tipo desconocido no es
+un error: lo entrega, y `es_conocido()` dice que no lo es. Ninguno de los dos
+reserva memoria por mensaje: trabajan sobre un búfer que se reutiliza.
+
+El plan pedía un codificador en `mcu-sim` y «el mismo par» en la GUI. Escribirlo
+dos veces era tener dos lectores que se pueden separar. Así que es **un
+fichero** que vive en los dos repositorios, como `protocolo.h`: la copia de
+referencia es la de aquí y la de `mcu-sim/src/common/` es vendida.
+
+**Una regla que el protocolo no decía.** `version` es «la que está en uso en
+esta conexión», pero antes del saludo no hay ninguna en uso. Ahora sí: **la 1**,
+la del saludo, en los dos sentidos, y la negociada después. Si no, un modelo
+nuevo que ofreciese la 2 en un `T_HOLA` con un 2 en la cabecera sería rechazado
+por una GUI vieja antes de poder ofrecérsela. Está en `doc/protocolo.md` §2.
+
+**En `mcu-sim`:**
+
+* `common/red.h`: **`conecta(host, puerto)`** y **`escucha(host, puerto)`**,
+  **al lado** de `conecta_local` y `escucha_local`, que siguen ahí y siguen
+  siendo las de GDB. Hablan IPv4 e IPv6 —`--gui [::1]` ya era una forma
+  válida— y quitan los corchetes. `conecta` prueba cada dirección del host con
+  un plazo de 5 s, porque un `connect` bloqueante contra una máquina que no
+  contesta puede tardar minutos y el modelo no debe quedarse colgado antes de
+  arrancar. Y dos ayudas: `puerto_local()`, para escuchar en el puerto 0 y
+  saber cuál dio el sistema, y `espera_legible()`, para leer sin girar en
+  vacío, que es lo que necesitará el saludo de la fase 3.
+* `common/proto_io.h`, la copia vendida.
+* `verif/prueba_gui_proto.cpp` y **`make gui-proto`** (§10.2).
+* `verif/prueba_macros_win.cpp` incluye ahora `proto_io.h`. Y no era
+  decorativo: el primer borrador del lector tenía un `enum { FALTA, MENSAJE,
+  ERROR }`, y `ERROR` es una macro de `<windows.h>`. Los estados se llaman
+  ahora `LEC_FALTA`, `LEC_MENSAJE` y `LEC_ERROR`.
+
+**En `mcu-sim-gui`:**
+
+* `src/conexion.h` y `src/conexion.cpp`: **`Conexion`**, sobre `QTcpServer` y
+  `QTcpSocket`. Escucha, acepta **un** modelo (otro se cierra en el acto y se
+  cuenta), entrega cada mensaje completo con la señal `mensaje()`, salta y
+  cuenta los desconocidos, y si llega algo que no es el protocolo cierra y
+  dice por qué con `desconectado()`. Cada conexión empieza de cero.
+* `src/proto_io.h`, la copia de referencia.
+* `CMakeLists.txt`: el transporte es una biblioteca sin Widgets, y hay pruebas
+  con `ctest` que no necesitan pantalla.
+* `tests/prueba_conexion.cpp` (§10.2).
+
+### 10.2 Cómo se ha comprobado
+
+**`make gui-proto`**, 40 comprobaciones sin SystemC, en tres partes:
+
+| Parte | Qué |
+| :--- | :--- |
+| P1, el marco sin red | la cabecera byte a byte (`MSG1` legible en un volcado); los diecinueve tipos de ida y vuelta de un golpe, byte a byte y en trozos de 3, 7, 13, 101, 4099 y 65537 bytes; los casos feos: magia mala (un `GET /` de navegador), versión 0, versión 2 antes de negociar, versión distinta de la negociada, longitud de 4 GB, 8 MiB justos (legal), tipo del otro sentido, tipo desconocido que se salta, salto de secuencia |
+| P2, por un socket de verdad, con dos hilos | un hilo hace de modelo con `conecta("localhost")` y el otro de pantalla con `escucha("127.0.0.1", 0)`: los diecinueve tipos en los dos sentidos; una placa de 300 kB que llega en 75 `recv`; un mensaje **partido en dos `recv` a la fuerza** (el emisor espera a que el lector haya leído la primera mitad); **dos mensajes en un solo `recv`**; un desconocido de 300 bytes en medio; el cierre visto como cero bytes; escribir después del cierre sin morir; un navegador en el puerto; `conecta` sin nadie escuchando; un host que no resuelve; IPv6 si la máquina lo tiene |
+| P3, las copias | `protocolo.h` y `proto_io.h` idénticos byte a byte a los de `mcu-sim-gui` (R-6) |
+
+**La prueba de la GUI**, 16 comprobaciones con `ctest`, la `Conexion` de verdad
+contra un `QTcpSocket` crudo que escribe con el mismo `proto_io.h`: cinco
+mensajes con una placa de 300 kB, uno partido a mitad de la cabecera, tres de
+un golpe con un desconocido en medio, cinco de vuelta, un segundo modelo
+rechazado, el cierre normal, la reconexión, el navegador, los 4 GB, un tipo de
+pantalla llegando a la pantalla y `cierra()`.
+
+**Y se ha comprobado que pueden fallar.** Seis mutaciones de `proto_io.h`, una
+cada vez:
+
+| Mutación | Lo que cae |
+| :--- | :--- |
+| sin el techo de longitud | los 4 GB |
+| sin comprobar el sentido | las dos pantallas |
+| sin comprobar la versión | las tres de versión |
+| no avanzar tras un mensaje | 12, casi todo |
+| la secuencia no sube | 9 |
+| resincronizar después de un error | **nada**, y es correcto: un lector roto no acepta más bytes, así que no hay con qué resincronizarse. Esa propiedad la da la construcción, no la prueba |
+
+**Dónde se ha ejecutado:**
+
+* Linux, g++ 13: `make gui-proto` 40/40, `make red` 13/13, `macros-win`, y la
+  prueba de la GUI 16/16 con Qt 6.4.2.
+* **Windows, cruzado**: `gui-proto` y `red` compilan con MinGW-w64 sin un aviso,
+  y **corren bajo Wine**: 40/40 y 13/13. No es un Windows de verdad —Wine
+  traduce a sockets de Linux—, pero ejercita la rama de Winsock del código.
+* **IPv6 no se ha podido probar**: la máquina donde se hizo no tiene IPv6 en el
+  núcleo, y la prueba lo salta diciéndolo. Lo dirá el CI.
+* Las cinco suites, igual que antes: 2118 / 204 / 165 / 189 / 87 y los cinco
+  invariantes al picosegundo. `red.h` lo incluyen los servidores de GDB y el
+  puente serie, y no se ha movido nada.
+
+### 10.3 El CI
+
+* `rapidas` clona también **este repositorio** y ejecuta
+  `make gui-proto GUI_REPO=../mcu-sim-gui`. Compara con la rama principal de
+  aquí, así que **un cambio del protocolo se sube primero aquí** y después a
+  `mcu-sim`; al revés, el CI de `mcu-sim` falla, que es lo que tiene que pasar.
+  Este repositorio es público y no hace falta token; si deja de serlo, hará
+  falta uno.
+* `macos` y `windows` pasan `make red gui-proto`, sin comparar copias, que ya se
+  comparan en `rapidas`.
+* Este repositorio sigue **sin CI propio**. La prueba de la GUI se ejecuta a
+  mano con `ctest`. Montarlo es poco —`apt install qt6-base-dev` en Ubuntu— y
+  cerraría la mitad de R-1 que sigue abierta: que esto compile en Windows.
+
+### 10.4 Lo que NO se ha hecho, que también es la fase 2
+
+Ni un mensaje con significado: nadie manda un `T_HOLA` de verdad todavía.
+`sim --gui` sigue imprimiendo una línea y nada más, y la ventana no usa la
+`Conexion`. Las dos cosas son la fase 3.
