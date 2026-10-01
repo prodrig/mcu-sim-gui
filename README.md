@@ -262,8 +262,8 @@ repos/
 ```
 
 Dos repositorios a propósito: `mcu-sim` tiene que seguir clonándose y
-compilándose sin Qt en cualquier máquina, que es lo que hace que su suite de
-2 074 comprobaciones valga en todas partes.
+compilándose sin Qt en cualquier máquina, que es lo que hace que sus suites
+—2 118 comprobaciones solo la del F407— valgan en todas partes.
 
 ---
 

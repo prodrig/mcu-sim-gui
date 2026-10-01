@@ -16,22 +16,47 @@ Las fuentes de este plan son tres, y conviene saber cuál es cuál:
 | `[CÓDIGO]` | El árbol de `mcu-sim` leído para escribir esto: `top/sim_main.cpp` (615 líneas, el ejecutable del producto), `parts/part_base.h`, `common/red.h`, `common/gdb_rsp.h` |
 | **⚠ SIN VERIFICAR** | Lo que no se ha podido probar todavía; se dice qué lo cerraría |
 
-**Estado del árbol al escribir esto**, que es la línea de la que se parte y
-contra la que se mide cualquier regresión:
+**Estado del árbol**, que es la línea de la que se parte y contra la que se
+mide cualquier regresión. La primera columna es la de cuando se escribió este
+plan y se queda como estaba; la que vale es la segunda:
 
-| | |
-| :--- | ---: |
-| Suite del F407 | **2074**, en `2336217899213 ps` |
-| Suite del F446 | **203**, en `1033367277932 ps` |
-| Banco del F417 | **164**, en `718988288 ps` |
-| Capa de red, sin SystemC | `make red` 13/13 |
-| Placas que validan | 6, con 0 avisos |
-| Referencias en el catálogo | 29 |
+| | Al escribir el plan | **Hoy** (2026-10-01, `mcu-sim` `0e449d0`) |
+| :--- | ---: | ---: |
+| Suite del F407 | 2074, en `2336217899213 ps` | **2118**, `resto` **`2240553274213 ps`** (total `2337219149213 ps`) |
+| Suite del F446 | 203, en `1033367277932 ps` | **204**, en `1033367277932 ps` |
+| Banco del F417 | 164, en `718988288 ps` | **165**, en `718988288 ps` |
+| Banco del puente UART (`testserie`) | — | **189**, en `400677589564 ps` |
+| Capa de red, sin SystemC | `make red` 13/13 | `make red` 13/13 |
+| Placas en `placas/` | 6, que validan con 0 avisos | 10: las 6 de antes y las 4 del puente UART |
+| Referencias en el catálogo | 29 | 29 |
 
-> **El invariante del F407 es el criterio de aceptación de las fases 1 a 6.**
-> Vale `2336217899213 ps` al picosegundo y lleva once fases sin moverse. Si un
-> cambio de este plan lo mueve, ha cambiado el comportamiento del modelo aunque
-> las 2074 sigan pasando, y hay que entender por qué **antes** de seguir.
+Lo que ha cambiado por el camino, para que nadie lo tome por una regresión:
+
+* **+43 en el F407**: las comprobaciones de `--gui` de la fase 0 (§8.4).
+* **+1 en cada suite**: `T00`/`A0`, que contrastan las huellas de los
+  firmwares antes de simular nada (**T-22** de `mcu-sim/doc/todo.md`).
+* **El F407 se mide por `resto` y no por el total.** El total lleva dentro lo
+  que tarda un GDB de verdad en contestar por un socket de verdad (T96 y T97),
+  y eso depende de la máquina (**T-16**). `resto` es el total menos esos dos
+  grupos.
+* **El invariante del F407 se movió una vez, a propósito**: al corregir que
+  el IWDG reseteaba un tick antes de su plazo (**T-23**, 2026-09-23), `resto`
+  pasó de `2239552024213` a `2240553274213 ps`, 1,00125 ms más. Las otras
+  suites no se movieron.
+* **`testserie` es un banco nuevo**, el del puente UART (**P-14**). Monta la
+  pieza `PuenteSerie`, que heredará los métodos nuevos de `ExtPartBase` de la
+  fase 1 igual que las demás, así que **entra en el criterio**.
+
+> **El criterio de aceptación de las fases 1 a 6 es `mcu-sim/src/verif/invariantes.txt`.**
+> Es la única fuente de esas cifras: una línea por suite, con el número de
+> comprobaciones y el tiempo simulado al picosegundo, y
+> `ci/comprueba_invariante.sh` la contrasta en las cuatro plataformas del CI.
+> Si un cambio de este plan mueve un tiempo simulado, ha cambiado el
+> comportamiento del modelo aunque todas las comprobaciones sigan pasando, y
+> hay que entender por qué **antes** de seguir. **El número de comprobaciones
+> sí puede crecer**: las fases añaden grupos. Cuando crezca, se actualiza la
+> cifra de su línea en `invariantes.txt` en el mismo commit, y la columna de
+> picosegundos no se toca.
 
 ---
 
@@ -268,8 +293,21 @@ cambia su `pulsado`, que una orden con pieza inexistente devuelve `RES_PIEZA`. L
 doctrina del proyecto aquí es conocida: **se pregunta al modelo, no se pasa por
 el bus**, porque una sola lectura de bus cuesta 62 500 ps y mueve el invariante.
 
-Y la comprobación que de verdad importa: **2074 / 203 / 164 y
-`2336217899213 ps`.**
+Y la comprobación que de verdad importa: **`ci/pasa_suites.sh` y
+`ci/comprueba_invariante.sh` en verde para las cuatro suites de
+`verif/invariantes.txt`**, con los picosegundos de hoy intactos:
+
+| Suite | Comprobaciones | Tiempo simulado |
+| :--- | ---: | ---: |
+| `test407` | **2118 + las del grupo nuevo** | `resto` **`2240553274213 ps`** |
+| `test446` | 204 | `1033367277932 ps` |
+| `test417` | 165 | `718988288 ps` |
+| `testserie` | 189 | `400677589564 ps` |
+
+Solo cambia una cifra, el recuento del F407, y se actualiza en
+`invariantes.txt` en el mismo commit que añade el grupo. Si cualquier otra se
+mueve, la fase no está cerrada. `testserie` está en la lista porque
+`PuenteSerie` también deriva de `ExtPartBase`.
 
 **Qué NO entra.** El socket. Las piezas nuevas (`PwmMeter`, `Servo`, `Encoder`,
 `StepperDriver`, `DcMotor`): son `[AG]` §8, son la parte grande y van después de
