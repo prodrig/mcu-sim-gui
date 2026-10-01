@@ -12,7 +12,9 @@
 //   G4  (fase 4) los avisos de placa durante el saludo, T_SUSCRIBE, y las
 //       instantáneas, los avisos y los estados en marcha;
 //   G5  (fase 5) las órdenes: `ordena()` -> T_ORDENES, antes de arrancar y en
-//       marcha, y T_ORDEN_HECHA -> `orden_hecha()`.
+//       marcha, y T_ORDEN_HECHA -> `orden_hecha()`;
+//   G6  (fase 6) el control: el contenido de T_ARRANCA, T_PAUSA, T_SIGUE,
+//       T_PASO y T_PARA, cuándo vale cada uno, y `pausada()`.
 // =============================================================================
 #include <QCoreApplication>
 
@@ -125,8 +127,9 @@ int main(int argc, char** argv)
         comprueba(m.espera_leidos(2) && m.leido[1].tipo == T_ARRANCA &&
                   m.leido[1].cuerpo.size() == int(sizeof a) &&
                   (std::memcpy(&a, m.leido[1].cuerpo.constData(), sizeof a), true) &&
-                  a.ritmo == RIT_LIBRE && a.ventana_ns == 0,
-                  "y el modelo recibe un T_ARRANCA de 16 bytes, ritmo libre y sin ventana");
+                  a.ritmo == RIT_REAL && a.factor == 1.f && a.ventana_ns == 0,
+                  "y el modelo recibe un T_ARRANCA de 16 bytes: a tiempo real, que es el "
+                  "ritmo por omision, y con la ventana de mcu-sim");
         comprueba(!s.arranca(), "y no se arranca dos veces");
         m.manda(T_INSTANTANEA, bytes(CabInstantanea{1, 0, 0}));
         m.manda(T_FIN, bytes(Fin{M_VENTANA, 0, 50110000ull}));
@@ -210,7 +213,6 @@ int main(int argc, char** argv)
                   c.periodo_ns_lo == 16666667u && c.periodo_ns_hi == 0 && c.n == 2,
                   "y el modelo recibe un T_SUSCRIBE con el periodo y los dos ids");
         s.arranca();
-        comprueba(!s.para(), "en marcha, para() no manda nada: es la fase 6");
         std::string in = bytes(CabInstantanea{7000000ull, 2, 4});
         in += bytes(Muestra{1, 0, 1.f}) + bytes(Muestra{3, 0, 0.f});
         m.manda(T_INSTANTANEA, in);
@@ -278,6 +280,62 @@ int main(int argc, char** argv)
         comprueba(espera([&] { return s.estado() == Sesion::Estado::Terminada; }) &&
                   !s.ordena(2, 0, 0.f),
                   "y con el modelo terminado, ordena() ya no manda nada");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("G6 La fase 6: el control\n");
+    for (int vuelta = 0; vuelta < 2; ++vuelta) {
+        const bool demanda = vuelta == 0;
+        Sesion s;
+        s.escucha(QHostAddress::LocalHost, 0);
+        if (demanda)
+            comprueba(!s.pausa() && !s.sigue() && !s.paso(1) && !s.para(),
+                      "sin un modelo saludado, ningun control manda nada");
+        ModeloFalso m;
+        m.conecta(s.puerto());
+        saluda_hasta_listo(m);
+        espera([&] { return s.estado() == Sesion::Estado::Lista; });
+        if (demanda)
+            comprueba(!s.pausa() && !s.sigue() && !s.paso(1),
+                      "esperando a arrancar, ni pausa ni sigue ni paso: no hay nada que "
+                      "pausar (para eso esta RIT_DEMANDA)");
+        Arranca a{};
+        comprueba(s.arranca(demanda ? RIT_DEMANDA : RIT_REAL, demanda ? 1.f : 0.5f,
+                            demanda ? 0 : 3000000000ull) &&
+                      m.espera_leidos(2) && m.leido[1].tipo == T_ARRANCA &&
+                      (std::memcpy(&a, m.leido[1].cuerpo.constData(), sizeof a), true) &&
+                      (demanda ? a.ritmo == RIT_DEMANDA
+                               : a.ritmo == RIT_REAL && a.factor == 0.5f &&
+                                     a.ventana_ns == 3000000000ull),
+                  demanda ? "arranca(RIT_DEMANDA): T_ARRANCA con ese ritmo"
+                          : "arranca(RIT_REAL, 0,5, 3 s): T_ARRANCA con el factor y la "
+                            "ventana");
+        if (demanda) {
+            comprueba(!s.sigue() && !s.pausada(),
+                      "a demanda, sigue() no manda nada; y no esta en pausa hasta que el "
+                      "modelo lo diga");
+            m.manda(T_ESTADO, bytes(Estado{F_PAUSADA, 0, 0, 0.1, 5}));
+            comprueba(espera([&] { return s.pausada(); }),
+                      "un T_ESTADO PAUSADA: pausada()");
+            Paso p{};
+            comprueba(s.paso(250000000ull) && m.espera_leidos(3) && m.leido[2].tipo == T_PASO &&
+                          m.leido[2].cuerpo.size() == int(sizeof p) &&
+                          (std::memcpy(&p, m.leido[2].cuerpo.constData(), sizeof p), true) &&
+                          p.ns == 250000000ull,
+                      "paso(250 ms): T_PASO de 8 bytes con los nanosegundos");
+            comprueba(s.para() && m.espera_leidos(4) && m.leido[3].tipo == T_PARA,
+                      "y para() en marcha manda T_PARA");
+        } else {
+            comprueba(!s.paso(1000), "a tiempo real, paso() no manda nada");
+            comprueba(s.pausa() && s.sigue() && m.espera_leidos(4) &&
+                          m.leido[2].tipo == T_PAUSA && m.leido[3].tipo == T_SIGUE,
+                      "pausa() y sigue(): T_PAUSA y T_SIGUE");
+            m.manda(T_ESTADO, bytes(Estado{F_CORRIENDO, 0, 9, 0.1, 5}));
+            m.manda(T_FIN, bytes(Fin{M_PARA, 0, 9}));
+            comprueba(espera([&] { return s.estado() == Sesion::Estado::Terminada; }) &&
+                          !s.pausa() && !s.para(),
+                      "y con el modelo terminado, nada");
+        }
     }
 
     return resultado();

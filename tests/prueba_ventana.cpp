@@ -18,17 +18,21 @@
 //       con T_LISTO y se apagan con T_FIN, que antes de arrancar y en marcha
 //       cada toque sale como T_ORDENES, y que los ecos que no son RES_OK -salvo
 //       el de rango, que ya avisa el modelo- van a la lista de avisos.
+//   G5  (fase 6) el control: el ritmo elegido antes de arrancar, «Pausa» /
+//       «Sigue» según diga el modelo, «Paso» a demanda y «Parar» en marcha.
 // =============================================================================
 #include <cmath>
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QGroupBox>
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSlider>
+#include <QSpinBox>
 #include <QStatusBar>
 
 #include "comun.h"
@@ -193,10 +197,13 @@ int main(int argc, char** argv)
                   "cada vez, con delta 0");
         auto* parar = v.findChild<QPushButton*>("parar");
         arrancar->click();
+        Arranca ar{};
         comprueba(m.espera_leidos(5) && m.leido[4].tipo == T_ARRANCA && !arrancar->isEnabled() &&
-                  !parar->isEnabled(),
-                  "pulsar Arrancar manda T_ARRANCA; Arrancar se desactiva, y Parar tambien "
-                  "(en marcha es la fase 6)");
+                  parar->isEnabled() &&
+                  (std::memcpy(&ar, m.leido[4].cuerpo.constData(), sizeof ar), true) &&
+                  ar.ritmo == RIT_REAL && ar.factor == 1.f,
+                  "pulsar Arrancar manda T_ARRANCA, a tiempo real, que es el ritmo por "
+                  "omision; Arrancar se desactiva, y Parar sigue (fase 6)");
 
         std::printf("G3 La ventana en marcha\n");
         auto* led = v.findChild<QLabel*>("obs:1");
@@ -258,6 +265,90 @@ int main(int argc, char** argv)
                   "T_FIN se ve en la barra de estado, con el instante: \"" +
                   v.statusBar()->currentMessage().toStdString() + "\"");
         comprueba(!pulsar->isEnabled(), "y con T_FIN los mandos se apagan");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("G5 El control\n");
+    {
+        VentanaPrincipal v(0);
+        v.show();
+        auto* ritmo  = v.findChild<QComboBox*>("ritmo");
+        auto* arr    = v.findChild<QPushButton*>("arrancar");
+        auto* pausa  = v.findChild<QPushButton*>("pausa");
+        auto* paso   = v.findChild<QPushButton*>("paso");
+        auto* paso_ms= v.findChild<QSpinBox*>("paso_ms");
+        auto* parar  = v.findChild<QPushButton*>("parar");
+        auto* relojes= v.findChild<QLabel*>("relojes");
+        comprueba(ritmo && pausa && paso && paso_ms && parar && !ritmo->isEnabled() &&
+                  !pausa->isEnabled() && !paso->isEnabled() && !parar->isEnabled(),
+                  "sin modelo, el control entero esta apagado");
+        ModeloFalso m;
+        m.conecta(v.sesion().puerto());
+        saluda_hasta_listo(m);
+        comprueba(espera([&] { return arr->isEnabled(); }) && ritmo->isEnabled() &&
+                  ritmo->currentText() == "tiempo real" && parar->isEnabled() &&
+                  !pausa->isEnabled() && !paso->isEnabled(),
+                  "con T_LISTO: el ritmo se elige ahora -tiempo real por omision-, y "
+                  "Parar; pausa y paso, no");
+        ritmo->setCurrentIndex(ritmo->findText("a demanda"));
+        arr->click();
+        Arranca a{};
+        comprueba(m.espera_leidos(3) && m.leido[2].tipo == T_ARRANCA &&
+                      (std::memcpy(&a, m.leido[2].cuerpo.constData(), sizeof a), true) &&
+                      a.ritmo == RIT_DEMANDA && !ritmo->isEnabled() && !pausa->isEnabled() &&
+                      !paso->isEnabled() && parar->isEnabled(),
+                  "a demanda: T_ARRANCA con RIT_DEMANDA; el ritmo ya no se cambia, y Paso "
+                  "espera a que el modelo diga que esta en pausa");
+        m.manda(T_ESTADO, bytes(Estado{F_PAUSADA, 0, 0, 0.05, 3}));
+        comprueba(espera([&] { return paso->isEnabled(); }) && paso_ms->isEnabled() &&
+                      relojes->text().contains("en pausa"),
+                  "T_ESTADO PAUSADA: Paso se habilita, y los relojes dicen 'en pausa'");
+        paso_ms->setValue(250);
+        paso->click();
+        Paso p{};
+        comprueba(m.espera_leidos(4) && m.leido[3].tipo == T_PASO &&
+                      (std::memcpy(&p, m.leido[3].cuerpo.constData(), sizeof p), true) &&
+                      p.ns == 250000000ull && !paso->isEnabled(),
+                  "Paso con 250 ms: T_PASO de 250 000 000 ns, y se apaga mientras avanza");
+        m.manda(T_ESTADO, bytes(Estado{F_CORRIENDO, 0, 100000000ull, 0.1, 9}));
+        m.manda(T_ESTADO, bytes(Estado{F_PAUSADA, 0, 250000000ull, 0.2, 19}));
+        comprueba(espera([&] { return paso->isEnabled(); }),
+                  "y vuelve cuando el modelo dice que esta otra vez en pausa");
+        parar->click();
+        comprueba(m.espera_leidos(5) && m.leido[4].tipo == T_PARA,
+                  "Parar en marcha: T_PARA");
+        m.manda(T_FIN, bytes(Fin{M_PARA, 0, 250000000ull}));
+        comprueba(espera([&] {
+                      return v.statusBar()->currentMessage().contains("se pidio parar");
+                  }) && !parar->isEnabled() && !paso->isEnabled(),
+                  "y con su T_FIN, todo apagado: \"" +
+                      v.statusBar()->currentMessage().toStdString() + "\"");
+    }
+    {
+        VentanaPrincipal v(0);
+        v.show();
+        auto* arr   = v.findChild<QPushButton*>("arrancar");
+        auto* pausa = v.findChild<QPushButton*>("pausa");
+        auto* paso  = v.findChild<QPushButton*>("paso");
+        ModeloFalso m;
+        m.conecta(v.sesion().puerto());
+        saluda_hasta_listo(m);
+        espera([&] { return arr->isEnabled(); });
+        arr->click();
+        comprueba(espera([&] { return pausa->isEnabled(); }) && pausa->text() == "Pausa" &&
+                      !paso->isEnabled(),
+                  "a tiempo real, en marcha: Pausa habilitado, Paso no");
+        pausa->click();
+        comprueba(m.espera_leidos(4) && m.leido[3].tipo == T_PAUSA && !pausa->isEnabled(),
+                  "Pausa manda T_PAUSA, y el boton espera a que el modelo conteste");
+        m.manda(T_ESTADO, bytes(Estado{F_PAUSADA, 0, 7000000ull, 0.3, 50}));
+        comprueba(espera([&] { return pausa->isEnabled() && pausa->text() == "Sigue"; }),
+                  "T_ESTADO PAUSADA: el boton dice 'Sigue'");
+        pausa->click();
+        comprueba(m.espera_leidos(5) && m.leido[4].tipo == T_SIGUE, "y manda T_SIGUE");
+        m.manda(T_ESTADO, bytes(Estado{F_CORRIENDO, 0, 7000000ull, 0.9, 51}));
+        comprueba(espera([&] { return pausa->isEnabled() && pausa->text() == "Pausa"; }),
+                  "T_ESTADO CORRIENDO: otra vez 'Pausa'");
     }
 
     return resultado();

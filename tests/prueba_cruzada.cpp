@@ -8,7 +8,8 @@
 // la fase 4, que el LED parpadea en las muestras que llegan: seis flancos
 // separados 100 ms, que es lo que programa el blinky. Y desde la fase 5, que
 // unas órdenes al pulsador B1 mandadas antes de arrancar vuelven con su eco en
-// el instante exacto, y que el blinky —que no mira PA0— parpadea igual.
+// el instante exacto, y que el blinky —que no mira PA0— parpadea igual. Y desde
+// la fase 6, G3: a demanda, un paso exacto, y T_PARA en marcha.
 //
 // Necesita un `mcu-sim` compilado y su árbol de fuentes, porque las placas y
 // los firmwares están allí. Se le dicen con dos variables de entorno:
@@ -100,7 +101,7 @@ int main(int argc, char** argv)
                                               {0, 99, 0, 1.f}}),
                       "tres ordenes antes de arrancar: pulsa B1 en 200 ms, lo suelta en "
                       "250, y una a la pieza 99");
-            comprueba(s.arranca(), "Arrancar");
+            comprueba(s.arranca(RIT_LIBRE), "Arrancar, con ritmo libre");
             comprueba(espera([&] { return fines == 1; }, 60000) && motivo == M_VENTANA &&
                       t == 700110000ull,
                       "T_FIN al acabar la ventana, en 700 ms y 110 us");
@@ -131,6 +132,42 @@ int main(int argc, char** argv)
         comprueba(acabo && p.exitStatus() == QProcess::NormalExit &&
                   p.exitCode() == 0,
                   "y mcu-sim termina con codigo 0");
+    }
+    // -------------------------------------------------------------------------
+    std::printf("G3 A demanda: un paso exacto, y parar en marcha\n");
+    {
+        Sesion s;
+        s.escucha(QHostAddress::LocalHost, 0);
+        int listos = 0, fines = 0;
+        QVector<QPair<quint32, quint64>> ests;
+        quint32 motivo = 99; quint64 t = 1;
+        QObject::connect(&s, &Sesion::listo, [&] { ++listos; });
+        QObject::connect(&s, &Sesion::estado_modelo, [&](quint32 f, quint64 x, double, quint64) {
+            ests.push_back({f, x});
+        });
+        QObject::connect(&s, &Sesion::fin, [&](quint32 m, qint32, quint64 x) {
+            ++fines; motivo = m; t = x;
+        });
+        QProcess p;
+        p.setWorkingDirectory(src);
+        // Sin ventana de tiempo: hasta que se diga parar
+        p.start(sim, {"placas/discovery_min.xml", "verif/fw/blinky/blinky.bin",
+                      "--gui", QStringLiteral("127.0.0.1:%1").arg(s.puerto())});
+        comprueba(espera([&] { return listos == 1; }, 20000) && s.arranca(RIT_DEMANDA),
+                  "saludo, y arranca a demanda, sin ventana de tiempo");
+        comprueba(espera([&] { return s.pausada(); }, 10000) && ests.last().second == 0,
+                  "el modelo dice que esta en pausa, en t = 0");
+        comprueba(s.paso(100000000ull) &&
+                      espera([&] { return s.pausada() && ests.last().second > 0; }, 20000) &&
+                      ests.last().second == 100000000ull,
+                  "un paso de 100 ms: otra vez en pausa en exactamente 100 ms");
+        comprueba(s.para() && espera([&] { return fines == 1; }, 20000) &&
+                      motivo == M_PARA && t == 100000000ull,
+                  "Parar: T_FIN con motivo M_PARA, en los mismos 100 ms");
+        const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);
+        comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0 &&
+                      p.readAllStandardOutput().contains("la ventana pidio parar"),
+                  "y mcu-sim termina con codigo 0, diciendo que se le pidio parar");
     }
     return resultado();
 }

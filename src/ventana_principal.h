@@ -29,9 +29,18 @@
 //     pieza o un mando que no existen lo dice aquí, y una fuera de rango la
 //     dice ya el modelo con su propio T_AVISO, así que no se repite.
 //
-// Lo que acabará teniendo y aún no tiene: parar, pausar y el ritmo (fase 6), y
-// lanzar el modelo ella misma (fase 7). Hoy el modelo se lanza a mano, desde
-// una consola, con `--gui`.
+// Desde la fase 6, el control:
+//
+//   * el RITMO se elige antes de arrancar: tiempo real, a la mitad, libre o a
+//     demanda -que arranca en pausa y solo avanza con «Paso»-;
+//   * en marcha, «Pausa» / «Sigue» y «Parar». El botón de pausa dice lo que
+//     dijo el último T_ESTADO, no lo que se pidió: la pausa la decide el
+//     modelo;
+//   * a demanda, «Paso» avanza los milisegundos que diga su casilla, y se
+//     vuelve a habilitar cuando el modelo dice que está otra vez en pausa.
+//
+// Lo que acabará teniendo y aún no tiene: lanzar el modelo ella misma (fase 7).
+// Hoy el modelo se lanza a mano, desde una consola, con `--gui`.
 // =============================================================================
 #ifndef MCU_SIM_GUI_VENTANA_PRINCIPAL_H
 #define MCU_SIM_GUI_VENTANA_PRINCIPAL_H
@@ -41,8 +50,10 @@
 #include "panel.h"
 #include "sesion.h"
 
+class QComboBox;
 class QLabel;
 class QListWidget;
+class QSpinBox;
 class QPushButton;
 class QScrollArea;
 
@@ -57,8 +68,9 @@ public:
     Sesion& sesion() { return ses_; }
 
     // Cada cuánto tiempo SIMULADO se pide una instantánea: 60 por segundo
-    // simulado. Con el ritmo libre de hoy son muchas más por segundo de pared;
-    // el ritmo es la fase 6.
+    // simulado, que a tiempo real -el ritmo por omisión- son 60 por segundo de
+    // pared. Con ritmo libre son muchas más, y la cola las tira si no da
+    // abasto: se ve que va por detrás.
     static constexpr quint64 PERIODO_NS = 16666667;
 
 private:
@@ -71,6 +83,7 @@ private:
     void pon_eco(quint64 t_sim_ns, quint16 pieza, quint16 mando, float valor,
                  quint32 resultado);
     void apaga_mandos() { if (panel_) panel_->activa_mandos(false); }
+    void pon_controles();
 
     Sesion        ses_;
     quint16       puerto_;
@@ -78,6 +91,10 @@ private:
     QScrollArea*  centro_    = nullptr;
     QPushButton*  arrancar_  = nullptr;
     QPushButton*  parar_     = nullptr;
+    QComboBox*    ritmo_     = nullptr;
+    QPushButton*  pausa_     = nullptr;
+    QPushButton*  paso_      = nullptr;
+    QSpinBox*     paso_ms_   = nullptr;
     Panel*        panel_     = nullptr;
     QLabel*       relojes_   = nullptr;
     QListWidget*  avisos_    = nullptr;

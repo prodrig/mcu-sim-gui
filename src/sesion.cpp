@@ -12,6 +12,7 @@ Sesion::Sesion(QObject* padre) : QObject(padre)
 {
     connect(&cx_, &Conexion::conectado, this, [this] {
         cambia(Estado::Saludando);
+        fase_ = proto::F_ESPERANDO;
         version_ = 0;
         hola_.clear();
         placa_xml_.clear();
@@ -128,6 +129,7 @@ void Sesion::llega(quint16 tipo, const QByteArray& cuerpo)
         proto::Estado e{};
         if (cuerpo.size() != int(sizeof e)) break;
         std::memcpy(&e, cuerpo.constData(), sizeof e);
+        fase_ = e.fase;
         emit estado_modelo(e.fase, e.t_sim_ns, e.t_pared_s, e.deltas);
         break;
     }
@@ -148,19 +150,38 @@ void Sesion::llega(quint16 tipo, const QByteArray& cuerpo)
     }
 }
 
-bool Sesion::arranca()
+bool Sesion::arranca(quint32 ritmo, float factor, quint64 ventana_ns)
 {
     if (estado_ != Estado::Lista) return false;
-    if (!cx_.envia_pod(proto::T_ARRANCA, proto::Arranca{proto::RIT_LIBRE, 1.f, 0}))
+    if (!cx_.envia_pod(proto::T_ARRANCA, proto::Arranca{ritmo, factor, ventana_ns}))
         return false;
+    ritmo_ = ritmo;
     cambia(Estado::Corriendo);
     return true;
 }
 
 bool Sesion::para()
 {
-    if (estado_ != Estado::Lista) return false;
+    if (estado_ != Estado::Lista && estado_ != Estado::Corriendo) return false;
     return cx_.envia(proto::T_PARA);
+}
+
+bool Sesion::pausa()
+{
+    if (estado_ != Estado::Corriendo) return false;
+    return cx_.envia(proto::T_PAUSA);
+}
+
+bool Sesion::sigue()
+{
+    if (estado_ != Estado::Corriendo || ritmo_ == proto::RIT_DEMANDA) return false;
+    return cx_.envia(proto::T_SIGUE);
+}
+
+bool Sesion::paso(quint64 ns)
+{
+    if (estado_ != Estado::Corriendo || ritmo_ != proto::RIT_DEMANDA) return false;
+    return cx_.envia_pod(proto::T_PASO, proto::Paso{ns});
 }
 
 bool Sesion::suscribe(quint64 periodo_ns, const QVector<quint16>& ids)

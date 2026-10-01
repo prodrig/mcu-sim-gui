@@ -304,16 +304,46 @@ lee cada 100 µs simulados, una orden en marcha aterriza en el primer múltiplo
 de 100 µs —contados desde que se activó el enlace— posterior a su llegada,
 más su delta.
 
-**`T_PAUSA`, `T_SIGUE`, `T_PASO` y `T_PARA` en marcha** se leen enteros y se
-ignoran hasta la fase 6.
-
 **Y eso trae la trampa de siempre, escrita aquí para que no sorprenda:** ese
 proceso solo corre **si el tiempo simulado avanza**. Con la simulación en pausa
 no hay tiempo que avance y el socket no se atiende, así que «pausado» **no
-puede** ser `sc_start()` sin más: el modelo en pausa sigue troceando rodajas
-cortas de tiempo simulado sin dejar correr al resto del modelo. Es lo mismo que
-ya hace `sim_main.cpp` hoy con `for (;;) espera(sc_time(1, SC_MS));` cuando hay
-un stub de GDB esperando.
+puede** ser dejar de llamar a `sc_start()`: el modelo se quedaría sordo y no
+oiría el `T_SIGUE`.
+
+**Cómo se resolvió, en la fase 6.** El plan proponía trocear rodajas cortas de
+tiempo simulado con el resto del modelo quieto. Se hizo algo más literal: todos
+los procesos de SystemC comparten **un** hilo del sistema operativo, así que
+mientras el enlace no llame a `wait()` no corre ningún otro y el tiempo simulado
+no se mueve. **La pausa es un bucle de reloj de pared dentro del propio
+proceso del enlace**: duerme en el socket hasta que llega algo —sin gastar CPU—,
+contesta `T_PING`, acepta `T_SUSCRIBE` y `T_ORDENES`, manda un `T_ESTADO` con
+`F_PAUSADA` cada 250 ms de pared, y sale cuando llega `T_SIGUE`. El modelo
+queda exactamente donde estaba: ni un picosegundo ni un delta. Lo que se ordene
+en pausa se aplica al seguir, y una suscripción nueva no da muestras hasta
+entonces, porque no pasa el tiempo.
+
+**`T_PAUSA`** pone la simulación en pausa en la vuelta que lo lee —en el
+primer múltiplo de 100 µs posterior—; si ya lo está, no hace nada, y si había
+un paso a medias, lo cancela. La pausa empieza con un `T_ESTADO` `F_PAUSADA`.
+
+**`T_SIGUE`** la quita, con un `T_ESTADO` `F_CORRIENDO`. Con `RIT_DEMANDA` no
+vale —allí solo se avanza con `T_PASO`—: un `T_AVISO` lo dice y se ignora.
+
+**El ritmo y la ventana de `T_ARRANCA`**, desde la fase 6:
+
+| `ritmo` | qué hace |
+| :--- | :--- |
+| `RIT_REAL` | frena la simulación al reloj de pared, multiplicado por `factor` (1 = tiempo real, 0,5 = a la mitad). Es el `--tiempo-real` de la línea de órdenes, y el ritmo por omisión de la ventana. Un `factor` que no es un número positivo vale 1 |
+| `RIT_LIBRE` | todo lo deprisa que se pueda |
+| `RIT_DEMANDA` | arranca **en pausa** en t = 0 y solo avanza con `T_PASO` |
+
+Con `--gui` el ritmo lo dice la ventana: el `--tiempo-real` de la línea de
+órdenes deja de mandar, y `mcu-sim` lo dice. La ventana de tiempo, `ventana_ns`:
+si es mayor que 0, esa; si es 0, la de `mcu-sim` —la de su línea de órdenes—
+o, si no se le dio ninguna, **sin fin**: hasta que la ventana diga `T_PARA`. Y
+si en ese caso la ventana se va, `mcu-sim` se para solo, porque ya no queda
+nadie que pueda pararlo. Tras una pausa a tiempo real el freno se reancla: no
+corre para recuperar el rato que estuvo parado.
 
 **`T_SUSCRIBE`** puede llegar tantas veces como quiera: reemplaza a la anterior.
 Cambiar de pestaña en la GUI es volver a suscribirse. Si trae un `id_obs` que no
@@ -324,11 +354,24 @@ mismo un `T_SUSCRIBE` que no mide lo que dice. Una suscripción vacía apaga las
 instantáneas.
 
 **`T_PASO`** solo tiene sentido con `RIT_DEMANDA`. Con cualquier otro ritmo se
-contesta con un `T_AVISO` de nivel `N_AVISO` y se ignora.
+contesta con un `T_AVISO` de nivel `N_AVISO` y se ignora, y lo mismo uno cuyo
+cuerpo no mide 8 bytes. Avanza `ns` simulados y vuelve a la pausa **en
+exactamente t + ns**, caiga o no en la rejilla de 100 µs del sondeo: el enlace
+acorta su última espera para despertar ahí. Uno que llega con otro paso a
+medias se suma al final de aquel; uno de 0 no se mueve y contesta con un
+`T_ESTADO`. Lo que el modelo tenga programado **exactamente** en t + ns puede
+haber corrido o no al pararse —SystemC no ordena procesos del mismo instante—;
+lo verá el paso siguiente. Pararse no cambia el orden de nada: en
+`make gui-control`, lo simulado a pasos sale idéntico a lo simulado de un
+tirón.
 
-**`T_PARA`** es un final ordenado: el modelo termina la rodaja, manda `T_FIN` y
-llama a `sc_stop()`. **`sc_stop()` es definitivo** —no hay «volver a arrancar»—
-y por eso `T_PAUSA` y `T_PARA` son mensajes distintos y no uno con un booleano.
+**`T_PARA`** es un final ordenado: el modelo llama a `sc_stop()` —desde la pausa
+también—, da su resumen de siempre por la consola y manda lo que tenga
+pendiente, un `T_ESTADO` `F_TERMINADA` y `T_FIN` con motivo `M_PARA` y código 0.
+**`sc_stop()` es definitivo** —no hay «volver a arrancar»— y por eso `T_PAUSA` y
+`T_PARA` son mensajes distintos y no uno con un booleano. Antes de `T_ARRANCA`
+`T_PAUSA`, `T_SIGUE` y `T_PASO` no quieren decir nada —no hay simulación que
+pausar; para arrancar en pausa está `RIT_DEMANDA`— y se leen y se ignoran.
 
 ---
 
@@ -428,7 +471,7 @@ orden con delta 0: «ahora», que antes de arrancar es t = 0.
 | La GUI no contesta a `T_HOLA` en 10 s, contesta `protocolo=0`, elige una versión que no se le ofreció o no empieza por `T_VERSION` | lo dice por la salida de error y **termina con código 2** | — |
 | El modelo ofrece una `protocolo_max` sin ninguna versión común | — | contesta `protocolo=0` y cierra |
 | La GUI cierra la conexión **antes** de `T_ARRANCA` | lo dice y **termina con código 2**, sin simular: ya no hay nadie que vaya a decir «arranca» | — |
-| La GUI cierra la conexión en marcha | **sigue simulando** hasta agotar su ventana y termina con normalidad. No se muere ni se queda colgado | — |
+| La GUI cierra la conexión en marcha | **sigue simulando** hasta agotar su ventana y termina con normalidad —si estaba en pausa o a demanda, se quita la pausa—. No se muere ni se queda colgado. Si la ventana de tiempo era **sin fin**, se para: ya no queda quien lo pare | — |
 | El modelo se rinde (`muere()`) con la GUI conectada | manda `T_FIN` con `M_ERROR` y código 2 antes de irse | lo enseña |
 | `mcu-sim` muere | — | lo ve por el `QProcess` y por el socket cerrado; enseña el código de salida y lo que quedara en la salida de error |
 | Magia mala, versión imposible, longitud > `CUERPO_MAX` | cierra diciendo por qué | igual |
@@ -436,6 +479,7 @@ orden con delta 0: «ahora», que antes de arrancar es t = 0.
 | El socket no traga instantáneas | las **tira** y cuenta cuántas en `perdidas` | enseña que va por detrás |
 | El socket no traga avisos | cola de 1000; si se llena, `T_FIN` con `M_ERROR`, cierra **y sigue simulando** | — |
 | El socket no traga ecos de órdenes | igual que con los avisos: 1000 en cola, y luego `T_FIN` con `M_ERROR`, cierra y sigue simulando —con las órdenes ya aceptadas— | — |
+| `T_SIGUE` a demanda, o `T_PASO` con otro ritmo o que no mide 8 bytes | un `T_AVISO`, y se ignora | lo enseña en la lista de avisos |
 | Una orden a una pieza o un mando que no existen | eco con `RES_PIEZA` o `RES_MANDO`; no se aplica | lo pone en la lista de avisos |
 | Una orden fuera de rango | la recorta, la aplica, eco con `RES_RANGO` y un `T_AVISO` detrás | enseña el aviso del modelo, sin repetirlo |
 | Un `T_ORDENES` que no es un múltiplo de 16 bytes | un `T_AVISO`, y no aplica ninguna | — |

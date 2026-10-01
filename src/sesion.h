@@ -30,6 +30,14 @@
 //                    modelo la lee si ya corre; las demás, deltas;
 //   T_ORDEN_HECHA -> `orden_hecha()`, con el instante REAL en que se aplicó y
 //                    el resultado. Uno por orden: ninguna se calla.
+//
+// Y desde la fase 6, el control (`doc/protocolo.md` §4.2):
+//
+//   `arranca(ritmo, factor, ventana)` -> T_ARRANCA con su contenido;
+//   `pausa()`, `sigue()`, `paso(ns)` y `para()` -> T_PAUSA, T_SIGUE, T_PASO y
+//                    T_PARA. `para()` vale antes de arrancar y en marcha;
+//   `pausada()`   -> lo que dijo el último T_ESTADO. La pausa la decide el
+//                    modelo: hasta que no lo dice, no está en pausa.
 // =============================================================================
 #ifndef MCU_SIM_GUI_SESION_H
 #define MCU_SIM_GUI_SESION_H
@@ -66,12 +74,23 @@ public:
     const QHash<QString, QString>& hola() const { return hola_; }
     const PlacaGui& placa() const { return placa_; }
 
-    // T_ARRANCA, con ritmo libre y ventana indefinida: el contenido lo usa la
-    // fase 6. false si el modelo no está esperando.
-    bool arranca();
-    // T_PARA: antes de arrancar, termina sin simular. En marcha es la fase 6,
-    // y hasta entonces no se manda: false.
+    // T_ARRANCA. El ritmo (proto::RIT_REAL con su factor, RIT_LIBRE o
+    // RIT_DEMANDA, que arranca en pausa) y la ventana de tiempo: 0 es la de
+    // mcu-sim, la de su línea de órdenes o sin fin. false si el modelo no
+    // está esperando.
+    bool arranca(quint32 ritmo = proto::RIT_REAL, float factor = 1.f,
+                 quint64 ventana_ns = 0);
+    // T_PARA: antes de arrancar, termina sin simular; en marcha, `sc_stop()`,
+    // y el T_FIN dice M_PARA. false si no hay un modelo esperando o corriendo.
     bool para();
+    // T_PAUSA y T_SIGUE: solo en marcha. Con ritmo a demanda T_SIGUE no vale.
+    bool pausa();
+    bool sigue();
+    // T_PASO: solo en marcha y con ritmo a demanda; avanza `ns` simulados y
+    // vuelve a la pausa.
+    bool paso(quint64 ns);
+    quint32 ritmo() const { return ritmo_; }
+    bool    pausada() const { return fase_ == proto::F_PAUSADA; }
     // T_SUSCRIBE: qué observables, y cada cuánto tiempo SIMULADO. Reemplaza a
     // la anterior; vacía, las apaga. false si no hay un modelo saludado.
     bool suscribe(quint64 periodo_ns, const QVector<quint16>& ids);
@@ -122,6 +141,8 @@ private:
     PlacaGui                placa_;
     quint64                 perdidas_ = 0;
     quint64                 ecos_ = 0;
+    quint32                 ritmo_ = proto::RIT_REAL;
+    quint32                 fase_ = proto::F_ESPERANDO;
 };
 
 } // namespace mcusim

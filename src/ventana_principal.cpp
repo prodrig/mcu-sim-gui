@@ -1,10 +1,12 @@
 #include "ventana_principal.h"
 
+#include <QComboBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSpinBox>
 #include <QStatusBar>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -31,11 +33,34 @@ VentanaPrincipal::VentanaPrincipal(quint16 puerto, QWidget* padre)
     arrancar_->setObjectName(QStringLiteral("arrancar"));
     parar_ = new QPushButton(tr("Parar"), cuerpo);
     parar_->setObjectName(QStringLiteral("parar"));
+    // Fase 6: el ritmo, que se elige ANTES de arrancar, y el control en marcha
+    ritmo_ = new QComboBox(cuerpo);
+    ritmo_->setObjectName(QStringLiteral("ritmo"));
+    ritmo_->addItem(tr("tiempo real"), QVariantList{proto::RIT_REAL, 1.0});
+    ritmo_->addItem(tr("a la mitad"),  QVariantList{proto::RIT_REAL, 0.5});
+    ritmo_->addItem(tr("libre"),       QVariantList{proto::RIT_LIBRE, 1.0});
+    ritmo_->addItem(tr("a demanda"),   QVariantList{proto::RIT_DEMANDA, 1.0});
+    ritmo_->setToolTip(tr("Tiempo real: un segundo simulado por segundo de reloj. Libre: "
+                          "todo lo deprisa que se pueda. A demanda: arranca en pausa y "
+                          "solo avanza con Paso."));
+    pausa_ = new QPushButton(tr("Pausa"), cuerpo);
+    pausa_->setObjectName(QStringLiteral("pausa"));
+    paso_ = new QPushButton(tr("Paso"), cuerpo);
+    paso_->setObjectName(QStringLiteral("paso"));
+    paso_ms_ = new QSpinBox(cuerpo);
+    paso_ms_->setObjectName(QStringLiteral("paso_ms"));
+    paso_ms_->setRange(1, 60000);
+    paso_ms_->setValue(100);
+    paso_ms_->setSuffix(tr(" ms"));
     relojes_ = new QLabel(cuerpo);
     relojes_->setObjectName(QStringLiteral("relojes"));
     fila->addWidget(resumen_, 1);
     fila->addWidget(relojes_);
+    fila->addWidget(ritmo_);
     fila->addWidget(arrancar_);
+    fila->addWidget(pausa_);
+    fila->addWidget(paso_ms_);
+    fila->addWidget(paso_);
     fila->addWidget(parar_);
     caja->addLayout(fila);
 
@@ -50,16 +75,27 @@ VentanaPrincipal::VentanaPrincipal(quint16 puerto, QWidget* padre)
     setCentralWidget(cuerpo);
 
     connect(arrancar_, &QPushButton::clicked, this, [this] {
-        if (ses_.arranca()) {
-            arrancar_->setEnabled(false);
-            // Parar en marcha es la fase 6: hasta entonces, no se ofrece.
-            parar_->setEnabled(false);
-            parar_->setToolTip(tr("Parar con la simulacion en marcha llega en la fase 6 del plan."));
-            statusBar()->showMessage(tr("simulando"));
+        const QVariantList r = ritmo_->currentData().toList();
+        if (ses_.arranca(r.value(0).toUInt(), r.value(1).toFloat())) {
+            statusBar()->showMessage(ses_.ritmo() == proto::RIT_DEMANDA
+                                         ? tr("a demanda: en pausa hasta que pulses Paso")
+                                         : tr("simulando"));
+            pon_controles();
         }
     });
     connect(parar_, &QPushButton::clicked, this, [this] {
         if (ses_.para()) parar_->setEnabled(false);
+    });
+    // La pausa la decide el modelo: el boton dice lo que dijo el ultimo
+    // T_ESTADO, no lo que se pidio
+    connect(pausa_, &QPushButton::clicked, this, [this] {
+        if (ses_.pausada() ? ses_.sigue() : ses_.pausa()) pausa_->setEnabled(false);
+    });
+    connect(paso_, &QPushButton::clicked, this, [this] {
+        if (ses_.paso(quint64(paso_ms_->value()) * 1000000ull)) {
+            paso_->setEnabled(false);       // hasta que diga que vuelve a estar en pausa
+            paso_ms_->setEnabled(false);
+        }
     });
 
     connect(&ses_, &Sesion::conectado, this, [this] {
@@ -72,8 +108,7 @@ VentanaPrincipal::VentanaPrincipal(quint16 puerto, QWidget* padre)
         // Antes de arrancar: asi la secuencia se repite al picosegundo
         if (panel_ && !panel_->pintados().isEmpty())
             ses_.suscribe(PERIODO_NS, panel_->pintados());
-        arrancar_->setEnabled(true);
-        parar_->setEnabled(true);
+        pon_controles();
         // Lo que se toque desde ya se aplica en t = 0 (doc/protocolo.md §5)
         if (panel_) panel_->activa_mandos(true);
         statusBar()->showMessage(tr("el modelo esta construido y esperando: pulsa Arrancar"));
@@ -84,11 +119,12 @@ VentanaPrincipal::VentanaPrincipal(quint16 puerto, QWidget* padre)
         if (panel_) panel_->pon_valor(id, v);
     });
     connect(&ses_, &Sesion::aviso, this, &VentanaPrincipal::pon_aviso);
-    connect(&ses_, &Sesion::estado_modelo, this,
-            [this](quint32, quint64 t, double p, quint64 d) { pon_relojes(t, p, d); });
+    connect(&ses_, &Sesion::estado_modelo, this, [this](quint32, quint64 t, double p, quint64 d) {
+        pon_relojes(t, p, d);
+        pon_controles();
+    });
     connect(&ses_, &Sesion::desconectado, this, [this](const QString& m) {
-        arrancar_->setEnabled(false);
-        parar_->setEnabled(false);
+        pon_controles();
         apaga_mandos();
         if (!m.isEmpty())
             statusBar()->showMessage(tr("conexion cerrada: %1").arg(m));
@@ -105,8 +141,7 @@ VentanaPrincipal::VentanaPrincipal(quint16 puerto, QWidget* padre)
 
 void VentanaPrincipal::espera_modelo()
 {
-    arrancar_->setEnabled(false);
-    parar_->setEnabled(false);
+    pon_controles();
     resumen_->setText(
         tr("<b>Esperando a mcu-sim</b> en localhost:%1. Lanzalo desde una consola "
            "con <code>mcu-sim placa.xml firmware.bin --gui</code>.").arg(puerto_));
@@ -165,6 +200,7 @@ void VentanaPrincipal::pon_relojes(quint64 t_sim_ns, double t_pared_s, quint64 d
                     .arg(double(t_sim_ns) / 1e6, 0, 'f', 3)
                     .arg(t_pared_s, 0, 'f', 2)
                     .arg(deltas);
+    if (ses_.pausada()) t += tr(" · <b>en pausa</b>");
     if (ses_.perdidas() > 0)
         t += tr(" · <b>va por detras: %1 instantaneas perdidas</b>").arg(ses_.perdidas());
     relojes_->setText(t);
@@ -193,10 +229,24 @@ void VentanaPrincipal::pon_eco(quint64 t_sim_ns, quint16 pieza, quint16 mando, f
               tr("ventana"), tr("orden a %1 (%2): %3").arg(quien).arg(valor).arg(por));
 }
 
+void VentanaPrincipal::pon_controles()
+{
+    using E = Sesion::Estado;
+    const E e = ses_.estado();
+    const bool lista = e == E::Lista, corre = e == E::Corriendo;
+    const bool demanda = ses_.ritmo() == proto::RIT_DEMANDA;
+    ritmo_->setEnabled(lista);
+    arrancar_->setEnabled(lista);
+    parar_->setEnabled(lista || corre);
+    pausa_->setEnabled(corre && !demanda);
+    pausa_->setText(corre && ses_.pausada() ? tr("Sigue") : tr("Pausa"));
+    paso_->setEnabled(corre && demanda && ses_.pausada());
+    paso_ms_->setEnabled(corre && demanda && ses_.pausada());
+}
+
 void VentanaPrincipal::termina(quint32 motivo, qint32 codigo, quint64 t_sim_ns)
 {
-    arrancar_->setEnabled(false);
-    parar_->setEnabled(false);
+    pon_controles();
     apaga_mandos();
     const QString por =
         motivo == proto::M_VENTANA ? tr("se agoto la ventana de simulacion")

@@ -1438,3 +1438,102 @@ La grabación de sesiones: es la fase 8, y los ecos con su instante real son lo
 que grabará. El control de la simulación —ritmo, pausa, parar en marcha—: fase
 6. Y la ventana no refleja el eco en el control: una casilla marcada cuya orden
 se recortó sigue marcada; lo que el modelo aplicó lo enseñan los indicadores.
+
+---
+
+## 14. Fase 6, ejecutada
+
+### 14.1 La trampa, y cómo se ha resuelto
+
+El plan pedía resolver que el socket lo atiende un proceso de SystemC, y que
+por eso «solo se atiende si el tiempo simulado avanza». Proponía trocear
+rodajas cortas de tiempo simulado con el resto del modelo quieto. **Se ha hecho
+algo más literal, y más barato**: todos los procesos de SystemC comparten un
+hilo del sistema operativo, así que mientras el enlace no llame a `wait()` no
+corre ningún otro y el tiempo simulado no se mueve. **La pausa es un bucle de
+reloj de pared dentro del proceso del enlace**: duerme en el socket
+(`CanalGui::espera_lectura`, un `select`) hasta que llega algo, contesta
+`T_PING`, acepta suscripciones y órdenes, manda su latido con `F_PAUSADA`, y
+vuelve al llegar `T_SIGUE`. Es lo que ya hacía `--espera-terminal` con los
+puentes serie antes de arrancar, ahora en marcha. El modelo queda exactamente
+donde estaba —ni un picosegundo, ni un delta— y no gasta CPU.
+
+### 14.2 Qué se ha escrito
+
+**En `mcu-sim`:**
+
+* **`parts/enlace_gui.h`**: `T_PAUSA`, `T_SIGUE`, `T_PASO` y `T_PARA`. La pausa,
+  como en §14.1. **`T_PASO` para en t + ns exacto**: el proceso acorta su
+  última espera para despertar justo ahí, aunque no caiga en la rejilla de
+  100 µs. Pasos seguidos se suman. `T_PARA`, desde la marcha o desde la pausa,
+  es `sc_stop()`, y `parada()` se lo dice a quien llamó a `sc_start()`. Si la
+  ventana se va en pausa, la pausa se quita; y con `para_al_perderse()` —la
+  ventana de tiempo sin fin— la simulación se para, porque ya no queda quien
+  la pare.
+* **`common/gui_mensajes.h` y `gui_cliente.h`**: `CanalGui::espera_lectura`, y
+  su `select` en el `CanalSocket`.
+* **`top/sim_main.cpp`**: `aplica_arranca()` aplica el contenido de
+  `T_ARRANCA`, que desde la fase 3 se leía y no se usaba. El ritmo: `RIT_REAL`
+  con su factor es el freno de `--tiempo-real` —que con `--gui` deja de
+  mandar, y se dice—; `RIT_DEMANDA` arranca en pausa. La ventana de tiempo:
+  `ventana_ns` > 0 manda; **0 es la de la línea de órdenes o, si no se dio,
+  sin fin** —ahora se puede parar desde la ventana—. El resumen del final
+  (lo simulado y cada LED) pasa a `informe()`, que se dice también al parar
+  desde la ventana; y al salir de una pausa el freno se reancla.
+* **`common/protocolo.h`**, en los dos repositorios: el comentario de
+  `ventana_ns`, que decía «0 = indefinida» y ahora dice lo de arriba.
+
+**En `mcu-sim-gui`:** `Sesion::arranca(ritmo, factor, ventana)`, `pausa()`,
+`sigue()`, `paso(ns)` y `para()` en marcha, cada uno solo cuando vale, y
+`pausada()`, que dice lo que dijo el último `T_ESTADO`. En la ventana, un
+selector de ritmo antes de arrancar —tiempo real por omisión, a la mitad,
+libre, a demanda— y en marcha **Pausa / Sigue**, **Paso** con sus
+milisegundos y **Parar**. El botón de pausa dice lo que dijo el modelo, no lo
+que se pidió, y Paso se apaga mientras avanza y vuelve cuando el modelo dice
+que está otra vez en pausa.
+
+### 14.3 Cómo se ha comprobado
+
+**La prueba que pide el plan**, `make gui-control` (`verif/gui/control.py`, 29
+comprobaciones), con el cliente en Python y sin Qt:
+
+| Grupo | Qué |
+| :--- | :--- |
+| C1 | a tiempo real y sin ventana de tiempo: **pausa**, y durante 1,2 s llegan cinco `T_ESTADO`, todos `PAUSADA` y **en el mismo instante y con los mismos deltas**; tres `T_PING`, tres `T_PONG`; una suscripción nueva no da muestras; y **0,000 s de CPU**. **Sigue**: `T_ESTADO CORRIENDO` y 500 ms simulados en 0,50 s de pared, sin correr para recuperar la pausa. **Para**: `T_FIN` con `M_PARA`, el `T_ESTADO TERMINADA` delante, y `mcu-sim` sale con 0 dando su resumen |
+| C2 | a demanda: en pausa en t = 0 y quieto medio segundo; pasos de 100, 250, 0, 50 + 50 y 150 ms que paran en **exactamente** 100, 350, 350, 450 y 600 ms; `T_SIGUE`, un aviso; `T_PARA` en pausa; y **las 59 muestras del LED hasta 600 ms, idénticas a las de una ejecución libre de un tirón** |
+| C3 | la ventana de `T_ARRANCA` manda sobre la de la línea de órdenes (30 ms y no 5000); sin ninguna no hay fin; y si la ventana se va, `mcu-sim` se para solo |
+| C4 | `--tiempo-real` en la línea de órdenes con ritmo libre en `T_ARRANCA`: va libre y lo dice; `T_PASO` a tiempo real y uno de 3 bytes, avisos |
+
+**`testgui`**, G14 contra el canal en memoria (126 → 136, y `76450000000 ps`).
+Como en pausa no corre ningún otro proceso —tampoco el del banco—, lo que la
+ventana hace durante la pausa lo hace **un guion** que el canal ejecuta en
+cada espera. Comprueba que en las esperas el tiempo y los deltas no se mueven
+y que el banco, que esperaba 100 µs, no despierta hasta el `T_SIGUE`; el
+`T_PONG` y el latido de pausa; los pasos exactos (250 µs, fuera de la
+rejilla), sumados y de cero; `T_SIGUE` a demanda; y la ventana que se va en
+pausa. T_PARA no se puede probar aquí: pararía el banco. **Seis mutaciones del
+control**, una a una, y las seis caen.
+
+**`test407` no cambia**, ni en picosegundos ni en recuento. Las otras tres
+suites tampoco; `gui-proto` 64 (también bajo Wine), `gui-saludo` 22,
+`gui-marcha` 24, `gui-ordenes` 23 e `interop` 47.
+
+**En esta ventana**, con `ctest`: `sesion` 51 (G6, el control y cuándo vale cada
+cosa), `ventana` 44 (G5, el selector de ritmo, Pausa / Sigue según el modelo,
+Paso, Parar) y `cruzada` 21 contra el `mcu-sim` de verdad: a demanda y sin
+ventana de tiempo, un paso de 100 ms que para en exactamente 100 ms y `T_PARA`
+con su `M_PARA`.
+
+### 14.4 Lo que cambió de las fases anteriores
+
+* `marcha.py` M4 y M5 y `ordenes.py` O4 pedían `--tiempo-real` en la línea de
+  órdenes y ritmo libre en `T_ARRANCA`: ahora el ritmo lo dice la ventana, y
+  piden `RIT_REAL`.
+* `testgui` G9 mandaba un `T_PAUSA` para ver que se ignoraba; ahora pararía el
+  enlace, y lo sustituye un tipo desconocido.
+* La ventana arranca a tiempo real, no libre.
+
+### 14.5 Lo que NO se ha hecho, que también es la fase 6
+
+Lanzar el modelo desde la ventana: fase 7. Y el ritmo no se cambia en marcha
+—el protocolo no tiene mensaje para eso—: se elige al arrancar.
