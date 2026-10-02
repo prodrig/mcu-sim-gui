@@ -15,6 +15,10 @@
 // —no existe, o es un `mcu-sim` anterior a `--argumentos`—, el diálogo lo dice
 // y deja la placa, el firmware y «a mano»: se puede lanzar igual.
 //
+// Arriba del todo dice de dónde salen los valores: el fichero de configuración
+// que se leyó o, si no había ninguno —y entonces el diálogo sale vacío—, en qué
+// sitios se buscó y dónde se guardará al lanzar.
+//
 // Cada campo lleva de `objectName` `arg:<nombre>` («arg:placa», «arg:--ms»...):
 // así lo encuentran las pruebas.
 // =============================================================================

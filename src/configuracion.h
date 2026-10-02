@@ -31,6 +31,10 @@ namespace mcusim {
 
 struct Configuracion {
     QString    ruta;              // de dónde se leyó, y adónde se guarda
+    bool       existia = false;   // si `ruta` existía al leerla
+    // Dónde se buscó antes de quedarse con `ruta`: para decirlo cuando no se
+    // encontró ninguna y el diálogo sale vacío.
+    QStringList buscadas;
     QString    ejecutable;        // relativa al fichero, o absoluta
     QString    directorio;        // ídem
     ValoresCli argumentos;
@@ -53,6 +57,8 @@ struct Configuracion {
     // Dónde buscarla si nadie dice otra: `config.json` en el directorio actual
     // si lo hay, y si no, en el de configuración del usuario.
     static QString ruta_por_omision();
+    // Esos dos sitios, en ese orden.
+    static QStringList rutas_candidatas();
 };
 
 } // namespace mcusim

@@ -65,6 +65,9 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "%s\n", qPrintable(error));
         return 1;
     }
+    // Sin --config se ha buscado en dos sitios: si no estaba en ninguno, el
+    // diálogo lo dice, con los dos
+    if (!args.isSet(config)) c.buscadas = mcusim::Configuracion::rutas_candidatas();
     if (args.isSet(puerto)) {
         bool ok = false;
         const uint p = args.value(puerto).toUInt(&ok);

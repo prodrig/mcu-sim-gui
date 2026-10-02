@@ -14,13 +14,16 @@
 //       relativas al fichero;
 //   G4  el diálogo construido con una lista: un campo por argumento según su
 //       forma, ninguno para lo que no se ofrece, las del mismo grupo se
-//       excluyen, y la línea que va a salir;
+//       excluyen, y la línea que va a salir; y arriba, de dónde salen los
+//       valores —o, si no había configuración, dónde se buscó y dónde se
+//       guardará—;
 //   G5  la ventana con el puerto cogido: escucha en otro sin decir nada, y una
 //       ruta de ejecutable mala se dice.
 // =============================================================================
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDir>
 #include <QFile>
 #include <QLabel>
 #include <QLineEdit>
@@ -248,6 +251,35 @@ int main(int argc, char** argv)
                   "y la configuracion sale con lo de los campos");
         comprueba(d.linea().contains("--serie=X=memoria") && d.linea().contains("--ms=2000"),
                   "y la linea, tambien");
+
+        // De donde salen los valores
+        auto origen = [&](const Configuracion& x) {
+            DialogoLanzamiento o(x, "127.0.0.1:1", &a);
+            auto* l = o.findChild<QLabel*>("origen");
+            return l ? l->text() : QString();
+        };
+        QTemporaryDir tmp;
+        Configuracion vacia;
+        QString err;
+        Configuracion::lee(tmp.filePath("aqui/config.json"), vacia, err);
+        vacia.buscadas = {tmp.filePath("aqui/config.json"), tmp.filePath("usuario/config.json")};
+        const QString t1 = origen(vacia);
+        comprueba(t1.contains("No hay configuracion") && t1.contains("sale vacio") &&
+                      t1.contains(QDir::toNativeSeparators(tmp.filePath("aqui/config.json"))) &&
+                      t1.contains(QDir::toNativeSeparators(tmp.filePath("usuario/config.json"))),
+                  "sin configuracion, el dialogo dice por que sale vacio, los dos sitios donde "
+                  "se busco y donde se guardara");
+        QFile f(tmp.filePath("leida.json"));
+        const bool escrito = f.open(QIODevice::WriteOnly) && f.write("{}") > 0;
+        f.close();
+        Configuracion leida;
+        Configuracion::lee(f.fileName(), leida, err);
+        const QString t2 = origen(leida);
+        comprueba(escrito && leida.existia && t2.contains("leida de") &&
+                      t2.contains(QDir::toNativeSeparators(f.fileName())),
+                  "con ella, de que fichero se leyo: \"" + t2.toStdString() + "\"");
+        comprueba(origen(Configuracion()).contains("Sin fichero"),
+                  "y sin fichero ninguno, que lo que se ponga no se guarda");
 
         Configuracion sin;
         sin.ejecutable = "/no/existe/mcu-sim";

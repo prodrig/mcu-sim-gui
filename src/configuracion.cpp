@@ -11,12 +11,19 @@
 
 namespace mcusim {
 
+QStringList Configuracion::rutas_candidatas()
+{
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    return {QDir::current().absoluteFilePath(QStringLiteral("config.json")),
+            QDir(dir.isEmpty() ? QDir::homePath() : dir).absoluteFilePath(QStringLiteral("config.json"))};
+}
+
 QString Configuracion::ruta_por_omision()
 {
-    const QString aqui = QDir::current().absoluteFilePath(QStringLiteral("config.json"));
-    if (QFileInfo::exists(aqui)) return aqui;
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-    return QDir(dir.isEmpty() ? QDir::homePath() : dir).absoluteFilePath(QStringLiteral("config.json"));
+    const QStringList c = rutas_candidatas();
+    for (const QString& r : c)
+        if (QFileInfo::exists(r)) return r;
+    return c.last();          // ninguna: se guardará en la del usuario
 }
 
 QString Configuracion::absoluta(const QString& r) const
@@ -31,8 +38,10 @@ bool Configuracion::lee(const QString& ruta, Configuracion& c, QString& error)
 {
     c = Configuracion();
     c.ruta = QFileInfo(ruta).absoluteFilePath();
+    c.buscadas = {c.ruta};
     QFile f(ruta);
     if (!f.exists()) return true;
+    c.existia = true;
     if (!f.open(QIODevice::ReadOnly)) {
         error = QStringLiteral("no se puede abrir %1: %2").arg(ruta, f.errorString());
         return false;

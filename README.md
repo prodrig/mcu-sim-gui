@@ -286,7 +286,9 @@ la ventana y el ritmo con el que arrancar.
 Nada de eso es obligatorio por fichero: **todo se puede poner también desde el
 diálogo de lanzamiento**, que la guarda al lanzar —respetando los comentarios
 que tuviera—. `mcu-sim-gui` la busca en el directorio actual y, si no está, en
-el de configuración del usuario; `--config FICHERO` dice otra. El puerto es una
+el de configuración del usuario; `--config FICHERO` dice otra. Si no
+encuentra ninguna, el diálogo sale vacío y lo dice arriba: en qué sitios ha
+buscado y dónde la guardará al lanzar. Si la encontró, de qué fichero la leyó. El puerto es una
 preferencia: si está cogido, la ventana escucha en otro y se lo pasa al hijo,
 sin decir nada.
 

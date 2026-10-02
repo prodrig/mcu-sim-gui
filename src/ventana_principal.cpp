@@ -299,7 +299,10 @@ void VentanaPrincipal::abre_dialogo()
     cfg_ = d.configuracion();
     args_ = d.argumentos();
     QString e;
-    if (!cfg_.ruta.isEmpty() && !cfg_.guarda(e)) statusBar()->showMessage(e);
+    if (!cfg_.ruta.isEmpty()) {
+        if (cfg_.guarda(e)) cfg_.existia = true;     // la proxima vez, «leida de»
+        else statusBar()->showMessage(e);
+    }
     lanza();
 }
 

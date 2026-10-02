@@ -61,6 +61,32 @@ DialogoLanzamiento::DialogoLanzamiento(const Configuracion& c, const QString& de
     resize(640, 560);
     auto* caja = new QVBoxLayout(this);
 
+    // De dónde sale lo que hay en los campos
+    auto* origen = new QLabel(this);
+    origen->setObjectName(QStringLiteral("origen"));
+    origen->setWordWrap(true);
+    origen->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    const QString ruta = QDir::toNativeSeparators(c.ruta);
+    if (c.ruta.isEmpty()) {
+        origen->setText(tr("Sin fichero de configuracion: lo que se ponga aqui no se guarda."));
+    } else if (c.existia) {
+        origen->setText(tr("Configuracion leida de <code>%1</code>. Al lanzar se guarda ahi.")
+                            .arg(ruta.toHtmlEscaped()));
+    } else {
+        QStringList donde;
+        for (const QString& b : c.buscadas)
+            donde << QStringLiteral("<code>%1</code>")
+                         .arg(QDir::toNativeSeparators(b).toHtmlEscaped());
+        if (donde.isEmpty()) donde << QStringLiteral("<code>%1</code>").arg(ruta.toHtmlEscaped());
+        origen->setText(
+            tr("<b>No hay configuracion</b>, y por eso esto sale vacio: no se ha encontrado %1. "
+               "Pon donde esta mcu-sim y el directorio desde el que se lanza -el de sus "
+               "placas/ y verif/-; al lanzar se guardara en <code>%2</code> y la proxima vez "
+               "saldra relleno.")
+                .arg(donde.join(tr(" ni ")), ruta.toHtmlEscaped()));
+    }
+    caja->addWidget(origen);
+
     auto* arriba = new QFormLayout;
     exe_ = new QLineEdit(c.ejecutable, this);
     exe_->setObjectName(QStringLiteral("arg:ejecutable"));
@@ -222,7 +248,10 @@ void DialogoLanzamiento::construye()
         else forma_->addRow(QStringLiteral("%1 (%2)").arg(etiqueta, o.unidad), w);
     }
 
-    if (args_.vacio() || args_.opciones.isEmpty())
+    if ((args_.vacio() || args_.opciones.isEmpty()) && exe_->text().trimmed().isEmpty())
+        estado_->setText(tr("Cuando se diga donde esta mcu-sim, se le pediran sus opciones "
+                            "(--argumentos) y saldran aqui."));
+    else if (args_.vacio() || args_.opciones.isEmpty())
         estado_->setText(tr("<b>No se pueden leer las opciones de mcu-sim</b>: %1. Se puede "
                             "lanzar igual con la placa, el firmware y lo que se escriba a mano.")
                              .arg(aviso_.toHtmlEscaped()));
