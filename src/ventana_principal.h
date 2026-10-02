@@ -39,20 +39,42 @@
 //   * a demanda, «Paso» avanza los milisegundos que diga su casilla, y se
 //     vuelve a habilitar cuando el modelo dice que está otra vez en pausa.
 //
-// Lo que acabará teniendo y aún no tiene: lanzar el modelo ella misma (fase 7).
-// Hoy el modelo se lanza a mano, desde una consola, con `--gui`.
+// Desde la fase 7, lanza el modelo ella misma:
+//
+//   * escucha PRIMERO, en el puerto de la configuración; si está cogido, en
+//     otro que le dé el sistema, sin decir nada —es una preferencia, no una
+//     exigencia—, y ese es el que le pasa al hijo en `--gui`;
+//   * «Simulación ▸ Lanzar mcu-sim…» abre el diálogo de lanzamiento
+//     (`dialogo_lanzamiento.h`), construido con lo que dice `mcu-sim
+//     --argumentos`; al aceptarlo guarda la configuración y lanza
+//     (`lanzador.h`). «Lanzar otra vez» repite lo último sin diálogo;
+//   * abajo, junto a los avisos, una pestaña con la salida de `mcu-sim`, la de
+//     error en rojo: el arranque, el resumen de los LEDs, un `muere()`;
+//   * si `mcu-sim` termina, se estrella o lo matan desde fuera, lo dice; si se
+//     cierra la ventana con él corriendo, primero le pide parar (T_PARA), y si
+//     no termina en un par de segundos, lo mata. Nunca queda un hijo huérfano
+//     simulando para nadie.
+//
+// Lanzarlo desde una consola con `--gui` sigue valiendo: la ventana no
+// distingue quién lanzó al modelo que se le conecta.
 // =============================================================================
 #ifndef MCU_SIM_GUI_VENTANA_PRINCIPAL_H
 #define MCU_SIM_GUI_VENTANA_PRINCIPAL_H
 
 #include <QMainWindow>
 
+#include "argumentos.h"
+#include "configuracion.h"
+#include "lanzador.h"
 #include "panel.h"
 #include "sesion.h"
 
 class QComboBox;
 class QLabel;
+class QAction;
 class QListWidget;
+class QPlainTextEdit;
+class QTabWidget;
 class QSpinBox;
 class QPushButton;
 class QScrollArea;
@@ -64,13 +86,27 @@ class VentanaPrincipal : public QMainWindow {
 public:
     explicit VentanaPrincipal(quint16 puerto = proto::PUERTO_OMISION,
                               QWidget* padre = nullptr);
+    explicit VentanaPrincipal(const Configuracion& c, QWidget* padre = nullptr);
 
-    Sesion& sesion() { return ses_; }
+    Sesion&   sesion() { return ses_; }
+    Lanzador& lanzador() { return lanz_; }
+    const Configuracion& configuracion() const { return cfg_; }
+    // Lo que va detrás de `--gui` al lanzar: el host y el puerto en el que de
+    // verdad se escucha.
+    QString destino_gui() const;
 
-    // Cada cuánto tiempo SIMULADO se pide una instantánea: 60 por segundo
-    // simulado, que a tiempo real -el ritmo por omisión- son 60 por segundo de
-    // pared. Con ritmo libre son muchas más, y la cola las tira si no da
-    // abasto: se ve que va por detrás.
+    // Lanza `mcu-sim` con la configuración que tenga, sin diálogo. Si no
+    // tiene aún su lista de opciones, se la pide. false si no se pudo, y la
+    // barra de estado y la consola dicen por qué.
+    bool lanza();
+    // Abre el diálogo; si se acepta, guarda la configuración y lanza.
+    void abre_dialogo();
+
+    // Cada cuánto tiempo SIMULADO se pide una instantánea por omisión: 60 por
+    // segundo simulado, que a tiempo real -el ritmo por omisión- son 60 por
+    // segundo de pared. Con ritmo libre son muchas más, y la cola las tira si no
+    // da abasto: se ve que va por detrás. La configuración lo puede cambiar
+    // (`vista.periodo_ms`).
     static constexpr quint64 PERIODO_NS = 16666667;
 
 private:
@@ -84,9 +120,23 @@ private:
                  quint32 resultado);
     void apaga_mandos() { if (panel_) panel_->activa_mandos(false); }
     void pon_controles();
+    void construye();
+    void escucha();
+    void consola(const QString& texto, const QString& color = QString());
+    void hijo_termino(int codigo, bool estrellado);
+    void closeEvent(QCloseEvent* e) override;
 
+    Configuracion cfg_;
+    ArgumentosCli args_;
     Sesion        ses_;
-    quint16       puerto_;
+    Lanzador      lanz_;
+    quint16       puerto_ = 0;
+    bool          conecto_hijo_ = false;
+    QTabWidget*   abajo_     = nullptr;
+    QPlainTextEdit* consola_ = nullptr;
+    QAction*      act_lanzar_ = nullptr;
+    QAction*      act_otra_   = nullptr;
+    QAction*      act_detener_ = nullptr;
     QLabel*       resumen_   = nullptr;
     QScrollArea*  centro_    = nullptr;
     QPushButton*  arrancar_  = nullptr;

@@ -65,8 +65,11 @@ qt_standard_project_setup()
 # Tres capas, de abajo arriba, y solo la ultima necesita pantalla:
 #
 #   transporte   mover bytes: el marco y el socket (fase 2)
-#   sesion       el significado: el saludo y los dos XML de la placa (fase 3)
-#   pantalla     construir los widgets a partir de esos XML (fase 3)
+#   sesion       el significado: el saludo y los dos XML de la placa (fase 3);
+#                y desde la fase 7, lanzar mcu-sim, su lista de opciones y la
+#                configuracion
+#   pantalla     construir los widgets a partir de esos XML (fase 3), y el
+#                dialogo de lanzamiento (fase 7)
 #
 # Las pruebas enlazan la capa que prueban, y las dos primeras corren sin
 # pantalla ninguna.
@@ -84,6 +87,12 @@ qt_add_library(sesion STATIC
     src/placa.cpp
     src/sesion.h
     src/sesion.cpp
+    src/argumentos.h
+    src/argumentos.cpp
+    src/configuracion.h
+    src/configuracion.cpp
+    src/lanzador.h
+    src/lanzador.cpp
 )
 target_link_libraries(sesion PUBLIC transporte)
 
@@ -92,6 +101,8 @@ qt_add_library(pantalla STATIC
     src/panel.cpp
     src/ventana_principal.h
     src/ventana_principal.cpp
+    src/dialogo_lanzamiento.h
+    src/dialogo_lanzamiento.cpp
 )
 target_link_libraries(pantalla PUBLIC sesion Qt6::Widgets)
 
@@ -125,6 +136,10 @@ if(BUILD_TESTING)
     prueba(prueba_sesion   tests/prueba_sesion.cpp   sesion)
     prueba(prueba_ventana  tests/prueba_ventana.cpp  pantalla)
     prueba(prueba_cruzada  tests/prueba_cruzada.cpp  sesion)
+    prueba(prueba_argumentos  tests/prueba_argumentos.cpp  pantalla)
+    prueba(prueba_lanzamiento tests/prueba_lanzamiento.cpp pantalla)
+    # La plantilla de configuracion se lee de las fuentes
+    target_compile_definitions(prueba_argumentos PRIVATE FUENTES="${CMAKE_SOURCE_DIR}")
 
     add_test(NAME conexion COMMAND prueba_conexion)
     add_test(NAME sesion   COMMAND prueba_sesion)
@@ -132,4 +147,10 @@ if(BUILD_TESTING)
     set_tests_properties(ventana PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_test(NAME cruzada  COMMAND prueba_cruzada)
     set_tests_properties(cruzada PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME argumentos COMMAND prueba_argumentos)
+    set_tests_properties(argumentos PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # Como `cruzada`: con MCU_SIM y MCU_SIM_SRC, contra el mcu-sim de verdad
+    add_test(NAME lanzamiento COMMAND prueba_lanzamiento)
+    set_tests_properties(lanzamiento PROPERTIES SKIP_RETURN_CODE 77
+                         ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()

@@ -4,7 +4,7 @@ La **contraparte de visualización gráfica de
 [`mcu-sim`](../mcu-sim)**, el modelo SystemC de microcontroladores STM32.
 `mcu-sim` simula; esto lo enseña y deja tocarlo.
 
-> **Estado: fase 6.** La ventana escucha, `mcu-sim --gui` se conecta, se
+> **Estado: fase 7.** La ventana escucha, `mcu-sim --gui` se conecta, se
 > saludan, y la ventana **se construye sola** a partir de la placa y el
 > catálogo que le manda el modelo: un recuadro por pieza, con sus patillas, un
 > indicador por cada cosa que la pieza sugiere mirar y un control por mando.
@@ -16,16 +16,22 @@ La **contraparte de visualización gráfica de
 > en t = 0. Cada orden vuelve con su eco, y las que el modelo no puede aplicar
 > lo dicen en la lista de avisos. **Y la ventana lleva la simulación**: el
 > ritmo se elige antes de arrancar —tiempo real, a la mitad, libre o a
-> demanda—, y en marcha hay Pausa / Sigue, Paso a demanda y Parar. Lo que
-> falta: que la ventana lance el modelo ella misma (fase 7).
+> demanda—, y en marcha hay Pausa / Sigue, Paso a demanda y Parar. **Y la
+> ventana lanza el modelo ella misma**: *Simulación ▸ Lanzar mcu-sim* (Ctrl+L)
+> abre un diálogo construido con lo que dice `mcu-sim --argumentos`, y abajo,
+> en la pestaña *mcu-sim*, sale todo lo que el simulador escribe. Lo que falta:
+> grabar y reproducir sesiones (fase 8).
 >
-> Para verlo, con las dos cosas compiladas:
+> Para verlo, con las dos cosas compiladas y una al lado de la otra:
 >
 > ```bash
-> ./build/mcu-sim-gui                                        # escucha en el 3344
-> # y en otra consola, desde mcu-sim/src:
-> ./build/mcu-sim placas/discovery_min.xml verif/fw/blinky/blinky.bin --gui     # sin fin: se para desde la ventana
+> cp config.ejemplo.json config.json      # apunta a ../mcu-sim y al blinky
+> ./build/mcu-sim-gui                     # Ctrl+L, Lanzar, y luego Arrancar
+> ./build/mcu-sim-gui --lanza             # o lanzarlo nada mas abrir
 > ```
+>
+> Lanzarlo a mano desde otra consola sigue valiendo: `mcu-sim placa.xml
+> firmware.bin --gui`.
 
 ---
 
@@ -272,12 +278,17 @@ pantalla de verdad: eso sigue siendo a mano.
 
 `config.ejemplo.json` es la plantilla: se copia a `config.json` —que no se
 versiona, porque las rutas son de cada máquina— y se ajusta. Lleva dónde está
-`mcu-sim`, qué placa y qué firmware cargar, y **todos** los demás argumentos del
-simulador.
+`mcu-sim` y desde qué directorio lanzarlo, sus argumentos **por nombre**
+(`placa`, `firmware`, `--ms`, `--ondas`...: los que diga `mcu-sim
+--argumentos`, sin lista escrita aquí), lo que se escriba a mano, dónde escucha
+la ventana y el ritmo con el que arrancar.
 
 Nada de eso es obligatorio por fichero: **todo se puede poner también desde el
-diálogo de lanzamiento de la ventana**. El fichero está para no tener que
-hacerlo cada vez.
+diálogo de lanzamiento**, que la guarda al lanzar —respetando los comentarios
+que tuviera—. `mcu-sim-gui` la busca en el directorio actual y, si no está, en
+el de configuración del usuario; `--config FICHERO` dice otra. El puerto es una
+preferencia: si está cogido, la ventana escucha en otro y se lo pasa al hijo,
+sin decir nada.
 
 ---
 

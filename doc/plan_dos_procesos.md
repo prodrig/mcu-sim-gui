@@ -1537,3 +1537,94 @@ con su `M_PARA`.
 
 Lanzar el modelo desde la ventana: fase 7. Y el ritmo no se cambia en marcha
 —el protocolo no tiene mensaje para eso—: se elige al arrancar.
+
+---
+
+## 15. Fase 7, ejecutada
+
+### 15.1 Qué se ha escrito
+
+**En `mcu-sim`:**
+
+* **`--argumentos`** (`top/sim_main.cpp`): vuelca en XML los dos posicionales y
+  las quince opciones —forma, tipo, omisión, unidad, grupo, si es repetible,
+  si con `--gui` tiene sentido, y una línea de ayuda—, con los 29 MCUs del
+  catálogo como valores de `--mcu`. Es lo que el plan pedía para no tener la
+  lista de opciones en dos sitios.
+* Pero **dentro de `mcu-sim` sigue estando en dos**: la tabla que se vuelca y
+  el bucle que lee `argv`. Reescribir el bucle a partir de la tabla era más
+  riesgo que beneficio; lo que hay es un vigilante, **`make gui-argumentos`**
+  (`verif/gui/argumentos.py`): toda opción que cite `--help` está en el volcado
+  y viceversa, y cada una, con su omisión o su ejemplo, la acepta `mcu-sim` de
+  verdad.
+* Y al escribirlo apareció **I-26**, que llevaba en `doc/todo.md` desde antes
+  de este proyecto: una opción desconocida se tomaba en silencio por el nombre
+  del firmware. Con un diálogo donde se escriben argumentos a mano ya no era
+  barato ignorarlo: ahora es «opcion desconocida» y código 1.
+* `--ms` **no declara omisión a propósito**: sin él son 100 ms, pero con
+  `--gui` es sin fin, y un diálogo que enseñase «100» mentiría justo en su caso.
+
+**En `mcu-sim-gui`**, cuatro piezas nuevas:
+
+* **`argumentos.h`** (capa `sesion`, sin pantalla): leer el volcado —saltando
+  la cabecera de copyright de SystemC, que sale antes de que empiece el
+  programa— y escribir la línea de órdenes a partir de los valores. **Una
+  opción vacía no se escribe**, que no es lo mismo que escribir su omisión.
+* **`configuracion.h`**: el JSON, con `QJsonDocument`. Los argumentos se
+  guardan **por nombre**, sin lista: lo que alguien puso. Rutas relativas al
+  fichero; al guardar, los comentarios de la plantilla sobreviven.
+* **`lanzador.h`**: `mcu-sim` como `QProcess`, su salida línea a línea, cuándo
+  termina y si se estrelló. Comprueba que el ejecutable exista —con o sin
+  `.exe`— antes de intentarlo. Le quita al hijo la cabecera de SystemC
+  (`SYSTEMC_DISABLE_COPYRIGHT_MESSAGE`), que sale por la salida de error y en
+  la consola parecía un fallo en cada arranque.
+* **`dialogo_lanzamiento.h`** (capa `pantalla`): se construye con la lista —una
+  casilla por bandera, un desplegable por elección, un campo con la omisión de
+  muestra para lo demás, las del mismo grupo se excluyen—, más «a mano» y la
+  línea que va a salir. Si el ejecutable no contesta a `--argumentos`, lo dice
+  y deja placa, firmware y «a mano».
+
+Y en la ventana: escucha **primero**, en el puerto de la configuración o, si
+está cogido, en otro, sin decir nada; *Simulación ▸ Lanzar mcu-sim* (Ctrl+L),
+*Lanzar otra vez* (Ctrl+R) y *Detener*; una pestaña con la salida de
+`mcu-sim`, la de error en rojo; y **cerrar con el modelo corriendo** le pide
+parar —su resumen, su `T_FIN`— y, si en dos segundos no ha terminado, lo mata.
+`main.cpp` gana `--config` y `--lanza`.
+
+### 15.2 Cómo se ha comprobado
+
+El plan dice que aquí **hace falta una persona**. Sigue haciendo falta: falta
+abrir la ventana en una pantalla de verdad y verlo. Lo que se ha hecho es
+automatizar todo lo que esa persona miraría, y la lista de fallos que el plan
+manda probar a mano, con la `VentanaPrincipal` entera en la plataforma
+`offscreen` contra el `mcu-sim` de verdad (`prueba_lanzamiento`, 18):
+
+| Grupo | Qué |
+| :--- | :--- |
+| L1 | `mcu-sim --argumentos` se lee; el diálogo, abierto sin lista, se la pide y sale de ella |
+| L2 | `lanza()` con la configuración: el hijo se conecta solo, la consola enseña la orden con su `--gui` y lo que dice `mcu-sim`; **a tiempo real, el LED cambia cada 100 ms simulados y cada 100 ms de pared** (medido: 100 100 100 100), con los dos relojes en pantalla. Con `CAPTURAS=dir`, deja dos capturas de la ventana —LED encendido y apagado— y una del diálogo |
+| L3 | **cerrar la ventana con el modelo corriendo**: `T_PARA`, y `mcu-sim` termina con 0 dando su resumen, que llega a la consola |
+| L4 | **matar `mcu-sim` desde fuera** (`kill -9`; en Windows, `taskkill /F`, que aquí no se ha podido ejecutar): la ventana lo ve, lo dice, apaga el control, y se puede volver a lanzar |
+| L5 | **un puerto ocupado a propósito**: escucha en otro, y el hijo se conecta a ese |
+| L6 | una placa que no existe: el hijo termina con 2 sin conectarse, y la ventana lo dice con su salida de error |
+
+Y `prueba_argumentos` (34), sin `mcu-sim`: leer el volcado y lo que no se
+puede leer, la línea de órdenes, la configuración —la plantilla versionada se
+lee, se guarda y se relee igual—, el diálogo construido con una lista, el
+puerto cogido y **una ruta de ejecutable mala**.
+
+En `mcu-sim`: `gui-argumentos` 11; las cinco suites y su invariante sin
+cambios —`test407` 2118 y `2240553274213 ps`—; `gui-saludo` 22, `gui-marcha`
+24, `gui-ordenes` 23, `gui-control` 29, `gui-proto` 64 e `interop` 47.
+
+### 15.3 Lo que queda para una persona
+
+Abrir la ventana en una pantalla de verdad, `Ctrl+L`, `Lanzar`, `Arrancar`, y
+**ver** el LED verde parpadear a su ritmo con los dos relojes avanzando. Y en
+Windows, además: que el diálogo encuentra `mcu-sim.exe` sin escribir el
+`.exe`, y que cerrar la ventana con el modelo corriendo no deja un `mcu-sim`
+en el administrador de tareas.
+
+### 15.4 Lo que NO se ha hecho, que también es la fase 7
+
+Nada bonito: esta fase es que funcione. La grabación de sesiones es la fase 8.

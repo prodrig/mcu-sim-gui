@@ -13,6 +13,9 @@ Sesion::Sesion(QObject* padre) : QObject(padre)
     connect(&cx_, &Conexion::conectado, this, [this] {
         cambia(Estado::Saludando);
         fase_ = proto::F_ESPERANDO;
+        ritmo_ = proto::RIT_REAL;
+        perdidas_ = 0;
+        ecos_ = 0;
         version_ = 0;
         hola_.clear();
         placa_xml_.clear();

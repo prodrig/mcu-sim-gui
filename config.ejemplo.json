@@ -1,23 +1,34 @@
 {
   "_comentario": [
     "Configuracion de ejemplo de mcu-sim-gui. Se copia a config.json -que no se",
-    "versiona, porque las rutas son de cada maquina- y se ajusta. Todo lo que hay",
-    "aqui se puede cambiar tambien desde el dialogo de lanzamiento de la ventana:",
-    "este fichero es para no tener que hacerlo cada vez, no la unica via."
+    "versiona, porque las rutas son de cada maquina- y se ajusta, o no se toca y",
+    "se rellena desde el dialogo de lanzamiento (Simulacion > Lanzar mcu-sim), que",
+    "la guarda al lanzar. Este fichero es para no tener que hacerlo cada vez, no la",
+    "unica via. mcu-sim-gui la busca en el directorio actual, y si no esta, en el de",
+    "configuracion del usuario; --config FICHERO dice otro."
   ],
 
   "mcu_sim": {
-    "_comentario": "Donde esta el ejecutable del simulador y con que se lanza.",
+    "_comentario": [
+      "Donde esta el simulador, desde donde se lanza, y con que. Las dos rutas de",
+      "arriba son relativas a ESTE fichero; la placa y el firmware, al directorio",
+      "de trabajo, que es como las lee mcu-sim."
+    ],
     "ejecutable": "../mcu-sim/src/build/mcu-sim",
     "directorio_de_trabajo": "../mcu-sim/src",
-    "placa": "placas/discovery_min.xml",
-    "firmware": "verif/fw/blinky/blinky.bin",
-    "ms": 0,
-    "mcu": "",
-    "ondas": false,
-    "tiempo_real": 1.0,
-    "gdb": "ninguno",
-    "puerto_gdb": 3333
+    "argumentos": {
+      "_comentario": [
+        "Por nombre, como en el dialogo: 'placa' y 'firmware' son los posicionales;",
+        "el resto, opciones de mcu-sim tal y como las vuelca 'mcu-sim --argumentos'.",
+        "Una bandera puesta vale true; una opcion que no esta, no se escribe. Ojo con",
+        "--ms: con la ventana, si no esta, la simulacion no tiene fin y se para desde",
+        "ella. Las repetibles (--serie) llevan sus valores separados por ';'."
+      ],
+      "placa": "placas/discovery_min.xml",
+      "firmware": "verif/fw/blinky/blinky.bin",
+      "--ondas": false
+    },
+    "a_mano": ""
   },
 
   "enlace": {
@@ -31,9 +42,11 @@
   },
 
   "vista": {
-    "_comentario": "periodo_ms es el de muestreo en tiempo SIMULADO.",
+    "_comentario": [
+      "ritmo: real, mitad, libre o demanda; es el que sale elegido al arrancar.",
+      "periodo_ms es el de las instantaneas, en tiempo SIMULADO."
+    ],
     "ritmo": "real",
-    "periodo_ms": 16.7,
-    "solo_interesantes": true
+    "periodo_ms": 16.6667
   }
 }

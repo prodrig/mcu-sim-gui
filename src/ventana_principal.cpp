@@ -1,9 +1,16 @@
 #include "ventana_principal.h"
 
+#include <QAction>
+#include <QCloseEvent>
 #include <QComboBox>
+#include <QCoreApplication>
+#include <QElapsedTimer>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
+#include <QMenuBar>
+#include <QPlainTextEdit>
+#include <QTabWidget>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
@@ -11,12 +18,40 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include "dialogo_lanzamiento.h"
 #include "panel.h"
 
 namespace mcusim {
 
+namespace {
+Configuracion con_puerto(quint16 p)
+{
+    Configuracion c;
+    c.puerto = p;
+    return c;
+}
+int indice_de_ritmo(const QString& r)
+{
+    if (r == QLatin1String("mitad"))   return 1;
+    if (r == QLatin1String("libre"))   return 2;
+    if (r == QLatin1String("demanda")) return 3;
+    return 0;
+}
+const char* const RITMOS[] = {"real", "mitad", "libre", "demanda"};
+} // namespace
+
 VentanaPrincipal::VentanaPrincipal(quint16 puerto, QWidget* padre)
-    : QMainWindow(padre), puerto_(puerto)
+    : VentanaPrincipal(con_puerto(puerto), padre)
+{
+}
+
+VentanaPrincipal::VentanaPrincipal(const Configuracion& c, QWidget* padre)
+    : QMainWindow(padre), cfg_(c)
+{
+    construye();
+}
+
+void VentanaPrincipal::construye()
 {
     setWindowTitle(tr("mcu-sim-gui"));
     resize(1000, 700);
@@ -68,14 +103,58 @@ VentanaPrincipal::VentanaPrincipal(quint16 puerto, QWidget* padre)
     centro_->setWidgetResizable(true);
     caja->addWidget(centro_, 1);
 
-    avisos_ = new QListWidget(cuerpo);
+    // Abajo, dos pestañas: los avisos que llegan por el protocolo, y lo que
+    // mcu-sim dice por su salida estándar y de error (fase 7)
+    abajo_ = new QTabWidget(cuerpo);
+    abajo_->setObjectName(QStringLiteral("abajo"));
+    abajo_->setMaximumHeight(180);
+    avisos_ = new QListWidget(abajo_);
     avisos_->setObjectName(QStringLiteral("avisos"));
-    avisos_->setMaximumHeight(120);
-    caja->addWidget(avisos_);
+    consola_ = new QPlainTextEdit(abajo_);
+    consola_->setObjectName(QStringLiteral("consola"));
+    consola_->setReadOnly(true);
+    consola_->setMaximumBlockCount(5000);
+    consola_->setFont(QFont(QStringLiteral("monospace")));
+    abajo_->addTab(avisos_, tr("Avisos"));
+    abajo_->addTab(consola_, tr("mcu-sim"));
+    caja->addWidget(abajo_);
     setCentralWidget(cuerpo);
+
+    ritmo_->setCurrentIndex(indice_de_ritmo(cfg_.ritmo));
+
+    // --- El menú: lanzar, otra vez, detener ------------------------------
+    QMenu* m = menuBar()->addMenu(tr("&Simulacion"));
+    act_lanzar_ = m->addAction(tr("&Lanzar mcu-sim..."), this, &VentanaPrincipal::abre_dialogo);
+    act_lanzar_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
+    act_otra_ = m->addAction(tr("Lanzar &otra vez"), this, [this] { lanza(); });
+    act_otra_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+    act_detener_ = m->addAction(tr("&Detener mcu-sim"), this, [this] {
+        consola(tr("— se pide a mcu-sim que termine —"), QStringLiteral("gray"));
+        lanz_.detiene();
+    });
+    m->addSeparator();
+    m->addAction(tr("&Salir"), this, &QWidget::close)->setShortcut(QKeySequence::Quit);
+
+    connect(&lanz_, &Lanzador::linea, this, [this](const QString& t, bool err) {
+        consola(t, err ? QStringLiteral("#c0392b") : QString());
+    });
+    connect(&lanz_, &Lanzador::fallo, this, [this](const QString& por) {
+        consola(por, QStringLiteral("#c0392b"));
+        statusBar()->showMessage(por);
+        abajo_->setCurrentWidget(consola_);
+        pon_controles();
+    });
+    connect(&lanz_, &Lanzador::termino, this, &VentanaPrincipal::hijo_termino);
 
     connect(arrancar_, &QPushButton::clicked, this, [this] {
         const QVariantList r = ritmo_->currentData().toList();
+        // El ritmo elegido se recuerda para la proxima vez
+        const QString elegido = QString::fromLatin1(RITMOS[qBound(0, ritmo_->currentIndex(), 3)]);
+        if (elegido != cfg_.ritmo && !cfg_.ruta.isEmpty()) {
+            cfg_.ritmo = elegido;
+            QString e;
+            cfg_.guarda(e);
+        }
         if (ses_.arranca(r.value(0).toUInt(), r.value(1).toFloat())) {
             statusBar()->showMessage(ses_.ritmo() == proto::RIT_DEMANDA
                                          ? tr("a demanda: en pausa hasta que pulses Paso")
@@ -101,13 +180,14 @@ VentanaPrincipal::VentanaPrincipal(quint16 puerto, QWidget* padre)
     connect(&ses_, &Sesion::conectado, this, [this] {
         avisos_->clear();
         relojes_->clear();
+        conecto_hijo_ = lanz_.corriendo();
         statusBar()->showMessage(tr("mcu-sim conectado; saludando"));
     });
     connect(&ses_, &Sesion::placa_lista, this, &VentanaPrincipal::pon_placa);
     connect(&ses_, &Sesion::listo, this, [this] {
         // Antes de arrancar: asi la secuencia se repite al picosegundo
         if (panel_ && !panel_->pintados().isEmpty())
-            ses_.suscribe(PERIODO_NS, panel_->pintados());
+            ses_.suscribe(quint64(cfg_.periodo_ms * 1e6 + 0.5), panel_->pintados());
         pon_controles();
         // Lo que se toque desde ya se aplica en t = 0 (doc/protocolo.md §5)
         if (panel_) panel_->activa_mandos(true);
@@ -133,18 +213,140 @@ VentanaPrincipal::VentanaPrincipal(quint16 puerto, QWidget* padre)
         statusBar()->showMessage(t);
     });
 
+    escucha();
     espera_modelo();
-    if (!ses_.escucha(QHostAddress::LocalHost, puerto_))
-        resumen_->setText(tr("<b>No se puede escuchar en el puerto %1</b>: %2")
-                              .arg(puerto_).arg(ses_.error()));
+}
+
+// Escucha PRIMERO, que es lo que quita la carrera de arranque: cuando el hijo
+// intente conectarse, esto lleva puesto desde antes de que existiera. Si el
+// puerto de la configuración está cogido, cualquier otro: el hijo recibe en
+// `--gui` el que haya, y nadie tiene que enterarse.
+void VentanaPrincipal::escucha()
+{
+    QHostAddress dir(QHostAddress::LocalHost);
+    if (!cfg_.host.isEmpty() && cfg_.host != QLatin1String("localhost")) {
+        QHostAddress h;
+        if (h.setAddress(cfg_.host)) dir = h;
+    }
+    bool ok = ses_.escucha(dir, cfg_.puerto);
+    if (!ok && cfg_.puerto != 0) ok = ses_.escucha(dir, 0);
+    puerto_ = ok ? ses_.puerto() : 0;
+}
+
+QString VentanaPrincipal::destino_gui() const
+{
+    QString h = cfg_.host;
+    if (h.isEmpty() || h == QLatin1String("localhost") || h == QLatin1String("0.0.0.0") ||
+        h == QLatin1String("::"))
+        h = QStringLiteral("127.0.0.1");
+    if (h.contains(QLatin1Char(':'))) h = QLatin1Char('[') + h + QLatin1Char(']');
+    return QStringLiteral("%1:%2").arg(h).arg(puerto_);
+}
+
+void VentanaPrincipal::consola(const QString& texto, const QString& color)
+{
+    if (color.isEmpty()) consola_->appendPlainText(texto);
+    else
+        consola_->appendHtml(QStringLiteral("<span style=\"color:%1\">%2</span>")
+                                 .arg(color, texto.toHtmlEscaped()));
+}
+
+bool VentanaPrincipal::lanza()
+{
+    if (lanz_.corriendo()) {
+        statusBar()->showMessage(tr("ya hay un mcu-sim lanzado desde aqui: detenlo antes"));
+        return false;
+    }
+    using E = Sesion::Estado;
+    if (ses_.estado() != E::Escuchando && ses_.estado() != E::Terminada) {
+        statusBar()->showMessage(tr("ya hay un mcu-sim conectado"));
+        return false;
+    }
+    if (puerto_ == 0) {
+        statusBar()->showMessage(tr("no se puede escuchar en ningun puerto: %1").arg(ses_.error()));
+        return false;
+    }
+    const QString exe = cfg_.ejecutable_absoluto();
+    const QString dir = cfg_.directorio_absoluto();
+    if (args_.vacio()) {
+        QString e;
+        const QByteArray s = Lanzador::argumentos_de(exe, dir, e);
+        if (!s.isEmpty() && !lee_argumentos(s, args_, e)) args_ = ArgumentosCli();
+        if (args_.vacio() && !e.isEmpty())
+            consola(tr("sin lista de opciones (%1): se lanza con la placa, el firmware y lo "
+                       "escrito a mano").arg(e), QStringLiteral("gray"));
+    }
+    QString error;
+    QStringList a = linea_de_ordenes(args_, cfg_.argumentos, cfg_.a_mano, &error);
+    if (!error.isEmpty()) {
+        statusBar()->showMessage(tr("no se puede lanzar: %1").arg(error));
+        return false;
+    }
+    a << QStringLiteral("--gui") << destino_gui();
+    conecto_hijo_ = false;
+    if (!lanz_.lanza(exe, dir, a)) return false;
+    consola(QStringLiteral("$ ") + lanz_.orden(), QStringLiteral("gray"));
+    abajo_->setCurrentWidget(consola_);
+    statusBar()->showMessage(tr("mcu-sim lanzado; esperando a que se conecte"));
+    pon_controles();
+    return true;
+}
+
+void VentanaPrincipal::abre_dialogo()
+{
+    DialogoLanzamiento d(cfg_, destino_gui(), args_.vacio() ? nullptr : &args_, this);
+    if (d.exec() != QDialog::Accepted) return;
+    cfg_ = d.configuracion();
+    args_ = d.argumentos();
+    QString e;
+    if (!cfg_.ruta.isEmpty() && !cfg_.guarda(e)) statusBar()->showMessage(e);
+    lanza();
+}
+
+void VentanaPrincipal::hijo_termino(int codigo, bool estrellado)
+{
+    const QString t = estrellado
+        ? tr("— mcu-sim se ha estrellado, o lo han matado —")
+        : tr("— mcu-sim ha terminado con codigo %1 —").arg(codigo);
+    consola(t, estrellado || codigo != 0 ? QStringLiteral("#c0392b") : QStringLiteral("gray"));
+    if (estrellado || codigo != 0) {
+        statusBar()->showMessage(estrellado ? tr("mcu-sim se ha estrellado, o lo han matado")
+                                            : tr("mcu-sim ha terminado con codigo %1").arg(codigo));
+        abajo_->setCurrentWidget(consola_);
+    }
+    if (!conecto_hijo_)
+        resumen_->setText(tr("<b>mcu-sim ha terminado sin llegar a conectarse.</b> Lo que dijo "
+                             "esta abajo, en la pestana <i>mcu-sim</i>."));
+    pon_controles();
+}
+
+// Cerrar con el modelo corriendo: primero se le pide parar, que es el final
+// ordenado -su resumen, su T_FIN-; si en dos segundos no ha terminado, se le
+// mata. Un hijo no sobrevive a su ventana.
+void VentanaPrincipal::closeEvent(QCloseEvent* e)
+{
+    if (lanz_.corriendo()) {
+        if (!ses_.para()) lanz_.detiene();
+        QElapsedTimer t;
+        t.start();
+        while (lanz_.corriendo() && t.elapsed() < 2000)
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        if (lanz_.corriendo()) lanz_.detiene(1000);
+    }
+    e->accept();
 }
 
 void VentanaPrincipal::espera_modelo()
 {
     pon_controles();
-    resumen_->setText(
-        tr("<b>Esperando a mcu-sim</b> en localhost:%1. Lanzalo desde una consola "
-           "con <code>mcu-sim placa.xml firmware.bin --gui</code>.").arg(puerto_));
+    if (puerto_ == 0)
+        resumen_->setText(tr("<b>No se puede escuchar en ningun puerto</b>: %1")
+                              .arg(ses_.error().toHtmlEscaped()));
+    else
+        resumen_->setText(
+            tr("<b>Esperando a mcu-sim</b> en %1. Lanzalo con <i>Simulacion &gt; Lanzar "
+               "mcu-sim</i> (Ctrl+L), o desde una consola con <code>mcu-sim placa.xml "
+               "firmware.bin --gui %1</code>.").arg(destino_gui()));
     auto* vacio = new QLabel(tr("Aqui aparecera la placa: una pieza por recuadro, con lo "
                                 "que deja ver y lo que se le puede hacer."), centro_);
     vacio->setAlignment(Qt::AlignCenter);
@@ -242,6 +444,13 @@ void VentanaPrincipal::pon_controles()
     pausa_->setText(corre && ses_.pausada() ? tr("Sigue") : tr("Pausa"));
     paso_->setEnabled(corre && demanda && ses_.pausada());
     paso_ms_->setEnabled(corre && demanda && ses_.pausada());
+    if (act_lanzar_) {
+        const bool libre = !lanz_.corriendo() &&
+                           (e == E::Escuchando || e == E::Terminada) && puerto_ != 0;
+        act_lanzar_->setEnabled(libre);
+        act_otra_->setEnabled(libre && !cfg_.ejecutable.isEmpty());
+        act_detener_->setEnabled(lanz_.corriendo());
+    }
 }
 
 void VentanaPrincipal::termina(quint32 motivo, qint32 codigo, quint64 t_sim_ns)
