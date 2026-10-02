@@ -185,19 +185,17 @@ int main(int argc, char** argv)
                       d.ejecutable == c.ejecutable && d.ritmo == c.ritmo,
                   "y se vuelve a leer igual");
         QFile f(ruta);
-        f.open(QIODevice::ReadOnly);
-        comprueba(f.readAll().contains("_comentario"),
+        comprueba(f.open(QIODevice::ReadOnly) && f.readAll().contains("_comentario"),
                   "los comentarios de la plantilla sobreviven a guardar");
         Configuracion n;
         comprueba(Configuracion::lee(tmp.filePath("no-existe.json"), n, e) && n.puerto == 3344 &&
                       n.ruta.endsWith("no-existe.json"),
                   "un fichero que no existe: la de por omision, con esa ruta para guardarla");
         QFile malo(tmp.filePath("malo.json"));
-        malo.open(QIODevice::WriteOnly);
-        malo.write("{ esto no es json");
+        const bool escrito = malo.open(QIODevice::WriteOnly) && malo.write("{ esto no es json") > 0;
         malo.close();
         const bool leido = Configuracion::lee(malo.fileName(), n, e);
-        comprueba(!leido && e.contains("JSON"),
+        comprueba(escrito && !leido && e.contains("JSON"),
                   "y uno roto se dice: \"" + e.toStdString() + "\"");
     }
 
