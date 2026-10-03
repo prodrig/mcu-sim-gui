@@ -23,8 +23,9 @@ La **contraparte de visualización gráfica de
 > puede depurar con un botón pulsado**: cada botón lleva al lado un
 > «switch» que lo deja hundido hasta que se vuelva a tocar, y *Vista ▸
 > Siempre encima* (Ctrl+T) deja la ventana a la vista mientras se trabaja
-> en el IDE; los pulsadores del modelo rebotan, y el rebote se ajusta en
-> marcha con su deslizador, que enseña su valor (plan §16). Lo que falta: grabar y reproducir sesiones (fase 8).
+> en el IDE; los pulsadores del modelo rebotan, y en marcha se ajusta
+> cuánto dura el rebote —un deslizador que enseña su valor— y cuántas veces
+> rebota —un desplegable— (plan §16). Lo que falta: grabar y reproducir sesiones (fase 8).
 >
 > Para verlo, con las dos cosas compiladas y una al lado de la otra:
 >

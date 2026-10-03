@@ -104,6 +104,23 @@ int main(int argc, char** argv)
                       rebote_v->text() == "2",
                   "un mando continuo nace donde esta el modelo -el rebote de B1, en 2 de "
                   "0 a 20: el deslizador en 100 de 1000- y dice su valor al lado");
+        auto* cuantos = w->findChild<QComboBox*>("mando:2:2");
+        comprueba(cuantos && !cuantos->isEnabled() && cuantos->count() == 9 &&
+                      cuantos->itemText(0) == "1" && cuantos->itemText(8) == "9" &&
+                      cuantos->currentText() == "5",
+                  "y uno discreto es un desplegable con los enteros del rango -de 1 a 9- "
+                  "en el valor del modelo, 5");
+        {
+            auto* panel = qobject_cast<Panel*>(w);
+            std::vector<std::pair<int, float>> o;
+            QObject::connect(panel, &Panel::orden,
+                             [&](quint16, quint16 m, float v) { o.push_back({m, v}); });
+            panel->activa_mandos(true);
+            cuantos->setCurrentIndex(2);
+            comprueba(o.size() == 1 && o[0].first == 2 && o[0].second == 3.f,
+                      "elegir el 3 ordena rebotes = 3, y nada mas");
+            panel->activa_mandos(false);
+        }
         QGroupBox* x3 = w->findChild<QGroupBox*>("pieza:0");
         comprueba(x3 && x3->title().contains("X3") && x3->title().contains("Crystal") &&
                   x3->title().contains("desoldada"),

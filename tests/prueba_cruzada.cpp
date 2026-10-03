@@ -77,9 +77,10 @@ int main(int argc, char** argv)
         bool todas = !pl.piezas.isEmpty();
         for (const PiezaGui& pz : pl.piezas) todas = todas && pz.en_placa;
         comprueba(pl.piezas.size() == 11 && todas && pl.avisos.isEmpty() &&
-                  pl.n_interesantes() == 8 && pl.n_mandos() == 4,
+                  pl.n_interesantes() == 8 && pl.n_mandos() == 6,
                   "la placa se construye entera: 11 piezas, todas casadas con su "
-                  "componente, 8 indicadores y 4 mandos -pulsar y rebote_ms de B1 y B2-");
+                  "componente, 8 indicadores y 6 mandos -pulsar, rebote_ms y rebotes de "
+                  "B1 y B2-");
         {
             double reb_b1 = -1, reb_b2 = -1;
             for (const PiezaGui& pz : pl.piezas)

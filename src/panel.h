@@ -29,7 +29,9 @@
 //                  otro, y solo se ordena cuando eso cambia;
 //   * interruptor: el máximo marcado, el mínimo desmarcado;
 //   * continuo:    la posición del deslizador, de mínimo a máximo. Al lado,
-//                  su nombre y su valor (`valor:<pieza>:<idx>`).
+//                  su nombre y su valor (`valor:<pieza>:<idx>`);
+//   * discreto:    el entero elegido en un desplegable con los enteros del
+//                  rango (una caja numérica si son más de 31).
 //
 // Y cada control NACE DONDE ESTÁ EL MODELO: el `valor` que el catálogo da de
 // cada mando. Colocarlo ahí no ordena nada.

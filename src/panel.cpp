@@ -1,6 +1,7 @@
 #include "panel.h"
 
 #include <QCheckBox>
+#include <QComboBox>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -9,8 +10,10 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSlider>
+#include <QSpinBox>
 #include <QWidget>
 
+#include <cmath>
 #include <memory>
 
 namespace mcusim {
@@ -42,6 +45,48 @@ QWidget* control_de(Panel* panel, const PiezaGui& p, const MandoGui& m, QWidget*
                          [=](bool si) { emit panel->orden(pz, md, si ? hi : lo); });
         ayuda = QObject::tr("Marcado ordena %1; desmarcado, %2.").arg(hi).arg(lo);
         w = c;
+    } else if (m.tipo == QLatin1String("discreto")) {
+        // Los ENTEROS del rango: un desplegable, que es lo que se pidio para
+        // `rebotes` -de 1 a 9- y lo que vale para cualquier mando de pocas
+        // opciones. Si el rango es largo, un desplegable de cien lineas no se
+        // maneja: entonces una caja numerica. Como el deslizador, nace donde
+        // esta el modelo, y colocarlo ahi no ordena nada.
+        const int a = int(std::ceil(m.min)), b = int(std::floor(m.max));
+        const int inicial = qBound(a, int(std::lround(m.valor)), b);
+        auto* fila = new QWidget(padre);
+        auto* h = new QHBoxLayout(fila);
+        h->setContentsMargins(0, 0, 0, 0);
+        h->addWidget(new QLabel(m.nombre, fila));
+        QWidget* c = nullptr;
+        if (b - a <= 30) {
+            auto* cb = new QComboBox(fila);
+            for (int k = a; k <= b; ++k) cb->addItem(QString::number(k), k);
+            {
+                const QSignalBlocker quieto(cb);
+                cb->setCurrentIndex(inicial - a);
+            }
+            QObject::connect(cb, &QComboBox::currentIndexChanged, panel, [=](int i) {
+                if (i >= 0) emit panel->orden(pz, md, float(cb->itemData(i).toInt()));
+            });
+            c = cb;
+        } else {
+            auto* sb = new QSpinBox(fila);
+            sb->setRange(a, b);
+            {
+                const QSignalBlocker quieto(sb);
+                sb->setValue(inicial);
+            }
+            QObject::connect(sb, &QSpinBox::valueChanged, panel,
+                             [=](int v) { emit panel->orden(pz, md, float(v)); });
+            c = sb;
+        }
+        c->setObjectName(QStringLiteral("mando:%1:%2").arg(p.idx).arg(m.idx));
+        c->setEnabled(false);
+        c->setToolTip(QObject::tr("%1: un entero de %2 a %3.").arg(m.nombre).arg(a).arg(b));
+        controles.push_back(c);
+        h->addWidget(c);
+        h->addStretch(1);
+        return fila;
     } else if (m.tipo == QLatin1String("continuo")) {
         // El deslizador, con su NOMBRE y su VALOR al lado: sin el número no se
         // sabe qué se está pidiendo. Nace donde está el modelo (el `valor` del

@@ -42,8 +42,9 @@ int main(int argc, char** argv)
         comprueba(cat.size() == 4 && cat[1].id == "LD4" && cat[1].tipo == "Led" &&
                   cat[1].observables.size() == 2 && cat[1].observables[1].unidad == "mA" &&
                   cat[1].observables[1].max == 25 && !cat[1].observables[1].interesante &&
-                  cat[2].mandos.size() == 2 && cat[2].mandos[0].tipo == "boton" &&
+                  cat[2].mandos.size() == 3 && cat[2].mandos[0].tipo == "boton" &&
                   cat[2].mandos[1].tipo == "continuo" && cat[2].mandos[1].max == 20 &&
+                  cat[2].mandos[2].tipo == "discreto" && cat[2].mandos[2].max == 9 &&
                   cat[3].observables.isEmpty() && cat[3].mandos.isEmpty(),
                   "con sus observables, sus unidades, sus escalas y sus mandos");
         comprueba(cat.size() == 4 && cat[2].mandos[0].valor == 0 && cat[2].mandos[1].valor == 2,
@@ -76,9 +77,9 @@ int main(int argc, char** argv)
                   "cada pieza del catalogo recibe sus patillas de la placa, por su id");
         comprueba(!p.piezas[0].conectada && p.piezas[1].conectada,
                   "y sabe si esta desoldada");
-        comprueba(p.n_observables() == 4 && p.n_interesantes() == 3 && p.n_mandos() == 2 &&
+        comprueba(p.n_observables() == 4 && p.n_interesantes() == 3 && p.n_mandos() == 3 &&
                   p.avisos.isEmpty(),
-                  "cuatro observables, tres que pintar, dos mandos, y nada que no case");
+                  "cuatro observables, tres que pintar, tres mandos, y nada que no case");
 
         PlacaGui q;
         const QByteArray ajena =

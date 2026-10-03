@@ -39,7 +39,7 @@ struct ObservableGui {
 struct MandoGui {
     int     idx = 0;          // dentro de su pieza: el `mando` de una Orden
     QString nombre;
-    QString tipo;             // "boton", "interruptor", "continuo"
+    QString tipo;             // "boton", "interruptor", "continuo", "discreto"
     double  min = 0, max = 0;
     // Lo que vale en el modelo al mandar el catálogo, para que el control nazca
     // ahí y no en el mínimo. Un mcu-sim anterior no lo dice: entonces, el mínimo.

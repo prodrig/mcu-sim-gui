@@ -166,11 +166,12 @@ puede **hacer**. También XML, en el mismo estilo:
     <observable idx="0" id_obs="2" nombre="pulsado" unidad="" min="0" max="1" interesante="si"/>
     <mando idx="0" nombre="pulsar"    tipo="boton"    min="0" max="1"  valor="0"/>
     <mando idx="1" nombre="rebote_ms" tipo="continuo" min="0" max="20" valor="2"/>
+    <mando idx="2" nombre="rebotes"   tipo="discreto" min="1" max="9"  valor="5"/>
   </pieza>
 </catalogo>
 ```
 
-Cuatro cosas que merecen nombre propio:
+Cinco cosas que merecen nombre propio:
 
 * **`idx` de pieza es el índice en el inventario** de `ExtPartBase`, y vale para
   toda la ejecución porque la elaboración de SystemC es estática: después de
@@ -183,6 +184,12 @@ Cuatro cosas que merecen nombre propio:
   `encendido` y no `corriente`; la GUI decide, y lo que decide lo dice en
   `T_SUSCRIBE`. Sin esto la pantalla de una placa con cuarenta piezas nace
   ilegible.
+* **`tipo`** de un mando dice qué control poner, sin decir de qué pieza es:
+  `boton` (el máximo mientras está hundido, el mínimo al soltarlo),
+  `interruptor` (máximo o mínimo), `continuo` (cualquier valor del rango) y
+  `discreto` (un **entero** del rango: un desplegable). `discreto` se añadió el
+  2026-10-03, también sin cambiar la versión: una ventana anterior no lo conoce
+  y lo pinta como un botón, así que conviene actualizar las dos a la vez.
 * **`valor`** de un mando es lo que vale en el modelo al mandar el catálogo,
   para que el control nazca ahí y no en el mínimo: un deslizador en su sitio.
   Se añadió el 2026-10-03 sin cambiar la versión del protocolo, porque es un

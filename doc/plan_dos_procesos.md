@@ -1708,6 +1708,17 @@ Aquí:
 Para una pieza que esta ventana no conoce sale igual: no hay ninguna palabra
 de «rebote» en el código de la ventana.
 
+**Y cuántos rebotes** (2026-10-03, después): un tipo de mando nuevo,
+**`discreto`** —un entero del rango—, que la ventana pinta como un
+**desplegable** con los enteros del rango (una caja numérica si son más de 31),
+y el tercer mando del pulsador, `rebotes`, de 1 a 9. En `mcu-sim`, `rebotes`
+pasa a ser el número **exacto** y no un máximo: con 3, la EXTI ve 4 flancos.
+`prueba_ventana` 58 → **60** (el desplegable de B1, de 1 a 9 en el 5; elegir
+el 3 ordena 3), `prueba_sesion` 53 (el tercer mando, en las comprobaciones que
+ya estaban) y `prueba_cruzada` 23, contra el `mcu-sim` de verdad con seis
+mandos. Una ventana anterior pintaría `discreto` como un botón: las dos se
+actualizan juntas.
+
 **Cómo se ha comprobado**: `prueba_ventana` 56 → **58** (el deslizador del
 rebote de B1 nace en 2 de 20 y lo dice; el número sigue al deslizador),
 `prueba_sesion` 51 → **53** (el `valor` se lee, y sin él vale el mínimo) y
