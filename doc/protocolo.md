@@ -164,12 +164,13 @@ puede **hacer**. También XML, en el mismo estilo:
   </pieza>
   <pieza idx="1" id="B1" tipo="Button">
     <observable idx="0" id_obs="2" nombre="pulsado" unidad="" min="0" max="1" interesante="si"/>
-    <mando idx="0" nombre="pulsar" tipo="boton" min="0" max="1"/>
+    <mando idx="0" nombre="pulsar"    tipo="boton"    min="0" max="1"  valor="0"/>
+    <mando idx="1" nombre="rebote_ms" tipo="continuo" min="0" max="20" valor="2"/>
   </pieza>
 </catalogo>
 ```
 
-Tres cosas que merecen nombre propio:
+Cuatro cosas que merecen nombre propio:
 
 * **`idx` de pieza es el índice en el inventario** de `ExtPartBase`, y vale para
   toda la ejecución porque la elaboración de SystemC es estática: después de
@@ -182,6 +183,11 @@ Tres cosas que merecen nombre propio:
   `encendido` y no `corriente`; la GUI decide, y lo que decide lo dice en
   `T_SUSCRIBE`. Sin esto la pantalla de una placa con cuarenta piezas nace
   ilegible.
+* **`valor`** de un mando es lo que vale en el modelo al mandar el catálogo,
+  para que el control nazca ahí y no en el mínimo: un deslizador en su sitio.
+  Se añadió el 2026-10-03 sin cambiar la versión del protocolo, porque es un
+  atributo más: una ventana que no lo conoce lo ignora, y una que sí, ante un
+  `mcu-sim` que no lo manda, toma el mínimo.
 
 **`T_LISTO`** — sin cuerpo. Quiere decir: *la placa está construida, el catálogo
 es el que has recibido, y estoy parado esperándote.*

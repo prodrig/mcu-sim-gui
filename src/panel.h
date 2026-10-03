@@ -28,7 +28,11 @@
 //                  se vuelva a tocar. El mando está hundido si lo está uno U
 //                  otro, y solo se ordena cuando eso cambia;
 //   * interruptor: el máximo marcado, el mínimo desmarcado;
-//   * continuo:    la posición del deslizador, de mínimo a máximo.
+//   * continuo:    la posición del deslizador, de mínimo a máximo. Al lado,
+//                  su nombre y su valor (`valor:<pieza>:<idx>`).
+//
+// Y cada control NACE DONDE ESTÁ EL MODELO: el `valor` que el catálogo da de
+// cada mando. Colocarlo ahí no ordena nada.
 //
 // El panel no habla con el modelo: emite `orden()`, y quien lo monta decide.
 //

@@ -77,9 +77,17 @@ int main(int argc, char** argv)
         bool todas = !pl.piezas.isEmpty();
         for (const PiezaGui& pz : pl.piezas) todas = todas && pz.en_placa;
         comprueba(pl.piezas.size() == 11 && todas && pl.avisos.isEmpty() &&
-                  pl.n_interesantes() == 8 && pl.n_mandos() == 2,
+                  pl.n_interesantes() == 8 && pl.n_mandos() == 4,
                   "la placa se construye entera: 11 piezas, todas casadas con su "
-                  "componente, 8 indicadores y 2 mandos");
+                  "componente, 8 indicadores y 4 mandos -pulsar y rebote_ms de B1 y B2-");
+        {
+            double reb_b1 = -1, reb_b2 = -1;
+            for (const PiezaGui& pz : pl.piezas)
+                for (const MandoGui& m : pz.mandos)
+                    if (m.nombre == "rebote_ms") (pz.id == "B1" ? reb_b1 : reb_b2) = m.valor;
+            comprueba(reb_b1 == 2 && reb_b2 == 0,
+                      "y el catalogo dice donde esta cada mando: B1 rebota 2 ms y B2 no");
+        }
         comprueba(s.hola().value("modo") == "simula" && s.version() == 1,
                   "en modo simula y con la version 1");
         if (arranca) {

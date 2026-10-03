@@ -98,6 +98,12 @@ int main(int argc, char** argv)
                       cuantos_con_prefijo(w, "fija:") == 1,
                   "y el mando de tipo boton lleva al lado su «switch»: marcable, suelto "
                   "y desactivado como el otro. Uno, porque solo hay un boton");
+        auto* rebote = w->findChild<QSlider*>("mando:2:1");
+        auto* rebote_v = w->findChild<QLabel*>("valor:2:1");
+        comprueba(rebote && rebote_v && !rebote->isEnabled() && rebote->value() == 100 &&
+                      rebote_v->text() == "2",
+                  "un mando continuo nace donde esta el modelo -el rebote de B1, en 2 de "
+                  "0 a 20: el deslizador en 100 de 1000- y dice su valor al lado");
         QGroupBox* x3 = w->findChild<QGroupBox*>("pieza:0");
         comprueba(x3 && x3->title().contains("X3") && x3->title().contains("Crystal") &&
                   x3->title().contains("desoldada"),
@@ -134,6 +140,9 @@ int main(int argc, char** argv)
         comprueba(panel->mandos_activos() && consigna->isEnabled() && habilita->isEnabled(),
                   "activa_mandos() los enciende todos");
         consigna->setValue(500);
+        comprueba(w2->findChild<QLabel*>("valor:0:0") &&
+                      w2->findChild<QLabel*>("valor:0:0")->text() == "90",
+                  "y el numero de al lado sigue al deslizador: 90");
         habilita->setChecked(true);
         habilita->setChecked(false);
         comprueba(ords.size() == 3 && ords[0].p == 0 && ords[0].m == 0 &&

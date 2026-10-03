@@ -87,6 +87,7 @@ bool lee_catalogo(const QByteArray& xml, QVector<PiezaGui>& piezas, QString& err
             m.tipo   = texto(a, "tipo");
             m.min    = real(a, "min");
             m.max    = real(a, "max");
+            m.valor  = a.hasAttribute(QLatin1String("valor")) ? real(a, "valor") : m.min;
             piezas.back().mandos.push_back(m);
         }
     }

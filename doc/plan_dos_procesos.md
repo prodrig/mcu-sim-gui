@@ -1674,3 +1674,42 @@ panel, G1b entera y *Siempre encima*), `prueba_argumentos` 37 → **38** (se
 guarda y se relee). Lo que no se ve desde aquí es que el gestor de ventanas de
 cada sistema respete la bandera: eso es para una persona, en Windows sobre
 todo.
+
+### 16.2 Los rebotes, en el modelo
+
+En `mcu-sim` y no aquí: el rebote es física del contacto, y su sitio es el XML
+de la placa. `Button` admite `rebote` (ms, 2 por omisión; `no` es un contacto
+ideal), `rebotes` (5) y `semilla`, con un patrón pseudoaleatorio reproducible
+al picosegundo. Los bancos de pruebas de `mcu-sim` montan sus pulsadores sin
+rebote, y su invariante no se mueve por el cambio del modelo —solo por la
+prueba nueva, T132—. Está contado en `doc/parts.md` (`Button`) y en P-12 k del
+`doc/todo.md` de `mcu-sim`.
+
+Para esta ventana no cambia nada: el observable `pulsado` es el dedo, que no
+rebota, y el contacto cambia en microsegundos, mucho más deprisa de lo que la
+ventana muestrea.
+
+### 16.3 El rebote en marcha, y los controles que nacen en su sitio
+
+En `mcu-sim`, el pulsador tiene un segundo mando, **`rebote_ms`** (continuo,
+de 0 a 20 ms), y cada `<mando>` del catálogo dice lo que vale en el modelo con
+un atributo **`valor`** (`doc/protocolo.md` §3). Sin cambiar la versión del
+protocolo: es un atributo más del XML.
+
+Aquí:
+
+* `MandoGui::valor`, leído del catálogo; si un `mcu-sim` anterior no lo manda,
+  el mínimo;
+* **cada control nace donde está el modelo**: el deslizador en su sitio y la
+  casilla marcada o no. Colocarlo ahí no ordena nada;
+* **el deslizador lleva al lado su nombre y su valor** (`valor:<pieza>:<idx>`),
+  que sigue a la mano. Sin el número no se sabía qué se estaba pidiendo.
+
+Para una pieza que esta ventana no conoce sale igual: no hay ninguna palabra
+de «rebote» en el código de la ventana.
+
+**Cómo se ha comprobado**: `prueba_ventana` 56 → **58** (el deslizador del
+rebote de B1 nace en 2 de 20 y lo dice; el número sigue al deslizador),
+`prueba_sesion` 51 → **53** (el `valor` se lee, y sin él vale el mínimo) y
+`prueba_cruzada` 22 → **23** contra el `mcu-sim` de verdad (cuatro mandos;
+B1 dice 2 ms y B2 cero).

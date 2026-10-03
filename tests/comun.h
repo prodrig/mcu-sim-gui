@@ -110,7 +110,8 @@ inline const char* CATALOGO_XML =
     "  </pieza>\n"
     "  <pieza idx=\"2\" id=\"B1\" tipo=\"Button\">\n"
     "    <observable idx=\"0\" id_obs=\"3\" nombre=\"pulsado\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\"/>\n"
-    "    <mando idx=\"0\" nombre=\"pulsar\" tipo=\"boton\" min=\"0\" max=\"1\"/>\n"
+    "    <mando idx=\"0\" nombre=\"pulsar\" tipo=\"boton\" min=\"0\" max=\"1\" valor=\"0\"/>\n"
+    "    <mando idx=\"1\" nombre=\"rebote_ms\" tipo=\"continuo\" min=\"0\" max=\"20\" valor=\"2\"/>\n"
     "  </pieza>\n"
     "  <pieza idx=\"3\" id=\"R35\" tipo=\"Rpull\"/>\n"
     "</catalogo>\n";

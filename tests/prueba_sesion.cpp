@@ -42,9 +42,22 @@ int main(int argc, char** argv)
         comprueba(cat.size() == 4 && cat[1].id == "LD4" && cat[1].tipo == "Led" &&
                   cat[1].observables.size() == 2 && cat[1].observables[1].unidad == "mA" &&
                   cat[1].observables[1].max == 25 && !cat[1].observables[1].interesante &&
-                  cat[2].mandos.size() == 1 && cat[2].mandos[0].tipo == "boton" &&
+                  cat[2].mandos.size() == 2 && cat[2].mandos[0].tipo == "boton" &&
+                  cat[2].mandos[1].tipo == "continuo" && cat[2].mandos[1].max == 20 &&
                   cat[3].observables.isEmpty() && cat[3].mandos.isEmpty(),
                   "con sus observables, sus unidades, sus escalas y sus mandos");
+        comprueba(cat.size() == 4 && cat[2].mandos[0].valor == 0 && cat[2].mandos[1].valor == 2,
+                  "y cada mando con lo que vale en el modelo: el boton suelto, el rebote en 2");
+        {
+            QVector<PiezaGui> viejo;
+            comprueba(lee_catalogo("<catalogo><pieza idx=\"0\" id=\"S1\" tipo=\"Servo\">"
+                                   "<mando idx=\"0\" nombre=\"consigna\" tipo=\"continuo\" "
+                                   "min=\"10\" max=\"180\"/></pieza></catalogo>", viejo, e) &&
+                          viejo.size() == 1 && viejo[0].mandos.size() == 1 &&
+                          viejo[0].mandos[0].valor == 10,
+                      "un catalogo sin `valor` -el de un mcu-sim anterior- se lee igual, y el "
+                      "mando vale su minimo");
+        }
 
         PlacaGui p;
         comprueba(junta_placa(PLACA_XML, cat, p, e) && p.nombre == "discovery" &&
@@ -63,9 +76,9 @@ int main(int argc, char** argv)
                   "cada pieza del catalogo recibe sus patillas de la placa, por su id");
         comprueba(!p.piezas[0].conectada && p.piezas[1].conectada,
                   "y sabe si esta desoldada");
-        comprueba(p.n_observables() == 4 && p.n_interesantes() == 3 && p.n_mandos() == 1 &&
+        comprueba(p.n_observables() == 4 && p.n_interesantes() == 3 && p.n_mandos() == 2 &&
                   p.avisos.isEmpty(),
-                  "cuatro observables, tres que pintar, un mando, y nada que no case");
+                  "cuatro observables, tres que pintar, dos mandos, y nada que no case");
 
         PlacaGui q;
         const QByteArray ajena =

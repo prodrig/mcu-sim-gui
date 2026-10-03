@@ -7,6 +7,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSlider>
 #include <QWidget>
 
@@ -36,18 +37,44 @@ QWidget* control_de(Panel* panel, const PiezaGui& p, const MandoGui& m, QWidget*
     QString ayuda;
     if (m.tipo == QLatin1String("interruptor")) {
         auto* c = new QCheckBox(m.nombre, padre);
+        c->setChecked(m.valor >= (m.min + m.max) / 2);   // donde esta el modelo
         QObject::connect(c, &QCheckBox::toggled, panel,
                          [=](bool si) { emit panel->orden(pz, md, si ? hi : lo); });
         ayuda = QObject::tr("Marcado ordena %1; desmarcado, %2.").arg(hi).arg(lo);
         w = c;
     } else if (m.tipo == QLatin1String("continuo")) {
-        auto* s = new QSlider(Qt::Horizontal, padre);
+        // El deslizador, con su NOMBRE y su VALOR al lado: sin el número no se
+        // sabe qué se está pidiendo. Nace donde está el modelo (el `valor` del
+        // catálogo), y colocarlo ahí no ordena nada: no es la mano.
+        auto* fila = new QWidget(padre);
+        auto* h = new QHBoxLayout(fila);
+        h->setContentsMargins(0, 0, 0, 0);
+        auto* s = new QSlider(Qt::Horizontal, fila);
+        s->setObjectName(QStringLiteral("mando:%1:%2").arg(p.idx).arg(m.idx));
         s->setRange(0, 1000);               // de min a max, en milésimas
+        auto* num = new QLabel(fila);
+        num->setObjectName(QStringLiteral("valor:%1:%2").arg(p.idx).arg(m.idx));
+        num->setMinimumWidth(num->fontMetrics().horizontalAdvance(QStringLiteral("00000.0")));
+        auto escribe = [=](int v) {
+            num->setText(QString::number(double(lo + (hi - lo) * float(v) / 1000.f), 'g', 4));
+        };
+        const double f = hi > lo ? (m.valor - m.min) / (m.max - m.min) : 0.0;
+        {
+            const QSignalBlocker quieto(s);
+            s->setValue(qBound(0, int(f * 1000.0 + 0.5), 1000));
+        }
+        escribe(s->value());
         QObject::connect(s, &QSlider::valueChanged, panel, [=](int v) {
+            escribe(v);
             emit panel->orden(pz, md, lo + (hi - lo) * float(v) / 1000.f);
         });
-        ayuda = QObject::tr("%1: de %2 a %3.").arg(m.nombre).arg(lo).arg(hi);
-        w = s;
+        s->setEnabled(false);
+        s->setToolTip(QObject::tr("%1: de %2 a %3.").arg(m.nombre).arg(lo).arg(hi));
+        controles.push_back(s);
+        h->addWidget(new QLabel(m.nombre, fila));
+        h->addWidget(s, 1);
+        h->addWidget(num);
+        return fila;
     } else {                                // "boton", y lo que no se conozca
         // DOS CONTROLES PARA UN MANDO. El de siempre, que es un dedo: la
         // pulsacion dura lo que dura el raton abajo. Y el «switch», que la deja

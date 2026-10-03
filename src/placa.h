@@ -41,6 +41,9 @@ struct MandoGui {
     QString nombre;
     QString tipo;             // "boton", "interruptor", "continuo"
     double  min = 0, max = 0;
+    // Lo que vale en el modelo al mandar el catálogo, para que el control nazca
+    // ahí y no en el mínimo. Un mcu-sim anterior no lo dice: entonces, el mínimo.
+    double  valor = 0;
 };
 
 struct PatillaGui {
