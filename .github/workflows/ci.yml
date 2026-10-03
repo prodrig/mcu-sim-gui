@@ -14,12 +14,19 @@
 # Las pruebas no necesitan pantalla: solo usan QtCore y QtNetwork. La ventana
 # se arranca además con la plataforma `offscreen` en Linux, para saber que no
 # se cae al abrirse.
+#
+# Y desde el 2026-10-03, LOS EJECUTABLES. Cada plataforma empaqueta el suyo con
+# Qt dentro (`ci/empaqueta-*.sh`) en CADA ejecucion -asi un push a `main` ya
+# dice si el empaquetado funciona, y sus paquetes se pueden bajar de la pagina
+# de la ejecucion-, y una etiqueta `v*` los publica como Release. Con `needs`:
+# un paquete no se publica si su plataforma no paso las pruebas.
 # =============================================================================
 name: ci
 
 on:
   push:
     branches: [main]
+    tags: ['v*']            # una etiqueta publica los ejecutables (job `publica`)
   pull_request:
   workflow_dispatch:
 
@@ -27,17 +34,25 @@ on:
 # la PRIMERA que corre con Node.js 24 (`runs.using: node24` en su action.yml),
 # no la ultima: es el salto mas corto, y el unico cambio de la v5 es ese.
 # msys2/setup-msys2@v2 ya corria con Node.js 24 y se queda. Comprobado el
-# 2026-10-01 en el action.yml de cada etiqueta.
+# 2026-10-01 en el action.yml de cada etiqueta. Para los paquetes, las mismas
+# que usa mcu-sim: actions/upload-artifact@v6 y actions/download-artifact@v7,
+# las primeras de cada una en Node.js 24.
 #
 # Piden un runner 2.327.1 o posterior, que los de GitHub ya tienen.
 permissions:
-  contents: read
+  contents: read            # el job `publica` se lo sube a write, y solo el
 
-# Un push nuevo a la misma rama o al mismo pull request cancela el anterior:
-# aquí nada se publica, y lo único que interesa es el último.
+# POR COMMIT, como en mcu-sim: empujar `main` y despues la etiqueta del MISMO
+# commit no lanza todo dos veces a la vez; la de la etiqueta sustituye a la de
+# la rama, porque es el mismo codigo y ademas publica.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.sha }}
   cancel-in-progress: true
+
+# La version que dira `mcu-sim-gui --version`: la de la etiqueta sin la `v`, o
+# «desarrollo-<commit>» si no se esta construyendo una etiqueta.
+env:
+  VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('desarrollo-{0}', github.sha) }}
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -61,7 +76,8 @@ jobs:
 
       - name: Compilar
         run: |
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release \
+                -DMCU_SIM_GUI_VERSION="${VERSION#v}"
           cmake --build build
 
       - name: Las pruebas
@@ -82,6 +98,17 @@ jobs:
           fi
           echo "  [OK  ] la ventana abre y sigue abierta"
 
+      - name: Empaquetar (AppImage, con Qt dentro)
+        # El suelo de glibc es el de ESTA distribucion, 24.04: lo imprime el
+        # script. No se baja a 22.04 porque su Qt (6.2.4) no llega al 6.3 que
+        # pide CMakeLists.txt.
+        run: bash ci/empaqueta-linux.sh build mcu-sim-gui-linux-x86_64.tar.gz
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: mcu-sim-gui-linux-x86_64
+          path: mcu-sim-gui-linux-x86_64.tar.gz
+
   # ---------------------------------------------------------------------------
   # Windows, con MSYS2 y MinGW-w64: la misma cadena que se usa para `mcu-sim`
   # en Windows (su `doc/compilacion.md` §5), con el Qt que empaqueta MSYS2.
@@ -101,10 +128,12 @@ jobs:
           msystem: MINGW64
           update: true
           pacboy: toolchain:p cmake:p ninja:p qt6-base:p
+          install: zip unzip
 
       - name: Compilar
         run: |
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release \
+                -DMCU_SIM_GUI_VERSION="${VERSION#v}"
           cmake --build build
 
       - name: Las pruebas
@@ -116,14 +145,55 @@ jobs:
       - name: Que se ha generado
         run: ls -la build/*.exe
 
+      - name: Empaquetar (con Qt y todas sus DLL al lado)
+        run: bash ci/empaqueta-windows.sh build mcu-sim-gui-windows-x86_64.zip
+
+      - name: Que arranca FUERA de MSYS2
+        # La prueba de la maquina del alumno: PowerShell, con un PATH que solo
+        # tiene Windows. Si faltara una DLL, Windows sacaria su dialogo de
+        # error y la ventana de mcu-sim-gui no apareceria nunca: por eso se
+        # espera a que aparezca SU ventana, por el titulo, y no solo a que el
+        # proceso siga vivo.
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          $p = Start-Process -FilePath "paquete\mcu-sim-gui.exe" -PassThru
+          $ok = $false
+          for ($i = 0; $i -lt 40 -and -not $ok; $i++) {
+            Start-Sleep -Milliseconds 500
+            $p.Refresh()
+            if ($p.HasExited) { break }
+            if ($p.MainWindowTitle -like '*mcu-sim-gui*') { $ok = $true }
+          }
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          if (-not $ok) {
+            Write-Host "  [FALLO] la ventana no ha aparecido (titulo: '$($p.MainWindowTitle)')"
+            exit 1
+          }
+          Write-Host "  [OK  ] fuera de MSYS2, la ventana aparece: '$($p.MainWindowTitle)'"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: mcu-sim-gui-windows-x86_64
+          path: mcu-sim-gui-windows-x86_64.zip
+
   # ---------------------------------------------------------------------------
-  # macOS, con el Qt de Homebrew. Una sola arquitectura, Apple Silicon: aquí
-  # no hay código que dependa de ella, a diferencia del Makefile de mcu-sim.
+  # macOS, con el Qt de Homebrew. Las dos arquitecturas, con los mismos
+  # runners que mcu-sim: aqui no hay codigo que dependa de ella, pero un
+  # ejecutable es de UNA, y los Mac Intel siguen en las aulas.
   # ---------------------------------------------------------------------------
   macos:
-    name: macOS (Qt de Homebrew)
-    runs-on: macos-latest
-    timeout-minutes: 30
+    name: macOS ${{ matrix.arq }} (Qt de Homebrew)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-26
+            arq: arm64
+          - os: macos-26-intel
+            arq: x86_64
     steps:
       - uses: actions/checkout@v5
 
@@ -135,8 +205,59 @@ jobs:
       - name: Compilar
         run: |
           cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
+                -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" \
+                -DMCU_SIM_GUI_VERSION="${VERSION#v}"
           cmake --build build
 
       - name: Las pruebas
         run: ctest --test-dir build --output-on-failure
+
+      - name: Empaquetar (.app con Qt dentro)
+        run: bash ci/empaqueta-macos.sh build mcu-sim-gui-macos-${{ matrix.arq }}.zip
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: mcu-sim-gui-macos-${{ matrix.arq }}
+          path: mcu-sim-gui-macos-${{ matrix.arq }}.zip
+
+  # ---------------------------------------------------------------------------
+  # PUBLICAR. Solo cuando se empuja una etiqueta `v*`, y solo si TODO lo de
+  # arriba esta en verde. `gh release create` con el GITHUB_TOKEN del propio
+  # trabajo, como en mcu-sim: sin acciones de terceros con permiso de escritura.
+  # ---------------------------------------------------------------------------
+  publica:
+    name: Publicar los ejecutables de una etiqueta
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write         # solo aqui, y solo para crear la Release
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: mcu-sim-gui-*
+          path: paquetes
+          merge-multiple: true
+
+      - name: Que estan los cuatro
+        run: |
+          ls -la paquetes
+          for f in mcu-sim-gui-linux-x86_64.tar.gz \
+                   mcu-sim-gui-windows-x86_64.zip \
+                   mcu-sim-gui-macos-arm64.zip \
+                   mcu-sim-gui-macos-x86_64.zip; do
+            [ -f "paquetes/$f" ] || { echo "  [FALLO] falta $f"; exit 1; }
+          done
+          echo "  [OK  ] los cuatro paquetes"
+          (cd paquetes && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+      - name: Crear la Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+             --title "mcu-sim-gui $GITHUB_REF_NAME" \
+             --notes-file doc/notas_release.md \
+             paquetes/*

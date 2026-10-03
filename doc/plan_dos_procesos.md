@@ -1713,3 +1713,43 @@ rebote de B1 nace en 2 de 20 y lo dice; el número sigue al deslizador),
 `prueba_sesion` 51 → **53** (el `valor` se lee, y sin él vale el mínimo) y
 `prueba_cruzada` 22 → **23** contra el `mcu-sim` de verdad (cuatro mandos;
 B1 dice 2 ms y B2 cero).
+
+---
+
+## 17. Los ejecutables, a cuenta de la fase 9
+
+Una parte de la fase 9 —repartir la ventana sin que haya que compilarla— se ha
+adelantado, porque hacía falta ya: **una etiqueta `v*` publica los
+ejecutables** de las tres plataformas, igual que hace `mcu-sim` desde su
+`v0.1.0`.
+
+| Plataforma | Paquete | Cómo lleva Qt | Qué se comprueba antes de publicar |
+| :--- | :--- | :--- | :--- |
+| Windows | `.zip` con la carpeta | `windeployqt6`, y las DLL que Qt arrastra en MSYS2 (ICU, HarfBuzz, FreeType...) buscadas con `ldd` hasta que no falte ninguna | que con un `PATH` sin MSYS2 todo lo que carga está en el paquete o en Windows, y que **su ventana aparece**, por el título, lanzada desde PowerShell |
+| Linux | AppImage dentro de un `.tar.gz` (para no perder el bit de ejecución) | `linuxdeploy` con su complemento de Qt | que lleva Qt dentro y que arranca; imprime el suelo de glibc (2.38, la de Ubuntu 24.04) |
+| macOS arm64 y x86_64 | `.app` en un `.zip` hecho con `ditto` | `macdeployqt`, y firma *ad hoc* (en Apple Silicon no es opcional) | que nada apunta a Homebrew, que la firma se verifica y que arranca |
+
+**La trampa de la §8.8 queda cerrada para la ventana.** Lo que le pasó al
+usuario —`hb_font_set_pterm` no encontrado en `Qt6Gui.dll`, porque había otra
+`libharfbuzz` antes en el `PATH`— no puede pasar con el paquete: Windows busca
+las DLL primero en la carpeta del ejecutable, y están todas ahí. Es lo que
+comprueba el CI con el `PATH` recortado.
+
+**El empaquetado corre en cada ejecución del CI**, no solo con la etiqueta: así
+un push a `main` ya dice si funciona, y sus paquetes se pueden bajar de la
+página de la ejecución para probarlos a mano antes de etiquetar. La etiqueta
+solo añade el trabajo `publica`, que depende de los otros tres.
+
+`mcu-sim-gui --version` dice ahora de qué etiqueta sale (`MCU_SIM_GUI_VERSION`
+en CMake): la del tag en una Release, `<versión>-desarrollo` compilado a mano.
+
+**Cómo se ha comprobado**: el de Linux, entero aquí —AppImage, Qt dentro, que
+arranca, `glibc 2.38`, el `.tar.gz`—. **Los de Windows y macOS no se han podido
+ejecutar fuera del CI**, así que su primera prueba es el primer push con este
+cambio: hay que mirar que los cuatro trabajos acaben en verde y bajar un
+paquete antes de poner la primera etiqueta.
+
+**Lo que sigue pendiente de la fase 9**: firmar (sigue sin firma: SmartScreen y
+Gatekeeper avisan, y está dicho en las notas de la Release), un instalador que
+lleve **los dos** programas juntos, y bajar el suelo de Linux a 22.04, que pide
+un Qt ≥ 6.3 que esa distribución no trae.

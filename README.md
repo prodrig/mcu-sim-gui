@@ -310,6 +310,27 @@ Dos repositorios a propósito: `mcu-sim` tiene que seguir clonándose y
 compilándose sin Qt en cualquier máquina, que es lo que hace que sus suites
 —2 118 comprobaciones solo la del F407— valgan en todas partes.
 
+### Los ejecutables
+
+**Una etiqueta `v*` publica los ejecutables** como Release, con Qt dentro, para
+que quien solo quiera usar la ventana no tenga que compilar nada ni instalar
+Qt: un `.zip` para Windows, un AppImage para Linux y una `.app` para cada Mac.
+Los construye la integración continua con `ci/empaqueta-*.sh`, en **cada**
+ejecución —los paquetes de un push a `main` se pueden bajar de la página de esa
+ejecución—, y la etiqueta solo añade publicarlos, y solo si todo pasó:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+Lo que comprueba cada paquete antes de publicarse: que **arranca**; en Windows,
+además, que con un `PATH` sin MSYS2 todo lo que carga está en el paquete o en
+Windows —la DLL equivocada en el `PATH` es justo lo que pasaba fuera del shell
+de MSYS2—; y en macOS, que nada dentro de la `.app` apunta a Homebrew.
+Las instrucciones para quien lo descarga están en `doc/notas_release.md`, que
+es el texto de la propia Release; las licencias, en `TERCEROS.md`. `mcu-sim`
+va aparte, en sus propias Release.
+
 ---
 
 ## Licencia

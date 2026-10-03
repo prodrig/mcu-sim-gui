@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=mcu-sim-gui
+Comment=La contraparte grafica de mcu-sim: lo lanza, lo ve y lo toca
+Exec=mcu-sim-gui
+Icon=mcu-sim-gui
+Categories=Development;Electronics;Education;
+Terminal=false

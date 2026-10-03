@@ -1,0 +1,14 @@
+# ===========================================================================
+# .gitattributes - mcu-sim-gui
+#
+# Los scripts de empaquetado (ci/*.sh) los ejecuta bash TAMBIEN en Windows, en
+# el shell de MSYS2 del CI. Los runners de Windows sacan el repositorio con
+# `core.autocrlf=true`, y un script con CRLF muere en la primera linea con
+# `$'\r': command not found`. Se fija LF para ellos y para los dos ficheros de
+# texto que linuxdeploy lee. No se pone `* text=auto`: normalizaria de golpe
+# todo el repositorio, y eso es otra decision.
+# ===========================================================================
+
+*.sh       text eol=lf
+*.desktop  text eol=lf
+*.svg      text eol=lf

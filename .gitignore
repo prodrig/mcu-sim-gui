@@ -47,3 +47,11 @@ Claude outputs/
 # Configuración local del usuario: la ruta a mcu-sim y a las placas es de cada
 # máquina. El ejemplo versionado es `config.ejemplo.json`.
 config.json
+
+# Lo que deja el empaquetado (ci/empaqueta-*.sh)
+AppDir/
+paquete/
+.herramientas/
+*.AppImage
+mcu-sim-gui-*.tar.gz
+mcu-sim-gui-*.zip

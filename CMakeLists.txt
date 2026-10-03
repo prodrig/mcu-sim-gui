@@ -60,6 +60,14 @@ endforeach()
 
 find_package(Qt6 6.3 REQUIRED COMPONENTS Core Widgets Network)
 
+# La version que dice `mcu-sim-gui --version`. La de `project()` con
+# «-desarrollo» detras, salvo que alguien diga otra: la integracion continua,
+# al construir una etiqueta `v1.2.3`, pasa -DMCU_SIM_GUI_VERSION=1.2.3. Asi un
+# ejecutable de una Release dice de cual sale, y uno compilado a mano no se
+# hace pasar por ella.
+set(MCU_SIM_GUI_VERSION "${PROJECT_VERSION}-desarrollo" CACHE STRING
+    "Version que anuncia el ejecutable")
+
 qt_standard_project_setup()
 
 # Tres capas, de abajo arriba, y solo la ultima necesita pantalla:
@@ -111,6 +119,8 @@ qt_add_executable(mcu-sim-gui
 )
 
 target_link_libraries(mcu-sim-gui PRIVATE pantalla)
+target_compile_definitions(mcu-sim-gui PRIVATE
+    MCU_SIM_GUI_VERSION="${MCU_SIM_GUI_VERSION}")
 
 # En Windows, sin consola detrás de la ventana.
 set_target_properties(mcu-sim-gui PROPERTIES WIN32_EXECUTABLE ON)

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Un chip con sus patillas y un LED encendido: el icono de mcu-sim-gui -->
+  <rect width="256" height="256" rx="40" fill="#1f2a36"/>
+  <g fill="#9aa7b4">
+    <rect x="58" y="34" width="12" height="28"/><rect x="92" y="34" width="12" height="28"/>
+    <rect x="126" y="34" width="12" height="28"/><rect x="160" y="34" width="12" height="28"/>
+    <rect x="186" y="34" width="12" height="28"/>
+    <rect x="58" y="194" width="12" height="28"/><rect x="92" y="194" width="12" height="28"/>
+    <rect x="126" y="194" width="12" height="28"/><rect x="160" y="194" width="12" height="28"/>
+    <rect x="186" y="194" width="12" height="28"/>
+    <rect x="34" y="70" width="28" height="12"/><rect x="34" y="104" width="28" height="12"/>
+    <rect x="34" y="138" width="28" height="12"/><rect x="34" y="172" width="28" height="12"/>
+    <rect x="194" y="70" width="28" height="12"/><rect x="194" y="104" width="28" height="12"/>
+    <rect x="194" y="138" width="28" height="12"/><rect x="194" y="172" width="28" height="12"/>
+  </g>
+  <rect x="56" y="56" width="144" height="144" rx="10" fill="#0c1218" stroke="#3a4a5a" stroke-width="4"/>
+  <circle cx="128" cy="128" r="34" fill="#2ecc71"/>
+  <circle cx="128" cy="128" r="50" fill="none" stroke="#2ecc71" stroke-opacity="0.35" stroke-width="10"/>
+  <circle cx="76" cy="76" r="6" fill="#3a4a5a"/>
+</svg>

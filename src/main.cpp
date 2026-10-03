@@ -33,7 +33,7 @@ int main(int argc, char** argv)
     QApplication app(argc, argv);
 
     QApplication::setApplicationName("mcu-sim-gui");
-    QApplication::setApplicationVersion("0.1.0");
+    QApplication::setApplicationVersion(QStringLiteral(MCU_SIM_GUI_VERSION));
     QApplication::setOrganizationName("mcu-sim");
 
     QCommandLineParser args;
