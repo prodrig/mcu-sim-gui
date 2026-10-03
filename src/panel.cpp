@@ -4,17 +4,31 @@
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QSlider>
 #include <QWidget>
 
+#include <memory>
+
 namespace mcusim {
 
 namespace {
 
-// El control de un mando, y lo que ordena. Nace desactivado.
-QWidget* control_de(Panel* panel, const PiezaGui& p, const MandoGui& m, QWidget* padre)
+// Un mando de tipo boton tiene DOS controles, el dedo y el «switch», y lo que
+// el modelo recibe es uno O el otro. Este es su estado, compartido por los dos.
+struct EstadoBoton {
+    bool dedo = false;        // el boton momentaneo, hundido
+    bool fijo = false;        // el «switch», marcado
+    bool enviado = false;     // lo ultimo que se ordeno: no se repite
+};
+
+// El control de un mando, y lo que ordena. Nace desactivado. Los widgets que
+// se encienden y se apagan van a `controles`; lo que se devuelve es lo que se
+// coloca en el recuadro.
+QWidget* control_de(Panel* panel, const PiezaGui& p, const MandoGui& m, QWidget* padre,
+                    QVector<QWidget*>& controles)
 {
     const quint16 pz = quint16(p.idx), md = quint16(m.idx);
     const float lo = float(m.min), hi = float(m.max);
@@ -35,18 +49,56 @@ QWidget* control_de(Panel* panel, const PiezaGui& p, const MandoGui& m, QWidget*
         ayuda = QObject::tr("%1: de %2 a %3.").arg(m.nombre).arg(lo).arg(hi);
         w = s;
     } else {                                // "boton", y lo que no se conozca
-        auto* b = new QPushButton(m.nombre, padre);
+        // DOS CONTROLES PARA UN MANDO. El de siempre, que es un dedo: la
+        // pulsacion dura lo que dura el raton abajo. Y el «switch», que la deja
+        // puesta hasta la siguiente vez que se toque: es lo que hace falta para
+        // depurar paso a paso con el boton pulsado desde OTRA ventana -la del
+        // IDE-, sin tener que sujetar el raton aqui.
+        //
+        // El mando esta hundido si lo esta CUALQUIERA de los dos, y solo se
+        // ordena cuando eso cambia: con el «switch» puesto, el dedo no ordena
+        // nada -ni al bajar ni, sobre todo, al subir, que soltaria lo que el
+        // «switch» sujeta-; y quitar el «switch» con el dedo abajo tampoco.
+        auto estado = std::make_shared<EstadoBoton>();
+        auto ordena = [=] {
+            const bool ahora = estado->dedo || estado->fijo;
+            if (ahora == estado->enviado) return;
+            estado->enviado = ahora;
+            emit panel->orden(pz, md, ahora ? hi : lo);
+        };
+        auto* fila = new QWidget(padre);
+        auto* h = new QHBoxLayout(fila);
+        h->setContentsMargins(0, 0, 0, 0);
+        auto* b = new QPushButton(m.nombre, fila);
+        b->setObjectName(QStringLiteral("mando:%1:%2").arg(p.idx).arg(m.idx));
         QObject::connect(b, &QPushButton::pressed, panel,
-                         [=] { emit panel->orden(pz, md, hi); });
+                         [=] { estado->dedo = true;  ordena(); });
         QObject::connect(b, &QPushButton::released, panel,
-                         [=] { emit panel->orden(pz, md, lo); });
-        ayuda = QObject::tr("Mientras esta hundido ordena %1; al soltarlo, %2.")
-                    .arg(hi).arg(lo);
-        w = b;
+                         [=] { estado->dedo = false; ordena(); });
+        b->setToolTip(QObject::tr("Mientras esta hundido ordena %1; al soltarlo, %2. "
+                                  "Con el «switch» puesto no ordena nada.")
+                          .arg(hi).arg(lo));
+        auto* sw = new QPushButton(QStringLiteral("switch"), fila);
+        sw->setObjectName(QStringLiteral("fija:%1:%2").arg(p.idx).arg(m.idx));
+        sw->setCheckable(true);
+        QObject::connect(sw, &QPushButton::toggled, panel,
+                         [=](bool si) { estado->fijo = si; ordena(); });
+        sw->setToolTip(QObject::tr("Cada pulsacion cambia %1 entre hundido (%2) y suelto "
+                                   "(%3), y lo deja asi: para seguir con el hundido "
+                                   "mientras se trabaja en otra ventana.")
+                           .arg(m.nombre).arg(hi).arg(lo));
+        h->addWidget(b, 1);
+        h->addWidget(sw);
+        for (QPushButton* x : {b, sw}) {
+            x->setEnabled(false);
+            controles.push_back(x);
+        }
+        return fila;
     }
     w->setObjectName(QStringLiteral("mando:%1:%2").arg(p.idx).arg(m.idx));
     w->setEnabled(false);
     w->setToolTip(ayuda);
+    controles.push_back(w);
     return w;
 }
 
@@ -74,11 +126,8 @@ QGroupBox* recuadro_de(Panel* panel, const PiezaGui& p, QWidget* padre,
         if (!o.unidad.isEmpty()) nombre += QStringLiteral(" (%1)").arg(o.unidad);
         f->addRow(QStringLiteral("<b>%1</b>").arg(nombre), l);
     }
-    for (const MandoGui& m : p.mandos) {
-        QWidget* c = control_de(panel, p, m, g);
-        controles.push_back(c);
-        f->addRow(c);
-    }
+    for (const MandoGui& m : p.mandos)
+        f->addRow(control_de(panel, p, m, g, controles));
     if (ocultos > 0) {
         auto* l = new QLabel(QObject::tr("+%n observable(s) sin pintar", nullptr, ocultos), g);
         l->setObjectName(QStringLiteral("ocultos:%1").arg(p.idx));

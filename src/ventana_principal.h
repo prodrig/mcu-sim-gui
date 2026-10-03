@@ -137,6 +137,7 @@ private:
     QAction*      act_lanzar_ = nullptr;
     QAction*      act_otra_   = nullptr;
     QAction*      act_detener_ = nullptr;
+    QAction*      act_encima_ = nullptr;
     QLabel*       resumen_   = nullptr;
     QScrollArea*  centro_    = nullptr;
     QPushButton*  arrancar_  = nullptr;

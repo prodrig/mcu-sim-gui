@@ -43,6 +43,9 @@ struct Configuracion {
     quint16    puerto = proto::PUERTO_OMISION;
     QString    ritmo = QStringLiteral("real");     // real, mitad, libre, demanda
     double     periodo_ms = 1000.0 / 60.0;         // de las instantáneas, SIMULADO
+    // La ventana por encima de las demás: para ver los LED y tocar los
+    // botones mientras se depura en el IDE, sin traerla delante cada vez.
+    bool       siempre_encima = false;
 
     // Lee `ruta`. Si no existe, la configuración por omisión con esa ruta —para
     // guardarla ahí— y true; false solo si existe y no se puede leer.

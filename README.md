@@ -19,8 +19,11 @@ La **contraparte de visualización gráfica de
 > demanda—, y en marcha hay Pausa / Sigue, Paso a demanda y Parar. **Y la
 > ventana lanza el modelo ella misma**: *Simulación ▸ Lanzar mcu-sim* (Ctrl+L)
 > abre un diálogo construido con lo que dice `mcu-sim --argumentos`, y abajo,
-> en la pestaña *mcu-sim*, sale todo lo que el simulador escribe. Lo que falta:
-> grabar y reproducir sesiones (fase 8).
+> en la pestaña *mcu-sim*, sale todo lo que el simulador escribe. **Y se
+> puede depurar con un botón pulsado**: cada botón lleva al lado un
+> «switch» que lo deja hundido hasta que se vuelva a tocar, y *Vista ▸
+> Siempre encima* (Ctrl+T) deja la ventana a la vista mientras se trabaja
+> en el IDE (plan §16). Lo que falta: grabar y reproducir sesiones (fase 8).
 >
 > Para verlo, con las dos cosas compiladas y una al lado de la otra:
 >
@@ -281,7 +284,7 @@ versiona, porque las rutas son de cada máquina— y se ajusta. Lleva dónde est
 `mcu-sim` y desde qué directorio lanzarlo, sus argumentos **por nombre**
 (`placa`, `firmware`, `--ms`, `--ondas`...: los que diga `mcu-sim
 --argumentos`, sin lista escrita aquí), lo que se escriba a mano, dónde escucha
-la ventana y el ritmo con el que arrancar.
+la ventana, el ritmo con el que arrancar y si la ventana va siempre encima.
 
 Nada de eso es obligatorio por fichero: **todo se puede poner también desde el
 diálogo de lanzamiento**, que la guarda al lanzar —respetando los comentarios

@@ -135,6 +135,31 @@ void VentanaPrincipal::construye()
     m->addSeparator();
     m->addAction(tr("&Salir"), this, &QWidget::close)->setShortcut(QKeySequence::Quit);
 
+    // --- Vista: la ventana por encima de las demas ------------------------
+    // Para depurar en el IDE con la placa a la vista: los LED se ven y los
+    // botones -y su «switch»- se tocan sin traer esta ventana delante cada
+    // vez, que es lo que la tapa en cuanto se vuelve al IDE.
+    QMenu* vista = menuBar()->addMenu(tr("&Vista"));
+    act_encima_ = vista->addAction(tr("Siempre &encima"));
+    act_encima_->setObjectName(QStringLiteral("siempre_encima"));
+    act_encima_->setCheckable(true);
+    act_encima_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_T));
+    act_encima_->setChecked(cfg_.siempre_encima);
+    if (cfg_.siempre_encima) setWindowFlag(Qt::WindowStaysOnTopHint, true);
+    connect(act_encima_, &QAction::toggled, this, [this](bool si) {
+        // Cambiar las banderas de una ventana la esconde: hay que volver a
+        // enseñarla, y solo si ya se estaba viendo
+        const bool visible = isVisible();
+        setWindowFlag(Qt::WindowStaysOnTopHint, si);
+        if (visible) show();
+        if (si != cfg_.siempre_encima && !cfg_.ruta.isEmpty()) {
+            cfg_.siempre_encima = si;
+            QString e;
+            cfg_.guarda(e);
+        }
+        cfg_.siempre_encima = si;
+    });
+
     connect(&lanz_, &Lanzador::linea, this, [this](const QString& t, bool err) {
         consola(t, err ? QStringLiteral("#c0392b") : QString());
     });

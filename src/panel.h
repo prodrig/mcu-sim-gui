@@ -23,7 +23,10 @@
 // mando y su rango declarado.
 //
 //   * boton:       el máximo al hundirlo y el mínimo al soltarlo. Es un dedo:
-//                  la pulsación dura lo que dura el ratón abajo;
+//                  la pulsación dura lo que dura el ratón abajo. Y al lado, un
+//                  «switch» (`fija:<pieza>:<idx>`) que la deja puesta hasta que
+//                  se vuelva a tocar. El mando está hundido si lo está uno U
+//                  otro, y solo se ordena cuando eso cambia;
 //   * interruptor: el máximo marcado, el mínimo desmarcado;
 //   * continuo:    la posición del deslizador, de mínimo a máximo.
 //

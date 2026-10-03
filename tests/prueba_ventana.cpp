@@ -29,6 +29,8 @@
 #include <QGroupBox>
 #include <QLabel>
 #include <QListWidget>
+#include <QAction>
+#include <QKeySequence>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSlider>
@@ -90,6 +92,12 @@ int main(int argc, char** argv)
                   "modelo esperando");
         comprueba(cuantos_con_prefijo(w, "mando:") == p.n_mandos(),
                   "un control por mando, ni uno mas");
+        QPushButton* fija = w->findChild<QPushButton*>("fija:2:0");
+        comprueba(fija && fija->text() == "switch" && fija->isCheckable() &&
+                      !fija->isChecked() && !fija->isEnabled() &&
+                      cuantos_con_prefijo(w, "fija:") == 1,
+                  "y el mando de tipo boton lleva al lado su «switch»: marcable, suelto "
+                  "y desactivado como el otro. Uno, porque solo hay un boton");
         QGroupBox* x3 = w->findChild<QGroupBox*>("pieza:0");
         comprueba(x3 && x3->title().contains("X3") && x3->title().contains("Crystal") &&
                   x3->title().contains("desoldada"),
@@ -150,6 +158,58 @@ int main(int argc, char** argv)
     }
 
     // -------------------------------------------------------------------------
+    std::printf("G1b El «switch»: el boton, puesto hasta que se vuelva a tocar\n");
+    {
+        PlacaGui placa;
+        PiezaGui b1;
+        b1.idx = 0; b1.id = "B1"; b1.tipo = "Button";
+        b1.observables.push_back({0, 0, "pulsado", "", 0, 1, true});
+        b1.mandos.push_back({0, "pulsar", "boton", 0, 1});
+        placa.piezas.push_back(b1);
+        auto* panel = construye_panel(placa);
+        std::vector<float> ords;
+        QObject::connect(panel, &Panel::orden,
+                         [&](quint16, quint16, float v) { ords.push_back(v); });
+        auto* dedo = panel->findChild<QPushButton*>("mando:0:0");
+        auto* sw   = panel->findChild<QPushButton*>("fija:0:0");
+        panel->activa_mandos(true);
+        comprueba(dedo && sw && dedo->isEnabled() && sw->isEnabled(),
+                  "activa_mandos() enciende los dos");
+        auto ordenes = [&] {
+            std::string t;
+            for (float v : ords) t += v >= 0.5f ? '1' : '0';
+            return t;
+        };
+        sw->setChecked(true);
+        comprueba(ordenes() == "1", "el «switch» puesto ordena pulsar = 1, y se queda");
+        emit dedo->pressed();
+        emit dedo->released();
+        comprueba(ordenes() == "1",
+                  "con el «switch» puesto, el boton de siempre no ordena nada: ni al "
+                  "hundirlo ni, sobre todo, al soltarlo, que soltaria lo que el "
+                  "«switch» sujeta");
+        sw->setChecked(false);
+        comprueba(ordenes() == "10", "quitar el «switch» ordena pulsar = 0");
+        emit dedo->pressed();
+        sw->setChecked(true);
+        sw->setChecked(false);
+        comprueba(ordenes() == "101",
+                  "con el dedo abajo, poner y quitar el «switch» no ordena nada: el "
+                  "boton sigue hundido todo el rato");
+        emit dedo->released();
+        comprueba(ordenes() == "1010", "y al soltar el dedo, por fin, 0");
+        emit dedo->pressed();
+        sw->setChecked(true);
+        emit dedo->released();
+        comprueba(ordenes() == "10101" && sw->isChecked(),
+                  "hundir, poner el «switch» y soltar deja el boton hundido: el "
+                  "«switch» lo sujeta");
+        sw->setChecked(false);
+        comprueba(ordenes() == "101010", "hasta que se quita");
+        delete panel;
+    }
+
+    // -------------------------------------------------------------------------
     std::printf("G2 La ventana entera, contra un modelo falso\n");
     {
         VentanaPrincipal v(0);              // puerto 0: el que dé el sistema
@@ -160,6 +220,20 @@ int main(int argc, char** argv)
         comprueba(puerto != 0 && arrancar && !arrancar->isEnabled() && resumen &&
                   resumen->text().contains("Esperando"),
                   "al abrirse escucha, dice que espera, y Arrancar esta desactivado");
+        auto* encima = v.findChild<QAction*>("siempre_encima");
+        comprueba(encima && encima->isCheckable() && !encima->isChecked() &&
+                      encima->shortcut() == QKeySequence(Qt::CTRL | Qt::Key_T) &&
+                      !(v.windowFlags() & Qt::WindowStaysOnTopHint),
+                  "Vista > Siempre encima existe, con Ctrl+T, y empieza sin marcar");
+        encima->trigger();
+        comprueba(encima->isChecked() && (v.windowFlags() & Qt::WindowStaysOnTopHint) &&
+                      v.isVisible() && v.configuracion().siempre_encima,
+                  "marcada, la ventana se queda por encima de las demas -y sigue a la "
+                  "vista: cambiar las banderas la esconde-");
+        encima->trigger();
+        comprueba(!(v.windowFlags() & Qt::WindowStaysOnTopHint) && v.isVisible() &&
+                      !v.configuracion().siempre_encima,
+                  "y desmarcada, vuelve a ser una ventana como las demas");
 
         ModeloFalso m;
         m.conecta(puerto);

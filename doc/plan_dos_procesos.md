@@ -1628,3 +1628,49 @@ en el administrador de tareas.
 ### 15.4 Lo que NO se ha hecho, que también es la fase 7
 
 Nada bonito: esta fase es que funcione. La grabación de sesiones es la fase 8.
+
+---
+
+## 16. Después de la fase 7: depurar con un botón pulsado
+
+Lo pidió el uso, no el plan: **depurar paso a paso desde CubeIDE con el botón
+de la placa pulsado**. Con un botón que solo ordena mientras el ratón está
+abajo, eso obliga a sujetarlo aquí y a la vez dar los pasos allí, que no se
+puede. Se hizo en tres pasos, cada uno su commit:
+
+| | Qué | Dónde |
+| :--- | :--- | :--- |
+| 1 | El «switch» al lado de cada botón, y *Siempre encima* | `mcu-sim-gui` |
+| 2 | Los rebotes del contacto, en el modelo del pulsador | `mcu-sim` |
+| 3 | El rebote como mando en marcha, el valor inicial de los mandos en el catálogo, y el deslizador que enseña su valor | los dos |
+
+**Ninguno toca el protocolo.** El «switch» es la ventana mandando 1 y 0, que el
+mando `pulsar` ya aceptaba; el rebote es física del contacto y su sitio es el
+XML de la placa, no la ventana —que así sigue sin conocer un tipo—; y el valor
+inicial de un mando es un atributo más del catálogo, que es XML.
+
+### 16.1 El «switch» y *Siempre encima*
+
+**El «switch».** Todo mando de tipo `boton` tiene ahora **dos** controles: el
+de siempre (`mando:<pieza>:<idx>`), que es un dedo, y al lado uno marcable con
+el texto `switch` (`fija:<pieza>:<idx>`), que deja el botón hundido hasta que
+se vuelva a tocar. No es una cosa del pulsador: lo lleva cualquier mando de
+tipo botón, de cualquier pieza, porque la ventana sigue sin saber qué es un
+pulsador.
+
+**La regla cuando se usan los dos**: el mando está hundido si lo está **uno u
+otro**, y solo se ordena cuando eso cambia. Con el «switch» puesto, el dedo no
+ordena nada —ni al bajar ni, sobre todo, al subir, que soltaría lo que el
+«switch» sujeta—; quitar el «switch» con el dedo abajo tampoco. Lo comprueba
+G1b de `prueba_ventana` con las seis combinaciones.
+
+***Siempre encima*** (*Vista*, Ctrl+T) pone la ventana por encima de las
+demás. Se guarda en la configuración (`vista.siempre_encima`) y se aplica al
+abrir. Cambiar las banderas de una ventana la esconde, así que se vuelve a
+enseñar si se estaba viendo; la prueba lo mira.
+
+**Cómo se ha comprobado**: `prueba_ventana` 44 → **56** (el «switch» en el
+panel, G1b entera y *Siempre encima*), `prueba_argumentos` 37 → **38** (se
+guarda y se relee). Lo que no se ve desde aquí es que el gestor de ventanas de
+cada sistema respete la bandera: eso es para una persona, en Windows sobre
+todo.

@@ -44,9 +44,12 @@
   "vista": {
     "_comentario": [
       "ritmo: real, mitad, libre o demanda; es el que sale elegido al arrancar.",
-      "periodo_ms es el de las instantaneas, en tiempo SIMULADO."
+      "periodo_ms es el de las instantaneas, en tiempo SIMULADO.",
+      "siempre_encima: la ventana por encima de las demas (Vista > Siempre encima,",
+      "Ctrl+T), para depurar en el IDE viendo la placa."
     ],
     "ritmo": "real",
-    "periodo_ms": 16.6667
+    "periodo_ms": 16.6667,
+    "siempre_encima": false
   }
 }

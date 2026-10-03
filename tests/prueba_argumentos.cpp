@@ -181,12 +181,14 @@ int main(int argc, char** argv)
         c.argumentos.insert("--ondas", "si");
         c.a_mano = "--traza-gdb";
         c.puerto = 4000;
+        comprueba(!c.siempre_encima, "la plantilla dice siempre_encima = false");
+        c.siempre_encima = true;
         comprueba(c.guarda(e), "se guarda: " + e.toStdString());
         Configuracion d;
         Configuracion::lee(ruta, d, e);
         comprueba(d.argumentos == c.argumentos && d.a_mano == c.a_mano && d.puerto == 4000 &&
-                      d.ejecutable == c.ejecutable && d.ritmo == c.ritmo,
-                  "y se vuelve a leer igual");
+                      d.ejecutable == c.ejecutable && d.ritmo == c.ritmo && d.siempre_encima,
+                  "y se vuelve a leer igual, siempre_encima incluido");
         QFile f(ruta);
         comprueba(f.open(QIODevice::ReadOnly) && f.readAll().contains("_comentario"),
                   "los comentarios de la plantilla sobreviven a guardar");
