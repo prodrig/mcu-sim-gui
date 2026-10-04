@@ -122,8 +122,23 @@ target_link_libraries(mcu-sim-gui PRIVATE pantalla)
 target_compile_definitions(mcu-sim-gui PRIVATE
     MCU_SIM_GUI_VERSION="${MCU_SIM_GUI_VERSION}")
 
-# En Windows, sin consola detrás de la ventana.
-set_target_properties(mcu-sim-gui PROPERTIES WIN32_EXECUTABLE ON)
+# En Windows, sin consola detrás de la ventana. En macOS, una .app.
+#
+# Lo de macOS hay que decirlo: `qt_standard_project_setup()` NO lo hace. El
+# parche de los ejecutables dio por hecho que si, y el primer CI con el lo
+# desmintio en los dos Mac: «no hay build/mcu-sim-gui.app». Sin .app,
+# macdeployqt no tiene donde meter Qt. Los MACOSX_BUNDLE_* rellenan el
+# Info.plist que CMake trae de plantilla: el nombre que enseña el Finder, el
+# identificador y la version -la de project(), que es la que el Info.plist
+# admite: numeros y puntos-.
+set_target_properties(mcu-sim-gui PROPERTIES
+    WIN32_EXECUTABLE ON
+    MACOSX_BUNDLE ON
+    MACOSX_BUNDLE_BUNDLE_NAME "mcu-sim-gui"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.prodrig.mcu-sim-gui"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_COPYRIGHT "AGPLv3")
 
 install(TARGETS mcu-sim-gui
         BUNDLE  DESTINATION .

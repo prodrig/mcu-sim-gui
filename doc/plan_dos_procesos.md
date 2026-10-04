@@ -1760,6 +1760,14 @@ ejecutar fuera del CI**, así que su primera prueba es el primer push con este
 cambio: hay que mirar que los cuatro trabajos acaben en verde y bajar un
 paquete antes de poner la primera etiqueta.
 
+**El primer CI con esto** (2026-10-03): Linux y Windows en verde —en Windows,
+la ventana apareció lanzada desde PowerShell con el `PATH` recortado—, y los
+dos Mac en rojo antes de empezar: «no hay `build/mcu-sim-gui.app`». El parche
+había dado por hecho que `qt_standard_project_setup()` convierte el ejecutable
+en una `.app`, y no lo hace. Ahora lo dice `CMakeLists.txt` (`MACOSX_BUNDLE`,
+con su `Info.plist`). Lo que viene detrás —`macdeployqt`, la firma, que
+arranca— todavía no ha corrido nunca: el siguiente CI es su primera prueba.
+
 **Lo que sigue pendiente de la fase 9**: firmar (sigue sin firma: SmartScreen y
 Gatekeeper avisan, y está dicho en las notas de la Release), un instalador que
 lleve **los dos** programas juntos, y bajar el suelo de Linux a 22.04, que pide

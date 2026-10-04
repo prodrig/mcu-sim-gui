@@ -163,7 +163,7 @@ C++17. Nada más: ni SystemC, ni una sola cabecera de `mcu-sim`.
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-./build/mcu-sim-gui
+./build/mcu-sim-gui                             # en macOS: open build/mcu-sim-gui.app
 ctest --test-dir build --output-on-failure      # las pruebas, sin ventana
 ```
 

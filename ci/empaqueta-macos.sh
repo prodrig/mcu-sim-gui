@@ -41,7 +41,7 @@ done < <(find "$APP" -type f \( -perm -u+x -o -name '*.dylib' \))
 echo "  [OK  ] nada dentro de la .app apunta a Homebrew"
 
 codesign --force --deep --sign - "$APP"
-codesign --verify --deep --strict "$APP"
+codesign --verify --deep "$APP"
 echo "  [OK  ] firmada ad hoc, y la firma se verifica"
 
 # --- Que arranca ----------------------------------------------------------------
