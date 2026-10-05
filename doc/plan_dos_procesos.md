@@ -1834,3 +1834,44 @@ va con las muestras), `prueba_sesion` 53 → **54** (`alarma="si"` se lee, y sin
 `placas/fuente_y_masa.xml`: saludo sin MCU, F1 limitando a sus 20 mA con el
 pulsador CORTO, la sobrecorriente a 1 y un solo `T_AVISO`. `prueba_argumentos`
 sigue en 38, con `--mcu` sin omisión en el volcado de prueba.
+
+---
+
+## 19. Varias placas enchufadas: el protocolo pasa a la versión 2
+
+En `mcu-sim` (P-15, `doc/analisis_placas_conectadas.md` allí) hay ahora una
+pieza `Conector` y un fichero `<sistema>` que junta placas —una Nucleo con un
+shield, dos placas por un cable— y dice cómo se enchufan. Lo simula aplanado:
+todo lo de la placa `N` se llama `N/...`. **`T_PLACA` puede traer ese
+`<sistema>`**, y como eso cambia lo que significaba un mensaje que ya existía,
+**el protocolo sube a la versión 2** (`doc/protocolo.md` §3). `protocolo.h` es
+el mismo fichero en los dos repositorios, y lo vigila `make gui-proto`: este se
+sube primero.
+
+Aquí:
+
+* la sesión elige la 2 con un `mcu-sim` que la ofrece, y la 1 con uno viejo;
+* `junta_placa` lee un `<sistema>` además de una `<placa>`: las placas
+  (`SubPlacaGui`), los acoples y cuántos hilos, y cada pieza sabe de qué
+  placa es por el prefijo de su id (`PiezaGui::placa`, `id_local`);
+* **el panel pone un recuadro por placa** (`placa:N`) con sus piezas dentro,
+  cada una con su nombre local —`LD2`, no `N/LD2`—;
+* **una pieza con más de ocho patillas las pliega** en una línea —«38
+  patillas, 12 a nodos de la placa»— con la lista en la ayuda. Sin eso, un
+  conector morpho se come la pantalla. Tampoco aquí aparece la palabra
+  «Conector»: lo decide el número de patillas;
+* **un conector enchufado dice con qué** (`acople:<pieza>`), sacado de los
+  `<acopla>` del sistema;
+* el resumen dice las placas, y cuántos acoples e hilos.
+
+Una ventana anterior, con un `mcu-sim` nuevo, recibe el sistema con la raíz
+`<placa>`: lo pinta, sin agrupar. Al revés, igual que siempre.
+
+**Cómo se ha comprobado**: `prueba_sesion` 54 → **58** (un `<sistema>` se lee;
+la versión elegida es la 2; lo mismo con la raíz `<placa>` no es un sistema),
+`prueba_ventana` 67 → **74** (G7: un recuadro por placa, nombres locales,
+patillas plegadas, el acople, y la ventana entera con un modelo falso de la
+versión 2) y `prueba_cruzada` 31 → **36** contra el `mcu-sim` de verdad con
+`placas/nucleo_y_shield.xml`: saludo en la 2 con un sistema de dos placas y
+cuatro acoples, y el blinky encendiendo a la vez —ni una muestra distinta en
+700— el LD2 de la Nucleo y el LED del shield.

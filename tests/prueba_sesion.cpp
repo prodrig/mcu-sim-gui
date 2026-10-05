@@ -95,6 +95,37 @@ int main(int argc, char** argv)
                   p.avisos.isEmpty(),
                   "cuatro observables, tres que pintar, tres mandos, y nada que no case");
 
+        {
+            // Un <sistema>, de la versión 2 del protocolo
+            QVector<PiezaGui> cs;
+            PlacaGui ps;
+            comprueba(lee_catalogo(CATALOGO_SISTEMA_XML, cs, e) &&
+                          junta_placa(SISTEMA_XML, cs, ps, e) && ps.es_sistema() &&
+                          ps.nombre == "nucleo-y-shield" && ps.placas.size() == 2 &&
+                          ps.placas[0].id == "N" && ps.placas[0].nombre == "nucleo-f446re" &&
+                          ps.placas[1].fichero == "shield_leds.xml",
+                      "un <sistema> se lee: su nombre y sus dos placas, con id, nombre y "
+                      "fichero");
+            comprueba(ps.piezas.size() == 4 && ps.piezas[0].placa == "N" &&
+                          ps.piezas[0].id_local == "LD2" && ps.piezas[3].placa == "S" &&
+                          ps.piezas[3].id_local == "LD_D13" &&
+                          ps.piezas[3].patillas[0].nodo == "N/u0.PA5" && ps.avisos.isEmpty(),
+                      "cada pieza sabe de que placa es y como se llama dentro de ella, por "
+                      "el prefijo de su id; el LED del shield cuelga de N/u0.PA5");
+            comprueba(ps.mcus == QStringList({"N/u0 (STM32F446RE)"}) &&
+                          ps.acoples.size() == 1 && ps.acoples[0].a == "N/CN5" &&
+                          ps.acoples[0].b == "S/J5" && !ps.acoples[0].espejo &&
+                          ps.n_hilos == 1,
+                      "con su MCU, su acople y su hilo");
+            PlacaGui plana;
+            comprueba(junta_placa("<placa nombre=\"x\"><componente tipo=\"Led\" "
+                                  "id=\"N/LD2\"/></placa>", cs, plana, e) &&
+                          !plana.es_sistema() && plana.piezas[0].placa.isEmpty() &&
+                          plana.piezas[0].id_local == "N/LD2",
+                      "lo mismo con la raiz <placa> -lo que recibe una ventana de la "
+                      "version 1- no es un sistema: la barra no agrupa nada");
+        }
+
         PlacaGui q;
         const QByteArray ajena =
             "<placa nombre=\"x\"><componente tipo=\"Servo\" id=\"S1\"/></placa>";
@@ -115,7 +146,8 @@ int main(int argc, char** argv)
     // -------------------------------------------------------------------------
     std::printf("G2 La Sesion contra un modelo falso\n");
     {
-        comprueba(Sesion::elige_version(1) == 1 && Sesion::elige_version(5) == 1 &&
+        comprueba(Sesion::elige_version(1) == 1 && Sesion::elige_version(2) == 2 &&
+                  Sesion::elige_version(5) == 2 &&
                   Sesion::elige_version(0) == 0 && Sesion::elige_version(-3) == 0,
                   "la version elegida es la mas alta que conocen los dos, o 0");
 
@@ -135,11 +167,11 @@ int main(int argc, char** argv)
         m.conecta(s.puerto());
         m.manda(T_HOLA, "protocolo_max=3\nmcu_sim=prueba\nplaca=placas/discovery.xml\n");
         comprueba(m.espera_leidos(1) && m.leido[0].tipo == T_VERSION &&
-                  m.leido[0].cuerpo.startsWith("protocolo=1\n"),
-                  "a un modelo que ofrece hasta la 3, contesta T_VERSION protocolo=1");
-        comprueba(s.version() == 1 && s.hola().value("placa") == "placas/discovery.xml",
+                  m.leido[0].cuerpo.startsWith("protocolo=2\n"),
+                  "a un modelo que ofrece hasta la 3, contesta T_VERSION protocolo=2");
+        comprueba(s.version() == 2 && s.hola().value("placa") == "placas/discovery.xml",
                   "y se queda con la version y con lo que dijo T_HOLA");
-        m.version(1);
+        m.version(2);
         m.manda(T_PLACA, PLACA_XML);
         m.manda(T_CATALOGO, CATALOGO_XML);
         comprueba(espera([&] { return placas == 1; }) && s.placa().piezas.size() == 4 &&

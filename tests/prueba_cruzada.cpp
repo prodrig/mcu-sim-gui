@@ -12,6 +12,9 @@
 // la fase 6, G3: a demanda, un paso exacto, y T_PARA en marcha. Y G4, una
 // placa SIN MCU (`placas/fuente_y_masa.xml`): la Fuente F1 limitando a sus
 // 20 mA con el pulsador CORTO pulsado, y su `sobrecorriente`, una alarma.
+// Y G5, un SISTEMA (`placas/nucleo_y_shield.xml`, versión 2 del protocolo):
+// la Nucleo y un shield sin MCU, y el blinky encendiendo a la vez el LD2 de
+// una placa y el LED del shield, que está en la otra.
 //
 // Necesita un `mcu-sim` compilado y su árbol de fuentes, porque las placas y
 // los firmwares están allí. Se le dicen con dos variables de entorno:
@@ -26,6 +29,7 @@
 #include <QHash>
 #include <QProcess>
 
+#include <algorithm>
 #include <cmath>
 
 #include "comun.h"
@@ -94,8 +98,8 @@ int main(int argc, char** argv)
             comprueba(reb_b1 == 2 && reb_b2 == 0,
                       "y el catalogo dice donde esta cada mando: B1 rebota 2 ms y B2 no");
         }
-        comprueba(s.hola().value("modo") == "simula" && s.version() == 1,
-                  "en modo simula y con la version 1");
+        comprueba(s.hola().value("modo") == "simula" && s.version() == 2,
+                  "en modo simula y con la version 2");
         if (arranca) {
             // encendido de LD4, la tercera pieza: su primer observable
             quint16 id = 0;
@@ -236,6 +240,54 @@ int main(int argc, char** argv)
                   "y a los 25 ms, suelto, todo como al principio");
         comprueba(avisos.filter("F1: sobrecorriente").size() == 1,
                   "con un T_AVISO, uno solo, al entrar en limitacion");
+        const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);
+        comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0,
+                  "y mcu-sim termina con codigo 0");
+    }
+    // -------------------------------------------------------------------------
+    std::printf("G5 Un sistema: la Nucleo y un shield enchufado\n");
+    {
+        Sesion s;
+        s.escucha(QHostAddress::LocalHost, 0);
+        int listos = 0, fines = 0;
+        quint64 t_inst = 0;
+        QHash<quint64, QHash<quint16, float>> m;
+        QObject::connect(&s, &Sesion::listo, [&] { ++listos; });
+        QObject::connect(&s, &Sesion::fin, [&](quint32, qint32, quint64) { ++fines; });
+        QObject::connect(&s, &Sesion::instantanea, [&](quint64 t, quint32) { t_inst = t; });
+        QObject::connect(&s, &Sesion::muestra, [&](quint16 id, float v) { m[t_inst][id] = v; });
+        QProcess p;
+        p.setWorkingDirectory(src);
+        p.start(sim, {"placas/nucleo_y_shield.xml", "--ms=700",
+                      "--gui", QStringLiteral("127.0.0.1:%1").arg(s.puerto())});
+        comprueba(espera([&] { return listos == 1; }, 20000) && s.version() == 2 &&
+                      s.placa().es_sistema() && s.placa().placas.size() == 2 &&
+                      s.placa().placas[0].id == "N" && s.placa().placas[1].id == "S" &&
+                      s.placa().acoples.size() == 4,
+                  "saluda en la version 2 con un <sistema>: placas N y S, y cuatro acoples");
+        int ld2 = -1, d13 = -1;
+        bool casan = !s.placa().piezas.isEmpty();
+        for (const PiezaGui& pz : s.placa().piezas) {
+            casan = casan && pz.en_placa && !pz.placa.isEmpty();
+            if (pz.id == "N/LD2") ld2 = pz.observables.value(0).id_obs;
+            if (pz.id == "S/LD_D13") d13 = pz.observables.value(0).id_obs;
+        }
+        comprueba(casan && ld2 >= 0 && d13 >= 0 && s.placa().avisos.isEmpty(),
+                  "todas las piezas casan con el catalogo y saben de que placa son");
+        s.suscribe(1000000, {quint16(ld2), quint16(d13)});
+        comprueba(s.arranca(RIT_LIBRE) && espera([&] { return fines == 1; }, 60000),
+                  "700 ms simulados");
+        QVector<quint64> ts = m.keys().toVector();
+        std::sort(ts.begin(), ts.end());
+        int flancos = 0, distintos = 0;
+        for (int k = 0; k < ts.size(); ++k) {
+            const float a = m[ts[k]].value(quint16(ld2), -1), b = m[ts[k]].value(quint16(d13), -1);
+            if (a != b) ++distintos;
+            if (k && a != m[ts[k - 1]].value(quint16(ld2), -1)) ++flancos;
+        }
+        comprueba(ts.size() == 700 && flancos >= 6 && distintos == 0,
+                  "y el blinky enciende y apaga los dos LEDs A LA VEZ, en dos placas: " +
+                      std::to_string(flancos) + " flancos, ni una muestra distinta");
         const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);
         comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0,
                   "y mcu-sim termina con codigo 0");

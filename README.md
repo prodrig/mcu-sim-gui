@@ -28,8 +28,11 @@ La **contraparte de visualización gráfica de
 > rebota —un desplegable— (plan §16). **Y una placa puede no llevar MCU**:
 > una `Fuente` y una `Gnd` de `mcu-sim`, con su límite de corriente, se ven
 > aquí con la corriente en mA y la **sobrecorriente como alarma** —«⚠ SI» en
-> rojo, y el título de la pieza también—; arriba, «sin MCU» (plan §18). Lo
-> que falta: grabar y reproducir sesiones (fase 8).
+> rojo, y el título de la pieza también—; arriba, «sin MCU» (plan §18). **Y
+> varias placas enchufadas** —una Nucleo con un shield encima, un `<sistema>`
+> de `mcu-sim`— se ven en un recuadro por placa, cada conector diciendo con
+> qué está enchufado (plan §19, protocolo v2). Lo que falta: grabar y
+> reproducir sesiones (fase 8).
 >
 > Para verlo, con las dos cosas compiladas y una al lado de la otra:
 >

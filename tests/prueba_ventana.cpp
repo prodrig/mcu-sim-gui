@@ -23,6 +23,9 @@
 //   G6  una placa sin MCU, con una Fuente: el resumen dice «sin MCU», la
 //       corriente se lee en mA y la sobrecorriente -un observable `alarma`-
 //       se pinta en rojo, con el título de su recuadro, y se apaga al volver.
+//   G7  un SISTEMA (versión 2 del protocolo): un recuadro por placa con sus
+//       piezas dentro, con su nombre local; un conector pliega sus patillas y
+//       dice con qué está enchufado; el resumen dice las placas.
 // =============================================================================
 #include <cmath>
 
@@ -525,6 +528,67 @@ int main(int argc, char** argv)
                       sob->styleSheet().isEmpty() && !caja->property("alarma").toBool() &&
                       caja->styleSheet().isEmpty(),
                   "y al pasar, todo vuelve a su color");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("G7 Un sistema: un recuadro por placa\n");
+    {
+        QVector<PiezaGui> cs;
+        PlacaGui ps;
+        QString e;
+        lee_catalogo(CATALOGO_SISTEMA_XML, cs, e);
+        junta_placa(SISTEMA_XML, cs, ps, e);
+        auto* panel = construye_panel(ps);
+        auto* gn = panel->findChild<QGroupBox*>("placa:N");
+        auto* gs = panel->findChild<QGroupBox*>("placa:S");
+        comprueba(gn && gs && gn->title() == QString::fromUtf8("N · nucleo-f446re") &&
+                      gs->title() == QString::fromUtf8("S · shield-leds") &&
+                      gs->toolTip() == "shield_leds.xml",
+                  "un recuadro por placa, con su id y su nombre, y su fichero en la ayuda");
+        auto* ld2 = panel->findChild<QGroupBox*>("pieza:0");
+        auto* d13 = panel->findChild<QGroupBox*>("pieza:3");
+        comprueba(ld2 && d13 && ld2->parentWidget() == gn && d13->parentWidget() == gs &&
+                      ld2->title() == QString::fromUtf8("LD2 · Led") &&
+                      d13->title() == QString::fromUtf8("LD_D13 · Led"),
+                  "cada pieza en el de su placa, con su nombre dentro de ella: LD2, no N/LD2");
+        auto* pl = panel->findChild<QLabel*>("patillas:1");
+        comprueba(pl && pl->text() == "10 patillas, 1 a nodos de la placa" &&
+                      pl->toolTip().contains(QString::fromUtf8("6 → N/u0.PA5")) &&
+                      !panel->findChild<QLabel*>("patilla:1:6"),
+                  "un conector de 10 pliega sus patillas en una linea -cuantas, y cuantas "
+                  "van soldadas- con la lista en la ayuda: \"" + (pl ? pl->text() : QString()).toStdString() + "\"");
+        auto* ac = panel->findChild<QLabel*>("acople:1");
+        auto* ac2 = panel->findChild<QLabel*>("acople:2");
+        comprueba(ac && ac->text() == "S/J5" && ac2 && ac2->text() == "N/CN5" &&
+                      !panel->findChild<QLabel*>("acople:0"),
+                  "y cada conector dice con quien esta enchufado; un LED, nada");
+        comprueba(panel->pintados() == QVector<quint16>({0, 1}),
+                  "los indicadores, los mismos que sin agrupar: los dos LEDs");
+        delete panel;
+
+        VentanaPrincipal v(0);
+        v.show();
+        auto* resumen = v.findChild<QLabel*>("resumen");
+        ModeloFalso m;
+        m.conecta(v.sesion().puerto());
+        m.manda(T_HOLA, "protocolo_max=2\nplaca=placas/nucleo_y_shield.xml\nmcu=STM32F446RE\n"
+                        "firmware=blinky446.bin\n");
+        comprueba(m.espera_leidos(1) && m.leido[0].cuerpo.startsWith("protocolo=2\n"),
+                  "a un mcu-sim que ofrece la 2, la ventana elige la 2");
+        m.version(2);
+        m.manda(T_PLACA, SISTEMA_XML);
+        m.manda(T_CATALOGO, CATALOGO_SISTEMA_XML);
+        m.manda(T_LISTO);
+        auto* arr = v.findChild<QPushButton*>("arrancar");
+        comprueba(espera([&] { return arr->isEnabled(); }) &&
+                      v.findChild<QGroupBox*>("placa:S") &&
+                      resumen->text().contains("nucleo-y-shield") &&
+                      resumen->text().contains("2 placa(s)") &&
+                      resumen->text().contains("N: nucleo-f446re") &&
+                      resumen->text().contains("1 acople(s), 1 hilo(s)") &&
+                      resumen->text().contains("N/u0 (STM32F446RE)"),
+                  "y la ventana entera: el panel por placas, y arriba el sistema, sus "
+                  "placas, sus acoples y el chip: \"" + resumen->text().toStdString() + "\"");
     }
 
     return resultado();

@@ -6,6 +6,7 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QSignalBlocker>
@@ -175,19 +176,50 @@ QWidget* control_de(Panel* panel, const PiezaGui& p, const MandoGui& m, QWidget*
     return w;
 }
 
-QGroupBox* recuadro_de(Panel* panel, const PiezaGui& p, QWidget* padre,
-                       QHash<quint16, QLabel*>& etiquetas, QVector<QWidget*>& controles)
+// Una pieza con más patillas que esto -un conector de 38 pines- las pliega en
+// una línea, con la lista entera en la ayuda emergente: si no, su recuadro se
+// come la pantalla y no dice nada que se lea.
+constexpr int MAX_PATILLAS_A_LA_VISTA = 8;
+
+QGroupBox* recuadro_de(Panel* panel, const PiezaGui& p, const PlacaGui& placa,
+                       QWidget* padre, QHash<quint16, QLabel*>& etiquetas,
+                       QVector<QWidget*>& controles)
 {
-    QString titulo = QStringLiteral("%1 · %2").arg(p.id, p.tipo);
+    // En un sistema, el recuadro de la placa ya dice cuál es: aquí basta el
+    // nombre de la pieza dentro de ella (`LD2`, no `N/LD2`).
+    QString titulo = QStringLiteral("%1 · %2").arg(p.id_local, p.tipo);
     if (!p.conectada) titulo += QStringLiteral(" (desoldada)");
     auto* g = new QGroupBox(titulo, padre);
     g->setObjectName(QStringLiteral("pieza:%1").arg(p.idx));
     auto* f = new QFormLayout(g);
 
-    for (const PatillaGui& t : p.patillas) {
-        auto* l = new QLabel(t.nodo, g);
-        l->setObjectName(QStringLiteral("patilla:%1:%2").arg(p.idx).arg(t.nombre));
-        f->addRow(t.nombre + QStringLiteral(" →"), l);
+    if (p.patillas.size() > MAX_PATILLAS_A_LA_VISTA) {
+        int soldadas = 0;
+        QStringList lista;
+        for (const PatillaGui& t : p.patillas) {
+            lista << QStringLiteral("%1 → %2").arg(t.nombre, t.nodo);
+            // Un pin al aire se llama como él mismo: `N/CN5.7`
+            if (!t.nodo.endsWith(QLatin1Char('.') + t.nombre)) ++soldadas;
+        }
+        auto* l = new QLabel(QObject::tr("%1 patillas, %2 a nodos de la placa")
+                                 .arg(p.patillas.size()).arg(soldadas), g);
+        l->setObjectName(QStringLiteral("patillas:%1").arg(p.idx));
+        l->setToolTip(lista.join(QLatin1Char('\n')));
+        f->addRow(QObject::tr("patillas →"), l);
+    } else {
+        for (const PatillaGui& t : p.patillas) {
+            auto* l = new QLabel(t.nodo, g);
+            l->setObjectName(QStringLiteral("patilla:%1:%2").arg(p.idx).arg(t.nombre));
+            f->addRow(t.nombre + QStringLiteral(" →"), l);
+        }
+    }
+    // Un conector enchufado dice con qué: lo dice el <acopla> del sistema
+    for (const AcopleGui& a : placa.acoples) {
+        const QString otro = a.a == p.id ? a.b : (a.b == p.id ? a.a : QString());
+        if (otro.isEmpty()) continue;
+        auto* l = new QLabel(otro + (a.espejo ? QObject::tr(" (en espejo)") : QString()), g);
+        l->setObjectName(QStringLiteral("acople:%1").arg(p.idx));
+        f->addRow(QObject::tr("enchufado a ⇄"), l);
     }
     int ocultos = 0;
     for (const ObservableGui& o : p.observables) {
@@ -215,14 +247,43 @@ QGroupBox* recuadro_de(Panel* panel, const PiezaGui& p, QWidget* padre,
 Panel::Panel(const PlacaGui& placa, QWidget* padre) : QWidget(padre)
 {
     setObjectName(QStringLiteral("panel"));
-    auto* rejilla = new QGridLayout(this);
     const int columnas = 3;
     QHash<quint16, QLabel*> etiquetas;
-    for (int i = 0; i < placa.piezas.size(); ++i)
-        rejilla->addWidget(recuadro_de(this, placa.piezas[i], this, etiquetas, controles_),
-                           i / columnas,
-                           i % columnas, Qt::AlignTop);
-    rejilla->setRowStretch(int((placa.piezas.size() + columnas - 1) / columnas), 1);
+    // Las piezas en una rejilla de tres columnas, dentro de `dentro`
+    auto rejilla_de = [&](QWidget* dentro, const QVector<int>& cuales) {
+        auto* rejilla = new QGridLayout(dentro);
+        for (int k = 0; k < cuales.size(); ++k)
+            rejilla->addWidget(recuadro_de(this, placa.piezas[cuales[k]], placa, dentro,
+                                           etiquetas, controles_),
+                               k / columnas, k % columnas, Qt::AlignTop);
+        rejilla->setRowStretch(int((cuales.size() + columnas - 1) / columnas), 1);
+    };
+    if (!placa.es_sistema()) {
+        QVector<int> todas;
+        for (int i = 0; i < placa.piezas.size(); ++i) todas.push_back(i);
+        rejilla_de(this, todas);
+    } else {
+        // UN RECUADRO POR PLACA, con las suyas dentro, en el orden del sistema.
+        // Una pieza que no diga de qué placa es -no debería haberla- va al
+        // final, en uno aparte, para que no se pierda.
+        auto* v = new QVBoxLayout(this);
+        QVector<SubPlacaGui> grupos = placa.placas;
+        grupos.push_back({QString(), tr("(sin placa)"), QString()});
+        for (const SubPlacaGui& s : grupos) {
+            QVector<int> suyas;
+            for (int i = 0; i < placa.piezas.size(); ++i)
+                if (placa.piezas[i].placa == s.id) suyas.push_back(i);
+            if (suyas.isEmpty() && s.id.isEmpty()) continue;
+            auto* g = new QGroupBox(s.id.isEmpty() ? s.nombre
+                                                   : QStringLiteral("%1 · %2").arg(s.id, s.nombre),
+                                    this);
+            g->setObjectName(QStringLiteral("placa:%1").arg(s.id));
+            if (!s.fichero.isEmpty()) g->setToolTip(s.fichero);
+            rejilla_de(g, suyas);
+            v->addWidget(g);
+        }
+        v->addStretch(1);
+    }
     for (const PiezaGui& p : placa.piezas)
         for (const ObservableGui& o : p.observables)
             if (QLabel* l = etiquetas.value(quint16(o.id_obs), nullptr)) {

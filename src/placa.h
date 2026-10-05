@@ -6,7 +6,10 @@
 //
 //   * T_PLACA, la placa DECLARADA: MCUs, componentes con su tipo, sus
 //     parámetros y a qué nodo va cada patilla. Es el mismo volcado que hace
-//     `--netlist`;
+//     `--netlist`. Desde la versión 2 del protocolo puede ser un <sistema>
+//     -varias placas enchufadas-, aplanado: las placas delante con su id, y
+//     todo lo demás con el nombre cualificado (`N/LD2`). Una pieza sabe de
+//     qué placa es por ese prefijo;
 //   * T_CATALOGO, lo que cada pieza deja VER y TOCAR: sus observables y sus
 //     mandos, con los índices que se usarán en el protocolo.
 //
@@ -57,6 +60,9 @@ struct PatillaGui {
 struct PiezaGui {
     int     idx = 0;          // el `pieza` de una Orden
     QString id, tipo;
+    // En un sistema, la placa de la pieza (`N` de `N/LD2`) y su nombre dentro
+    // de ella (`LD2`). Fuera de un sistema, `placa` vacía e `id_local` = `id`.
+    QString placa, id_local;
     QVector<ObservableGui> observables;
     QVector<MandoGui>      mandos;
     // De T_PLACA. Una pieza que el modelo construye y la placa no declara -no
@@ -66,9 +72,23 @@ struct PiezaGui {
     bool    en_placa  = false;
 };
 
+// Una placa de un <sistema>, y un acople entre dos conectores.
+struct SubPlacaGui {
+    QString id, nombre, fichero;
+};
+struct AcopleGui {
+    QString a, b;             // "N/CN5", "S/J5"
+    bool    espejo = false;
+};
+
 struct PlacaGui {
     QString           nombre;
-    QStringList       mcus;   // "u0 (STM32F407VG)"; vacía si no declara ninguno
+    // Vacías en una placa suelta: es como se sabe que esto es un sistema.
+    QVector<SubPlacaGui> placas;
+    QVector<AcopleGui>   acoples;
+    int                  n_hilos = 0;
+    bool es_sistema() const { return !placas.isEmpty(); }
+    QStringList       mcus;   // "u0 (STM32F407VG)", "N/u0 (...)"; vacía si ninguno
     QVector<PiezaGui> piezas; // en el orden del catálogo: `idx` es su posición
     QStringList       avisos; // componentes de la placa que el catálogo no trae
 
@@ -81,7 +101,8 @@ struct PlacaGui {
 // catálogo.
 bool lee_catalogo(const QByteArray& xml, QVector<PiezaGui>& piezas, QString& error);
 
-// Lee T_PLACA y la junta con el catálogo ya leído.
+// Lee T_PLACA -una <placa>, o desde la versión 2 un <sistema>- y la junta con
+// el catálogo ya leído.
 bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
                  PlacaGui& placa, QString& error);
 

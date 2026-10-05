@@ -63,6 +63,7 @@ bool lee_catalogo(const QByteArray& xml, QVector<PiezaGui>& piezas, QString& err
             PiezaGui p;
             p.idx  = entero(a, "idx", ok);
             p.id   = texto(a, "id");
+            p.id_local = p.id;
             p.tipo = texto(a, "tipo");
             if (p.idx != piezas.size()) {
                 error = QStringLiteral("la pieza %1 trae idx=%2, y le toca el %3")
@@ -126,9 +127,18 @@ bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
         }
         if (t != QXmlStreamReader::StartElement) continue;
         const QXmlStreamAttributes a = r.attributes();
-        if (r.name() == QLatin1String("placa")) {
+        if (!raiz && (r.name() == QLatin1String("placa") ||
+                      r.name() == QLatin1String("sistema"))) {
             raiz = true;
             placa.nombre = texto(a, "nombre");
+        } else if (r.name() == QLatin1String("placa")) {
+            // Una placa DENTRO de un <sistema>: solo su id y su nombre
+            placa.placas.push_back({texto(a, "id"), texto(a, "nombre"), texto(a, "fichero")});
+        } else if (r.name() == QLatin1String("acopla")) {
+            placa.acoples.push_back({texto(a, "a"), texto(a, "b"),
+                                     a.value(QLatin1String("espejo")) == QLatin1String("si")});
+        } else if (r.name() == QLatin1String("hilo")) {
+            ++placa.n_hilos;
         } else if (r.name() == QLatin1String("mcu")) {
             const QString id = texto(a, "id"), tipo = texto(a, "tipo");
             placa.mcus << (id.isEmpty() ? tipo : QStringLiteral("%1 (%2)").arg(id, tipo));
@@ -152,8 +162,23 @@ bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
         return false;
     }
     if (!raiz) {
-        error = QStringLiteral("el XML no es una <placa>");
+        error = QStringLiteral("el XML no es una <placa> ni un <sistema>");
         return false;
+    }
+    // La placa de cada pieza, por el prefijo de su id. Solo cuenta si es una
+    // de las placas declaradas: fuera de un sistema, un id con barra no dice
+    // nada (no debería haberlo).
+    for (PiezaGui& p : placa.piezas) {
+        p.placa.clear();
+        p.id_local = p.id;
+        const int b = p.id.indexOf(QLatin1Char('/'));
+        if (b <= 0) continue;
+        const QString pl = p.id.left(b);
+        for (const SubPlacaGui& s : placa.placas)
+            if (s.id == pl) {
+                p.placa    = pl;
+                p.id_local = p.id.mid(b + 1);
+            }
     }
     return true;
 }

@@ -122,7 +122,7 @@ mcu-sim                                   mcu-sim-gui
 **`T_HOLA`** — cuerpo de texto, una línea `clave=valor` por renglón, UTF-8:
 
 ```
-protocolo_max=1
+protocolo_max=2
 mcu_sim=0.9.0
 pid=48211
 placa=placas/discovery_min.xml
@@ -143,7 +143,7 @@ una `Gnd` y lo que cuelgue de ellas. La ventana dice entonces «sin MCU».
 ≤ `protocolo_max`. Mismo formato:
 
 ```
-protocolo=1
+protocolo=2
 gui=0.1.0
 ```
 
@@ -152,11 +152,52 @@ Si la GUI no sabe hablar ninguna versión que el modelo ofrezca, manda
 código distinto de cero. **La negociación es de una sola vuelta**: el que se
 conecta propone el máximo, el que escucha elige.
 
+**Las versiones**, que suben cuando cambia el significado de algo que ya
+existía —no por añadir un mensaje, que se salta por longitud—:
+
+| Versión | Qué cambió |
+| :--- | :--- |
+| 1 | La primera |
+| 2 | (2026-10-05) `T_PLACA` puede traer un `<sistema>`: varias placas enchufadas entre sí |
+
+Las dos se hablan: una ventana de la 2 con un `mcu-sim` de la 1 elige la 1, y
+un `mcu-sim` de la 2 con una ventana de la 1 le manda un sistema con la raíz
+`<placa>` de siempre (abajo).
+
 **`T_PLACA`** — el XML de `--netlist`, entero y tal cual. No se inventa un
 formato: ese volcado ya existe, ya está versionado y la suite ya lo compara
 consigo mismo (`git diff --exit-code placas/banco.xml`). La GUI construye sus
 widgets a partir de él **sin conocer ni un tipo de C++**, que es todo el
 argumento de §2.2 del análisis.
+
+**Desde la versión 2, un `<sistema>`** cuando `mcu-sim` simula varias placas
+enchufadas (`doc/analisis_placas_conectadas.md` en `mcu-sim`). Va **aplanado y
+resuelto**: las placas delante, con su id; luego todo lo de todas con el nombre
+cualificado por su placa y una barra, y los conectores ya convertidos en nodos;
+y al final los acoples y los hilos, que ya están aplicados y van para que la
+ventana sepa qué se enchufó con qué:
+
+```xml
+<sistema nombre="nucleo-y-shield">
+  <placa id="N" nombre="nucleo-f446re" fichero="nucleo_f446re.xml"/>
+  <placa id="S" nombre="shield-leds" fichero="shield_leds.xml"/>
+  <mcu tipo="STM32F446RE" id="N/u0" firmware="verif/fw/blinky446/blinky446.bin"/>
+  <componente tipo="Led" id="N/LD2" ...><pin nombre="anodo" nodo="N/u0.PA5"/></componente>
+  <componente tipo="Conector" id="S/J5" ...>
+    <pin nombre="6" nodo="N/u0.PA5"/>   <!-- enchufado al CN5.6 de la Nucleo -->
+    <pin nombre="7" nodo="N/CN5.7"/>    <!-- al aire en las dos -->
+    ...
+  </componente>
+  <componente tipo="Led" id="S/LD_D13" ...><pin nombre="anodo" nodo="N/u0.PA5"/></componente>
+  <acopla a="N/CN5" b="S/J5"/>
+  <hilo a="N/CN9.2" b="S/J9.1"/>
+</sistema>
+```
+
+Una pieza es de la placa del prefijo de su id (`N/LD2` es de `N`); el
+catálogo usa los mismos ids. **A una ventana de la versión 1** le llega lo
+mismo con la raíz `<placa nombre="...">` y sin las `<placa id>`, `<acopla>` e
+`<hilo>`: la pinta, sin agrupar. Una placa suelta se manda igual en las dos.
 
 **`T_CATALOGO`** — lo que el XML todavía no dice: qué se puede **ver** y qué se
 puede **hacer**. También XML, en el mismo estilo:

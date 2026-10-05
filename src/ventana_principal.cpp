@@ -400,6 +400,17 @@ void VentanaPrincipal::pon_placa()
                         .arg(p.nombre.toHtmlEscaped(), mcus.toHtmlEscaped(),
                              fw.toHtmlEscaped())
                         .arg(p.piezas.size()).arg(p.n_interesantes()).arg(p.n_mandos());
+    // Un sistema dice sus placas y cuántos acoples las unen; el resto es igual
+    if (p.es_sistema()) {
+        QStringList pl;
+        for (const SubPlacaGui& x : p.placas)
+            pl << QStringLiteral("%1: %2").arg(x.id, x.nombre).toHtmlEscaped();
+        texto += tr("<br>%n placa(s) &nbsp; %1", nullptr, int(p.placas.size()))
+                     .arg(pl.join(QStringLiteral(", ")));
+        if (!p.acoples.isEmpty() || p.n_hilos)
+            texto += tr(" &nbsp; <i>%1 acople(s), %2 hilo(s)</i>")
+                         .arg(p.acoples.size()).arg(p.n_hilos);
+    }
     if (h.value(QStringLiteral("modo")) == QLatin1String("valida"))
         texto += tr(" &nbsp; <b>(solo validacion: no se simulara)</b>");
     resumen_->setText(texto);

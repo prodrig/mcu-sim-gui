@@ -117,6 +117,61 @@ inline const char* CATALOGO_XML =
     "  <pieza idx=\"3\" id=\"R35\" tipo=\"Rpull\"/>\n"
     "</catalogo>\n";
 
+// UN SISTEMA (versión 2 del protocolo): una Nucleo y un shield, con un
+// conector de cada lado enchufado. Es lo que manda `mcu-sim` para
+// placas/nucleo_y_shield.xml, recortado: aplanado, con los nombres
+// cualificados y los conectores ya resueltos.
+inline const char* SISTEMA_XML =
+    "<sistema nombre=\"nucleo-y-shield\">\n"
+    "  <placa id=\"N\" nombre=\"nucleo-f446re\" fichero=\"nucleo_f446re.xml\"/>\n"
+    "  <placa id=\"S\" nombre=\"shield-leds\" fichero=\"shield_leds.xml\"/>\n"
+    "  <mcu tipo=\"STM32F446RE\" id=\"N/u0\"/>\n"
+    "  <componente tipo=\"Led\" id=\"N/LD2\" a_vss=\"si\">\n"
+    "    <pin nombre=\"anodo\" nodo=\"N/u0.PA5\"/>\n"
+    "  </componente>\n"
+    "  <componente tipo=\"Conector\" id=\"N/CN5\" columnas=\"10\" filas=\"1\">\n"
+    "    <pin nombre=\"1\" nodo=\"N/CN5.1\"/>\n"
+    "    <pin nombre=\"2\" nodo=\"N/CN5.2\"/>\n"
+    "    <pin nombre=\"3\" nodo=\"N/CN5.3\"/>\n"
+    "    <pin nombre=\"4\" nodo=\"N/CN5.4\"/>\n"
+    "    <pin nombre=\"5\" nodo=\"N/CN5.5\"/>\n"
+    "    <pin nombre=\"6\" nodo=\"N/u0.PA5\"/>\n"
+    "    <pin nombre=\"7\" nodo=\"N/CN5.7\"/>\n"
+    "    <pin nombre=\"8\" nodo=\"N/CN5.8\"/>\n"
+    "    <pin nombre=\"9\" nodo=\"N/CN5.9\"/>\n"
+    "    <pin nombre=\"10\" nodo=\"N/CN5.10\"/>\n"
+    "  </componente>\n"
+    "  <componente tipo=\"Conector\" id=\"S/J5\" columnas=\"10\" filas=\"1\">\n"
+    "    <pin nombre=\"1\" nodo=\"N/CN5.1\"/>\n"
+    "    <pin nombre=\"2\" nodo=\"N/CN5.2\"/>\n"
+    "    <pin nombre=\"3\" nodo=\"N/CN5.3\"/>\n"
+    "    <pin nombre=\"4\" nodo=\"N/CN5.4\"/>\n"
+    "    <pin nombre=\"5\" nodo=\"N/CN5.5\"/>\n"
+    "    <pin nombre=\"6\" nodo=\"N/u0.PA5\"/>\n"
+    "    <pin nombre=\"7\" nodo=\"N/CN5.7\"/>\n"
+    "    <pin nombre=\"8\" nodo=\"N/CN5.8\"/>\n"
+    "    <pin nombre=\"9\" nodo=\"N/CN5.9\"/>\n"
+    "    <pin nombre=\"10\" nodo=\"N/CN5.10\"/>\n"
+    "  </componente>\n"
+    "  <componente tipo=\"Led\" id=\"S/LD_D13\" a_vss=\"si\">\n"
+    "    <pin nombre=\"anodo\" nodo=\"N/u0.PA5\"/>\n"
+    "  </componente>\n"
+    "  <acopla a=\"N/CN5\" b=\"S/J5\"/>\n"
+    "  <hilo a=\"N/CN5.7\" b=\"S/J5.8\"/>\n"
+    "</sistema>\n";
+
+inline const char* CATALOGO_SISTEMA_XML =
+    "<catalogo>\n"
+    "  <pieza idx=\"0\" id=\"N/LD2\" tipo=\"Led\">\n"
+    "    <observable idx=\"0\" id_obs=\"0\" nombre=\"encendido\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\"/>\n"
+    "  </pieza>\n"
+    "  <pieza idx=\"1\" id=\"N/CN5\" tipo=\"Conector\"/>\n"
+    "  <pieza idx=\"2\" id=\"S/J5\" tipo=\"Conector\"/>\n"
+    "  <pieza idx=\"3\" id=\"S/LD_D13\" tipo=\"Led\">\n"
+    "    <observable idx=\"0\" id_obs=\"1\" nombre=\"encendido\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\"/>\n"
+    "  </pieza>\n"
+    "</catalogo>\n";
+
 // El saludo entero desde el lado del modelo, hasta T_LISTO incluido.
 inline bool saluda_hasta_listo(ModeloFalso& m) {
     using namespace mcusim::proto;
