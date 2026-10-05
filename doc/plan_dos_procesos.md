@@ -1768,6 +1768,20 @@ en una `.app`, y no lo hace. Ahora lo dice `CMakeLists.txt` (`MACOSX_BUNDLE`,
 con su `Info.plist`). Lo que viene detrás —`macdeployqt`, la firma, que
 arranca— todavía no ha corrido nunca: el siguiente CI es su primera prueba.
 
+**El segundo CI** (2026-10-04) llegó a `macdeployqt` en los dos Mac y se paró
+en la comprobación. Dos cosas, las dos del **Qt de Homebrew**, que viene partido
+en una fórmula por módulo: (1) `macdeployqt` mete todos los complementos que
+encuentra —SVG, PDF, teclado virtual, WebP— y cada uno pide un framework de
+otra fórmula que no sabe encontrar («Cannot resolve rpath
+@rpath/QtPdf.framework…»); (2) `libbrotlicommon` acabó copiada en `Frameworks`
+pero con su nombre apuntando todavía a Homebrew, y la comprobación lo cazó, que
+es para lo que estaba. Ahora el script copia **solo los dos complementos que la
+ventana usa** —la plataforma `cocoa` y el estilo de macOS—, ejecuta
+`macdeployqt -no-plugins` con `-executable=` para cada uno, escribe el
+`qt.conf`, remata con `install_name_tool` lo que queda apuntando a Homebrew, y
+comprueba además que **todo `@rpath/…` esté dentro de la `.app`**. La firma, al
+final y una vez: `install_name_tool` rompe la que deja `macdeployqt`.
+
 **Lo que sigue pendiente de la fase 9**: firmar (sigue sin firma: SmartScreen y
 Gatekeeper avisan, y está dicho en las notas de la Release), un instalador que
 lleve **los dos** programas juntos, y bajar el suelo de Linux a 22.04, que pide
