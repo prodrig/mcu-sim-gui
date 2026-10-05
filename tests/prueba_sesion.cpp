@@ -113,10 +113,46 @@ int main(int argc, char** argv)
                       "cada pieza sabe de que placa es y como se llama dentro de ella, por "
                       "el prefijo de su id; el LED del shield cuelga de N/u0.PA5");
             comprueba(ps.mcus == QStringList({"N/u0 (STM32F446RE)"}) &&
-                          ps.acoples.size() == 1 && ps.acoples[0].a == "N/CN5" &&
-                          ps.acoples[0].b == "S/J5" && !ps.acoples[0].espejo &&
-                          ps.n_hilos == 1,
-                      "con su MCU, su acople y su hilo");
+                          ps.acoples.size() == 1 &&
+                          ps.acoples[0].conectores == QStringList({"N/CN5", "S/J5"}) &&
+                          ps.acoples[0].placas == QStringList({"N", "S"}) &&
+                          !ps.acoples[0].espejo && ps.n_hilos == 1,
+                      "con su MCU, su acople y su hilo; un acople escrito solo con a= y "
+                      "b= -el de la primera version de los sistemas- se lee igual, y sus "
+                      "placas salen de los prefijos");
+            // Y una pila, con cada placa descrita dentro
+            PlacaGui pila;
+            comprueba(junta_placa(PILA_XML, QVector<PiezaGui>(), pila, e) &&
+                          pila.placas.size() == 3 && pila.placas[0].n_piezas == 2 &&
+                          pila.placas[1].n_piezas == 3 &&
+                          pila.placas[0].mcus == QStringList({"CPU/u0 (STM32F407VG)"}) &&
+                          pila.placas[1].mcus.isEmpty() &&
+                          pila.mcus == QStringList({"CPU/u0 (STM32F407VG)"}),
+                      "cada placa de un sistema trae lo que la describe: cuantas piezas y "
+                      "sus chips, sin confundirlos con los <mcu> del sistema");
+            const SubPlacaGui* l2 = pila.subplaca("L2");
+            comprueba(l2 && l2->conectores.size() == 2 && l2->conectores[0].ref == "L2/J1" &&
+                          l2->conectores[0].filas == 2 && l2->conectores[0].columnas == 32 &&
+                          l2->conectores[0].zigzag && l2->conectores[0].acople == 0 &&
+                          !l2->conectores[1].zigzag && l2->conectores[1].acople == -1 &&
+                          !pila.subplaca("X"),
+                      "y sus conectores con su forma y el acople en que estan, o al aire");
+            comprueba(pila.acoples.size() == 1 &&
+                          pila.acoples[0].conectores ==
+                              QStringList({"CPU/J1", "L1/J1", "L2/J1"}) &&
+                          pila.acoples[0].placas == QStringList({"CPU", "L1", "L2"}) &&
+                          pila.hilos.size() == 1 && pila.hilos[0].placa_a == "CPU" &&
+                          pila.hilos[0].placa_b == "L2",
+                      "un acople de tres -una pila PC/104- con sus tres placas, y el hilo "
+                      "con las dos suyas");
+            const QVector<EnlaceGui> en = pila.enlaces();
+            comprueba(en.size() == 3 && en[0].placa_a == "CPU" && en[0].placa_b == "L1" &&
+                          en[1].placa_a == "L1" && en[1].placa_b == "L2" &&
+                          en[1].por == QString::fromUtf8("L1/J1 ⇄ L2/J1") &&
+                          en[2].placa_a == "CPU" && en[2].placa_b == "L2" &&
+                          en[2].por.startsWith("hilo"),
+                      "y el grafo de placas, para dibujarlo: la pila, cada una con la "
+                      "siguiente; el hilo, de la CPU a L2");
             PlacaGui plana;
             comprueba(junta_placa("<placa nombre=\"x\"><componente tipo=\"Led\" "
                                   "id=\"N/LD2\"/></placa>", cs, plana, e) &&

@@ -31,8 +31,9 @@ La **contraparte de visualización gráfica de
 > rojo, y el título de la pieza también—; arriba, «sin MCU» (plan §18). **Y
 > varias placas enchufadas** —una Nucleo con un shield encima, un `<sistema>`
 > de `mcu-sim`— se ven en un recuadro por placa, cada conector diciendo con
-> qué está enchufado (plan §19, protocolo v2). Lo que falta: grabar y
-> reproducir sesiones (fase 8).
+> qué está enchufado (plan §19, protocolo v2), también en pila, como en
+> PC/104; y la ventana sabe ya todo lo necesario para dibujar el sistema
+> algún día (plan §20). Lo que falta: grabar y reproducir sesiones (fase 8).
 >
 > Para verlo, con las dos cosas compiladas y una al lado de la otra:
 >

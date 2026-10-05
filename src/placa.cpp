@@ -20,6 +20,27 @@ int PlacaGui::n_interesantes() const
     return n;
 }
 
+const SubPlacaGui* PlacaGui::subplaca(const QString& id) const
+{
+    for (const SubPlacaGui& s : placas) if (s.id == id) return &s;
+    return nullptr;
+}
+
+QVector<EnlaceGui> PlacaGui::enlaces() const
+{
+    QVector<EnlaceGui> v;
+    for (const AcopleGui& a : acoples)
+        for (int k = 1; k < a.conectores.size() && k < a.placas.size(); ++k)
+            if (a.placas[k - 1] != a.placas[k])
+                v.push_back({a.placas[k - 1], a.placas[k],
+                             a.conectores[k - 1] + QStringLiteral(" ⇄ ") + a.conectores[k]});
+    for (const HiloGui& h : hilos)
+        if (!h.placa_a.isEmpty() && !h.placa_b.isEmpty() && h.placa_a != h.placa_b)
+            v.push_back({h.placa_a, h.placa_b,
+                         QStringLiteral("hilo %1 - %2").arg(h.a, h.b)});
+    return v;
+}
+
 int PlacaGui::n_mandos() const
 {
     int n = 0;
@@ -119,10 +140,23 @@ bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
     QXmlStreamReader r(xml);
     bool raiz = false;
     int  actual = -1;                       // la pieza del <componente> abierto
+    int  sub = -1;                          // la <placa id> abierta de un sistema
+    // La placa de un nombre cualificado (`N/CN5` -> `N`)
+    auto placa_de = [](const QString& n) {
+        const int b = n.indexOf(QLatin1Char('/'));
+        return b > 0 ? n.left(b) : QString();
+    };
+    auto lista = [](const QString& s) {
+        return s.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    };
     while (!r.atEnd()) {
         const QXmlStreamReader::TokenType t = r.readNext();
         if (t == QXmlStreamReader::EndElement && r.name() == QLatin1String("componente")) {
             actual = -1;
+            continue;
+        }
+        if (t == QXmlStreamReader::EndElement && r.name() == QLatin1String("placa")) {
+            sub = -1;
             continue;
         }
         if (t != QXmlStreamReader::StartElement) continue;
@@ -132,13 +166,50 @@ bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
             raiz = true;
             placa.nombre = texto(a, "nombre");
         } else if (r.name() == QLatin1String("placa")) {
-            // Una placa DENTRO de un <sistema>: solo su id y su nombre
-            placa.placas.push_back({texto(a, "id"), texto(a, "nombre"), texto(a, "fichero")});
+            // Una placa DENTRO de un <sistema>, con lo que la describe dentro
+            SubPlacaGui s;
+            s.id      = texto(a, "id");
+            s.nombre  = texto(a, "nombre");
+            s.fichero = texto(a, "fichero");
+            bool ok = false;
+            const int n = a.value(QLatin1String("piezas")).toInt(&ok);
+            if (ok) s.n_piezas = n;
+            placa.placas.push_back(s);
+            sub = int(placa.placas.size()) - 1;
+        } else if (sub >= 0 && r.name() == QLatin1String("mcu")) {
+            placa.placas[sub].mcus << QStringLiteral("%1 (%2)").arg(texto(a, "ref"),
+                                                                    texto(a, "tipo"));
+        } else if (sub >= 0 && r.name() == QLatin1String("conector")) {
+            ConectorGui c;
+            c.ref      = texto(a, "ref");
+            c.filas    = a.value(QLatin1String("filas")).toInt();
+            c.columnas = a.value(QLatin1String("columnas")).toInt();
+            c.zigzag   = a.value(QLatin1String("numeracion")) != QLatin1String("filas");
+            bool ok = false;
+            const int k = a.value(QLatin1String("acople")).toInt(&ok);
+            c.acople   = ok ? k : -1;
+            placa.placas[sub].conectores.push_back(c);
         } else if (r.name() == QLatin1String("acopla")) {
-            placa.acoples.push_back({texto(a, "a"), texto(a, "b"),
-                                     a.value(QLatin1String("espejo")) == QLatin1String("si")});
+            // conectores="A/J1 B/J1 C/J1" -una pila-, o solo a= y b= (un
+            // mcu-sim de la primera versión de los sistemas)
+            AcopleGui ac;
+            ac.conectores = a.hasAttribute(QLatin1String("conectores"))
+                                ? lista(texto(a, "conectores"))
+                                : QStringList({texto(a, "a"), texto(a, "b")});
+            if (a.hasAttribute(QLatin1String("placas")))
+                ac.placas = lista(texto(a, "placas"));
+            else
+                for (const QString& c : ac.conectores) ac.placas << placa_de(c);
+            ac.espejo = a.value(QLatin1String("espejo")) == QLatin1String("si");
+            placa.acoples.push_back(ac);
         } else if (r.name() == QLatin1String("hilo")) {
-            ++placa.n_hilos;
+            HiloGui h;
+            h.a = texto(a, "a");
+            h.b = texto(a, "b");
+            h.placa_a = placa_de(h.a);
+            h.placa_b = placa_de(h.b);
+            placa.hilos.push_back(h);
+            placa.n_hilos = int(placa.hilos.size());
         } else if (r.name() == QLatin1String("mcu")) {
             const QString id = texto(a, "id"), tipo = texto(a, "tipo");
             placa.mcus << (id.isEmpty() ? tipo : QStringLiteral("%1 (%2)").arg(id, tipo));

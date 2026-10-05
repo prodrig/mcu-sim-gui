@@ -195,7 +195,31 @@ ventana sepa qué se enchufó con qué:
 ```
 
 Una pieza es de la placa del prefijo de su id (`N/LD2` es de `N`); el
-catálogo usa los mismos ids. **A una ventana de la versión 1** le llega lo
+catálogo usa los mismos ids.
+
+**Cada placa, descrita para poder dibujarla** (añadido el 2026-10-05 a la
+versión 2, sin subirla: una ventana que no lo conoce lo ignora). Cada
+`<placa id>` lleva dentro lo que la describe, y los acoples e hilos dicen qué
+placas unen:
+
+```xml
+<placa id="CPU" nombre="pc104-cpu" fichero="pc104_cpu.xml" piezas="2">
+  <mcu ref="CPU/u0" tipo="STM32F407VG"/>
+  <conector ref="CPU/J1" filas="2" columnas="32" numeracion="zigzag" acople="0"/>
+</placa>
+...
+<acopla n="0" conectores="CPU/J1 L1/J1 L2/J1" placas="CPU L1 L2"/>
+<hilo a="CPU/u0.PA2" b="L2/J9.1" placas="CPU L2"/>
+```
+
+| Dónde | Atributo | Qué dice |
+| :--- | :--- | :--- |
+| `<placa id>` | `piezas` | Cuántas piezas lleva la placa |
+| `<placa>/<mcu>` | `ref`, `tipo` | Sus chips. No son los `<mcu id>` del sistema, que siguen fuera |
+| `<placa>/<conector>` | `ref`, `filas`, `columnas`, `numeracion` | Sus conectores y su forma |
+| | `acople` | El `n` del acople en que está; sin él, al aire |
+| `<acopla>` | `n`, `conectores`, `placas` | El acople: sus conectores **en orden** y la placa de cada uno. Con más de dos es una **pila** (PC/104): el pin *k* es el mismo en todas. Con dos, lleva además `a=` y `b=`, como en la primera versión de los sistemas |
+| `<hilo>` | `placas` | Las dos placas que une | **A una ventana de la versión 1** le llega lo
 mismo con la raíz `<placa nombre="...">` y sin las `<placa id>`, `<acopla>` e
 `<hilo>`: la pinta, sin agrupar. Una placa suelta se manda igual en las dos.
 

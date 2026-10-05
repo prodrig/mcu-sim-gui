@@ -160,6 +160,28 @@ inline const char* SISTEMA_XML =
     "  <hilo a=\"N/CN5.7\" b=\"S/J5.8\"/>\n"
     "</sistema>\n";
 
+// UNA PILA (PC/104), como la manda el mcu-sim de ahora: cada placa descrita
+// dentro de su <placa id> -piezas, chips, conectores con su forma- y un
+// acople de TRES conectores, con las placas que une. Y un hilo de la CPU a
+// la última placa. Las piezas se omiten: aquí solo importa la estructura.
+inline const char* PILA_XML =
+    "<sistema nombre=\"pila-pc104\">\n"
+    "  <placa id=\"CPU\" nombre=\"pc104-cpu\" fichero=\"pc104_cpu.xml\" piezas=\"2\">\n"
+    "    <mcu ref=\"CPU/u0\" tipo=\"STM32F407VG\"/>\n"
+    "    <conector ref=\"CPU/J1\" filas=\"2\" columnas=\"32\" numeracion=\"zigzag\" acople=\"0\"/>\n"
+    "  </placa>\n"
+    "  <placa id=\"L1\" nombre=\"pc104-leds\" fichero=\"pc104_leds.xml\" piezas=\"3\">\n"
+    "    <conector ref=\"L1/J1\" filas=\"2\" columnas=\"32\" numeracion=\"zigzag\" acople=\"0\"/>\n"
+    "  </placa>\n"
+    "  <placa id=\"L2\" nombre=\"pc104-leds\" fichero=\"pc104_leds.xml\" piezas=\"3\">\n"
+    "    <conector ref=\"L2/J1\" filas=\"2\" columnas=\"32\" numeracion=\"zigzag\" acople=\"0\"/>\n"
+    "    <conector ref=\"L2/J9\" filas=\"1\" columnas=\"8\" numeracion=\"filas\"/>\n"
+    "  </placa>\n"
+    "  <mcu tipo=\"STM32F407VG\" id=\"CPU/u0\"/>\n"
+    "  <acopla n=\"0\" conectores=\"CPU/J1 L1/J1 L2/J1\" placas=\"CPU L1 L2\"/>\n"
+    "  <hilo a=\"CPU/u0.PA2\" b=\"L2/J9.1\" placas=\"CPU L2\"/>\n"
+    "</sistema>\n";
+
 inline const char* CATALOGO_SISTEMA_XML =
     "<catalogo>\n"
     "  <pieza idx=\"0\" id=\"N/LD2\" tipo=\"Led\">\n"

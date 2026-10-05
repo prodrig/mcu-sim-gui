@@ -72,13 +72,37 @@ struct PiezaGui {
     bool    en_placa  = false;
 };
 
-// Una placa de un <sistema>, y un acople entre dos conectores.
+// UNA PLACA DE UN <sistema>, descrita entera: es lo que hace falta para
+// DIBUJAR el sistema algún día -un rectángulo por placa, sus conectores con su
+// forma, y líneas entre ellos- sin deducir nada de los prefijos. Hoy la ventana
+// solo agrupa por placa y lo dice en las ayudas; el dibujo es para después.
+struct ConectorGui {
+    QString ref;              // "N/CN5"
+    int     filas = 1, columnas = 0;
+    bool    zigzag = true;    // numeracion="zigzag" (o "filas")
+    int     acople = -1;      // índice en PlacaGui::acoples, o -1 si al aire
+};
 struct SubPlacaGui {
     QString id, nombre, fichero;
+    int     n_piezas = -1;            // -1: un mcu-sim que no lo dice
+    QStringList mcus;                 // "N/u0 (STM32F446RE)"
+    QVector<ConectorGui> conectores;
 };
+// Un acople: DOS conectores enchufados, o VARIOS en pila (PC/104), con las
+// placas a las que pertenece cada uno, en el mismo orden.
 struct AcopleGui {
-    QString a, b;             // "N/CN5", "S/J5"
-    bool    espejo = false;
+    QStringList conectores;   // "N/CN5", "S/J5"
+    QStringList placas;       // "N", "S"
+    bool        espejo = false;
+};
+struct HiloGui {
+    QString a, b;             // "N/CN9.2", "S/J9.1"
+    QString placa_a, placa_b;
+};
+// Una arista del grafo de placas: A y B están unidas, y por qué.
+struct EnlaceGui {
+    QString placa_a, placa_b;
+    QString por;              // "N/CN5 ⇄ S/J5", o "hilo N/CN9.2 - S/J9.1"
 };
 
 struct PlacaGui {
@@ -86,8 +110,14 @@ struct PlacaGui {
     // Vacías en una placa suelta: es como se sabe que esto es un sistema.
     QVector<SubPlacaGui> placas;
     QVector<AcopleGui>   acoples;
-    int                  n_hilos = 0;
+    QVector<HiloGui>     hilos;
+    int                  n_hilos = 0;     // = hilos.size()
     bool es_sistema() const { return !placas.isEmpty(); }
+    // El grafo de placas: una arista por cada par de placas VECINAS en un
+    // acople -en una pila, cada una con la siguiente, en el orden del
+    // acople- y una por cada hilo que va de una placa a otra.
+    QVector<EnlaceGui> enlaces() const;
+    const SubPlacaGui* subplaca(const QString& id) const;
     QStringList       mcus;   // "u0 (STM32F407VG)", "N/u0 (...)"; vacía si ninguno
     QVector<PiezaGui> piezas; // en el orden del catálogo: `idx` es su posición
     QStringList       avisos; // componentes de la placa que el catálogo no trae

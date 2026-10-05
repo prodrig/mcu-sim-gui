@@ -14,7 +14,9 @@
 // 20 mA con el pulsador CORTO pulsado, y su `sobrecorriente`, una alarma.
 // Y G5, un SISTEMA (`placas/nucleo_y_shield.xml`, versión 2 del protocolo):
 // la Nucleo y un shield sin MCU, y el blinky encendiendo a la vez el LD2 de
-// una placa y el LED del shield, que está en la otra.
+// una placa y el LED del shield, que está en la otra. Y G6, una PILA
+// (`placas/pila_pc104.xml`): un acople de tres conectores, lo que T_PLACA
+// cuenta de cada placa para poder dibujarla, y el mismo pin en las tres.
 //
 // Necesita un `mcu-sim` compilado y su árbol de fuentes, porque las placas y
 // los firmwares están allí. Se le dicen con dos variables de entorno:
@@ -288,6 +290,66 @@ int main(int argc, char** argv)
         comprueba(ts.size() == 700 && flancos >= 6 && distintos == 0,
                   "y el blinky enciende y apaga los dos LEDs A LA VEZ, en dos placas: " +
                       std::to_string(flancos) + " flancos, ni una muestra distinta");
+        const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);
+        comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0,
+                  "y mcu-sim termina con codigo 0");
+    }
+    // -------------------------------------------------------------------------
+    std::printf("G6 Una pila PC/104: tres placas en un acople\n");
+    {
+        Sesion s;
+        s.escucha(QHostAddress::LocalHost, 0);
+        int listos = 0, fines = 0;
+        quint64 t_inst = 0;
+        QHash<quint64, QHash<quint16, float>> m;
+        QObject::connect(&s, &Sesion::listo, [&] { ++listos; });
+        QObject::connect(&s, &Sesion::fin, [&](quint32, qint32, quint64) { ++fines; });
+        QObject::connect(&s, &Sesion::instantanea, [&](quint64 t, quint32) { t_inst = t; });
+        QObject::connect(&s, &Sesion::muestra, [&](quint16 id, float v) { m[t_inst][id] = v; });
+        QProcess p;
+        p.setWorkingDirectory(src);
+        p.start(sim, {"placas/pila_pc104.xml", "--ms=500",
+                      "--gui", QStringLiteral("127.0.0.1:%1").arg(s.puerto())});
+        comprueba(espera([&] { return listos == 1; }, 20000) && s.placa().es_sistema(),
+                  "saluda con el sistema de la pila");
+        const PlacaGui& pl = s.placa();
+        const SubPlacaGui* cpu = pl.subplaca("CPU");
+        const SubPlacaGui* l2 = pl.subplaca("L2");
+        comprueba(pl.placas.size() == 3 && cpu && l2 && cpu->n_piezas == 2 &&
+                      l2->n_piezas == 3 &&
+                      cpu->mcus == QStringList({"CPU/u0 (STM32F407VG)"}) &&
+                      l2->mcus.isEmpty() && l2->fichero == "pc104_leds.xml",
+                  "cada placa, descrita: cuantas piezas, sus chips y su fichero");
+        comprueba(cpu && cpu->conectores.size() == 1 && cpu->conectores[0].ref == "CPU/J1" &&
+                      cpu->conectores[0].filas == 2 && cpu->conectores[0].columnas == 32 &&
+                      cpu->conectores[0].zigzag && cpu->conectores[0].acople == 0,
+                  "y sus conectores, con su forma -2x32 en zigzag- y su acople");
+        const QVector<EnlaceGui> en = pl.enlaces();
+        comprueba(pl.acoples.size() == 1 &&
+                      pl.acoples[0].conectores == QStringList({"CPU/J1", "L1/J1", "L2/J1"}) &&
+                      pl.acoples[0].placas == QStringList({"CPU", "L1", "L2"}) &&
+                      en.size() == 2 && en[0].placa_a == "CPU" && en[1].placa_b == "L2",
+                  "un acople de tres, y el grafo de placas: CPU - L1 - L2");
+        int a = -1, b = -1;
+        for (const PiezaGui& pz : pl.piezas) {
+            if (pz.id == "L1/LD1") a = pz.observables.value(0).id_obs;
+            if (pz.id == "L2/LD1") b = pz.observables.value(0).id_obs;
+        }
+        s.suscribe(1000000, {quint16(a), quint16(b)});
+        comprueba(a >= 0 && b >= 0 && s.arranca(RIT_LIBRE) &&
+                      espera([&] { return fines == 1; }, 60000),
+                  "500 ms simulados, mirando el LD1 de los dos modulos");
+        QVector<quint64> ts = m.keys().toVector();
+        std::sort(ts.begin(), ts.end());
+        int flancos = 0, distintos = 0;
+        for (int k = 0; k < ts.size(); ++k) {
+            const float x = m[ts[k]].value(quint16(a), -1), y = m[ts[k]].value(quint16(b), -1);
+            if (x != y) ++distintos;
+            if (k && x != m[ts[k - 1]].value(quint16(a), -1)) ++flancos;
+        }
+        comprueba(ts.size() == 500 && flancos >= 4 && distintos == 0,
+                  "el blinky de la CPU los enciende y apaga a la vez, en dos placas de la "
+                  "pila: " + std::to_string(flancos) + " flancos, ni una muestra distinta");
         const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);
         comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0,
                   "y mcu-sim termina con codigo 0");

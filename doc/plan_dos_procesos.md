@@ -1875,3 +1875,43 @@ versión 2) y `prueba_cruzada` 31 → **36** contra el `mcu-sim` de verdad con
 `placas/nucleo_y_shield.xml`: saludo en la 2 con un sistema de dos placas y
 cuatro acoples, y el blinky encendiendo a la vez —ni una muestra distinta en
 700— el LD2 de la Nucleo y el LED del shield.
+
+---
+
+## 20. Pilas, y cada placa descrita para poder dibujarla
+
+En `mcu-sim` un acople puede juntar **más de dos conectores**: una pila, como
+la de PC/104, donde el pin *k* es el mismo hilo en todas las placas
+(`<acopla conectores="CPU/J1 L1/J1 L2/J1"/>`). Y `T_PLACA` describe ahora
+**cada placa entera** —cuántas piezas, sus chips, sus conectores con su forma
+y en qué acople están— y dice qué placas une cada acople y cada hilo
+(`doc/protocolo.md` §3). Es **añadido a la versión 2**, que ya llevaba el
+`<sistema>`, y por eso no sube: la ventana de §19 lo ignora y sigue
+funcionando.
+
+Aquí, el modelo lo recoge todo, **para que el día que se dibuje el sistema no
+haya que deducir nada**:
+
+* `SubPlacaGui` lleva sus piezas, sus chips y sus conectores (`ConectorGui`:
+  forma, numeración y acople);
+* `AcopleGui` es una lista de conectores con la placa de cada uno, en orden
+  —dos, o los de una pila—; uno escrito solo con `a=` y `b=` se lee igual;
+* `HiloGui`, con sus dos placas;
+* **`PlacaGui::enlaces()`, el grafo de placas**: una arista por cada par de
+  placas vecinas en un acople —en una pila, cada una con la siguiente— y una
+  por cada hilo entre placas. Es lo que un dibujo necesita para poner las
+  líneas.
+
+Lo que se ve hoy: **cada conector de una pila nombra a los demás** («L1/J1,
+L2/J1 (en pila)»), y **el recuadro de cada placa dice en su ayuda a cuáles
+está unida y por dónde** («unida a CPU por CPU/J1 ⇄ L1/J1»). El dibujo queda
+para después, y para que sea fiel harán falta datos que `mcu-sim` todavía no
+tiene: el tamaño de cada placa y dónde va cada conector.
+
+**Cómo se ha comprobado**: `prueba_sesion` 58 → **62** (cada placa con su
+descripción, un acople de tres, el hilo, y el grafo), `prueba_ventana` 74 →
+**76** (G8: los conectores de una pila y la ayuda de cada placa; G7 con su
+ayuda nueva) y `prueba_cruzada` 36 → **43** contra el `mcu-sim` de verdad con
+`placas/pila_pc104.xml`: tres placas descritas, un acople de tres, el grafo
+CPU - L1 - L2, y el blinky encendiendo a la vez el LED de dos módulos de la
+pila.

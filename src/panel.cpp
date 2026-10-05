@@ -215,9 +215,13 @@ QGroupBox* recuadro_de(Panel* panel, const PiezaGui& p, const PlacaGui& placa,
     }
     // Un conector enchufado dice con qué: lo dice el <acopla> del sistema
     for (const AcopleGui& a : placa.acoples) {
-        const QString otro = a.a == p.id ? a.b : (a.b == p.id ? a.a : QString());
-        if (otro.isEmpty()) continue;
-        auto* l = new QLabel(otro + (a.espejo ? QObject::tr(" (en espejo)") : QString()), g);
+        if (!a.conectores.contains(p.id)) continue;
+        QStringList otros = a.conectores;
+        otros.removeAll(p.id);
+        QString texto = otros.join(QStringLiteral(", "));
+        if (a.espejo) texto += QObject::tr(" (en espejo)");
+        else if (a.conectores.size() > 2) texto += QObject::tr(" (en pila)");
+        auto* l = new QLabel(texto, g);
         l->setObjectName(QStringLiteral("acople:%1").arg(p.idx));
         f->addRow(QObject::tr("enchufado a ⇄"), l);
     }
@@ -267,6 +271,7 @@ Panel::Panel(const PlacaGui& placa, QWidget* padre) : QWidget(padre)
         // Una pieza que no diga de qué placa es -no debería haberla- va al
         // final, en uno aparte, para que no se pierda.
         auto* v = new QVBoxLayout(this);
+        const QVector<EnlaceGui> enlaces = placa.enlaces();
         QVector<SubPlacaGui> grupos = placa.placas;
         grupos.push_back({QString(), tr("(sin placa)"), QString()});
         for (const SubPlacaGui& s : grupos) {
@@ -278,7 +283,16 @@ Panel::Panel(const PlacaGui& placa, QWidget* padre) : QWidget(padre)
                                                    : QStringLiteral("%1 · %2").arg(s.id, s.nombre),
                                     this);
             g->setObjectName(QStringLiteral("placa:%1").arg(s.id));
-            if (!s.fichero.isEmpty()) g->setToolTip(s.fichero);
+            // La ayuda dice de dónde sale la placa y a cuáles está unida
+            QStringList ayuda;
+            if (!s.fichero.isEmpty()) ayuda << s.fichero;
+            for (const EnlaceGui& e : enlaces) {
+                if (e.placa_a == s.id && !s.id.isEmpty())
+                    ayuda << tr("unida a %1 por %2").arg(e.placa_b, e.por);
+                else if (e.placa_b == s.id && !s.id.isEmpty())
+                    ayuda << tr("unida a %1 por %2").arg(e.placa_a, e.por);
+            }
+            g->setToolTip(ayuda.join(QLatin1Char('\n')));
             rejilla_de(g, suyas);
             v->addWidget(g);
         }

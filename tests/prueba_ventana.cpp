@@ -26,6 +26,8 @@
 //   G7  un SISTEMA (versión 2 del protocolo): un recuadro por placa con sus
 //       piezas dentro, con su nombre local; un conector pliega sus patillas y
 //       dice con qué está enchufado; el resumen dice las placas.
+//   G8  una PILA (PC/104): un conector en un acople de tres dice los otros
+//       dos, y el recuadro de cada placa dice a cuáles está unida.
 // =============================================================================
 #include <cmath>
 
@@ -543,8 +545,10 @@ int main(int argc, char** argv)
         auto* gs = panel->findChild<QGroupBox*>("placa:S");
         comprueba(gn && gs && gn->title() == QString::fromUtf8("N · nucleo-f446re") &&
                       gs->title() == QString::fromUtf8("S · shield-leds") &&
-                      gs->toolTip() == "shield_leds.xml",
-                  "un recuadro por placa, con su id y su nombre, y su fichero en la ayuda");
+                      gs->toolTip().startsWith("shield_leds.xml") &&
+                      gs->toolTip().contains(QString::fromUtf8("unida a N por N/CN5 ⇄ S/J5")),
+                  "un recuadro por placa, con su id y su nombre; en la ayuda, su fichero y "
+                  "a que placas esta unida");
         auto* ld2 = panel->findChild<QGroupBox*>("pieza:0");
         auto* d13 = panel->findChild<QGroupBox*>("pieza:3");
         comprueba(ld2 && d13 && ld2->parentWidget() == gn && d13->parentWidget() == gs &&
@@ -589,6 +593,37 @@ int main(int argc, char** argv)
                       resumen->text().contains("N/u0 (STM32F446RE)"),
                   "y la ventana entera: el panel por placas, y arriba el sistema, sus "
                   "placas, sus acoples y el chip: \"" + resumen->text().toStdString() + "\"");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("G8 Una pila: un acople de tres\n");
+    {
+        QVector<PiezaGui> cs;
+        QString e;
+        lee_catalogo("<catalogo>"
+                     "<pieza idx=\"0\" id=\"CPU/J1\" tipo=\"Conector\"/>"
+                     "<pieza idx=\"1\" id=\"L1/J1\" tipo=\"Conector\"/>"
+                     "<pieza idx=\"2\" id=\"L2/J1\" tipo=\"Conector\"/>"
+                     "</catalogo>", cs, e);
+        PlacaGui ps;
+        junta_placa(PILA_XML, cs, ps, e);
+        auto* panel = construye_panel(ps);
+        auto* a0 = panel->findChild<QLabel*>("acople:0");
+        auto* a2 = panel->findChild<QLabel*>("acople:2");
+        comprueba(a0 && a0->text() == "L1/J1, L2/J1 (en pila)" && a2 &&
+                      a2->text() == "CPU/J1, L1/J1 (en pila)",
+                  "cada conector de la pila dice los otros dos: \"" +
+                      (a0 ? a0->text() : QString()).toStdString() + "\"");
+        auto* l1 = panel->findChild<QGroupBox*>("placa:L1");
+        auto* l2 = panel->findChild<QGroupBox*>("placa:L2");
+        comprueba(l1 && l1->toolTip().contains(QString::fromUtf8(
+                            "unida a CPU por CPU/J1 ⇄ L1/J1")) &&
+                      l1->toolTip().contains(QString::fromUtf8("unida a L2 por L1/J1 ⇄ L2/J1")) &&
+                      l2 && l2->toolTip().contains("unida a CPU por hilo CPU/u0.PA2 - L2/J9.1") &&
+                      l1->toolTip().startsWith("pc104_leds.xml"),
+                  "y el recuadro de cada placa dice de que fichero sale y a cuales esta "
+                  "unida, y por donde");
+        delete panel;
     }
 
     return resultado();
