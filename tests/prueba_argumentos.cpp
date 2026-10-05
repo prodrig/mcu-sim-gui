@@ -53,7 +53,7 @@ const char* const VOLCADO =
     "  <posicional nombre=\"placa\" tipo=\"fichero\" filtro=\"*.xml\" obligatorio=\"si\" ayuda=\"la placa\"/>\n"
     "  <posicional nombre=\"firmware\" tipo=\"fichero\" filtro=\"*.bin\" obligatorio=\"no\" ayuda=\"el firmware\"/>\n"
     "  <opcion nombre=\"--ms\" forma=\"valor\" tipo=\"numero\" omision=\"100\" unidad=\"ms\" ejemplo=\"2000\" ayuda=\"tiempo simulado\"/>\n"
-    "  <opcion nombre=\"--mcu\" forma=\"valor\" tipo=\"eleccion\" omision=\"STM32F407VG\" ayuda=\"el MCU\">\n"
+    "  <opcion nombre=\"--mcu\" forma=\"valor\" tipo=\"eleccion\" ejemplo=\"STM32F407VG\" ayuda=\"el MCU\">\n"
     "    <valor>STM32F405RG</valor>\n"
     "    <valor>STM32F407VG</valor>\n"
     "    <valor>STM32F446RE</valor>\n"
@@ -100,8 +100,9 @@ int main(int argc, char** argv)
         const OpcionCli& mcu = a.opciones[1];
         comprueba(mcu.nombre == "--mcu" && mcu.tipo == "eleccion" &&
                       mcu.valores == QStringList{"STM32F405RG", "STM32F407VG", "STM32F446RE"} &&
-                      mcu.omision == "STM32F407VG",
-                  "--mcu: una eleccion con sus tres valores y su omision");
+                      mcu.omision.isEmpty() && mcu.ejemplo == "STM32F407VG",
+                  "--mcu: una eleccion con sus tres valores, sin omision -sin <mcu> ni "
+                  "--mcu la placa va sin MCU- y con un ejemplo");
         comprueba(a.opciones[7].ayuda == "puentes & cosas" && a.opciones[7].repetible,
                   "las entidades del XML se deshacen, y --serie es repetible");
         int ofrecidas = 0;
@@ -228,6 +229,7 @@ int main(int argc, char** argv)
                       !d.findChild<QWidget*>("arg:--help"),
                   "y ninguno para lo que no se ofrece");
         comprueba(mcu && mcu->count() == 4 && mcu->currentText() == "STM32F405RG" &&
+                      mcu->itemText(0) == "(sin decir)" &&
                       ondas && ondas->isChecked() && ms && ms->text().isEmpty() &&
                       ms->placeholderText().contains("100"),
                   "con los valores de la configuracion; un campo vacio, con su omision de "

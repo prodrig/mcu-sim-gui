@@ -34,6 +34,9 @@ struct ObservableGui {
     QString nombre, unidad;
     double  min = 0, max = 0;
     bool    interesante = false;
+    // Un 0/1 que, a 1, es un AVISO -la sobrecorriente de una Fuente-: se
+    // pinta para que se note. Un mcu-sim anterior no lo dice: entonces, no.
+    bool    alarma = false;
 };
 
 struct MandoGui {
@@ -65,7 +68,7 @@ struct PiezaGui {
 
 struct PlacaGui {
     QString           nombre;
-    QStringList       mcus;   // "u0 (STM32F407VG)", o solo el tipo si no tiene id
+    QStringList       mcus;   // "u0 (STM32F407VG)"; vacía si no declara ninguno
     QVector<PiezaGui> piezas; // en el orden del catálogo: `idx` es su posición
     QStringList       avisos; // componentes de la placa que el catálogo no trae
 

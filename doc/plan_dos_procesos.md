@@ -1798,3 +1798,39 @@ arranque.
 Gatekeeper avisan, y está dicho en las notas de la Release), un instalador que
 lleve **los dos** programas juntos, y bajar el suelo de Linux a 22.04, que pide
 un Qt ≥ 6.3 que esa distribución no trae.
+
+---
+
+## 18. Placas sin MCU, y la alarma
+
+En `mcu-sim` (P-12 l en su `doc/todo.md`) el MCU **ya no se supone**: se
+declara con `<mcu>` o con `--mcu`, y si están los dos gana `--mcu`. Sin ninguno
+la placa va **sin MCU**, que es una placa legítima: un circuito que solo es
+electricidad, para mirarlo aquí. Para eso hay dos piezas nuevas, `Fuente` y
+`Gnd`, con un límite de corriente opcional y dos observables, `corriente` (mA)
+y `sobrecorriente`. La segunda llega en el catálogo con un atributo nuevo,
+**`alarma="si"`** (`doc/protocolo.md` §3), sin cambiar la versión del
+protocolo.
+
+Aquí:
+
+* `ObservableGui::alarma`, leído del catálogo; sin el atributo, falso;
+* **una alarma se nota**: «○» en reposo y «⚠ SI» en rojo y negrita cuando vale
+  1, y el título del recuadro de su pieza en rojo mientras alguna de sus
+  alarmas esté disparada. El estilo solo se toca cuando cambia, no en cada
+  muestra. Tampoco aquí aparece la palabra «Fuente»: lo dice la declaración;
+* **el resumen dice «sin MCU»** cuando ni la placa ni `T_HOLA` traen uno, en
+  vez de dejar un hueco;
+* en el diálogo de lanzamiento, `--mcu` ya no tiene omisión: el desplegable
+  empieza en «(sin decir)», que es lo que el XML diga —o ningún MCU—.
+
+Una ventana anterior lo ve casi todo: la corriente igual, y la sobrecorriente
+como un ● / ○ más, sin color. Conviene actualizar las dos juntas.
+
+**Cómo se ha comprobado**: `prueba_ventana` 60 → **67** (G6: el texto de una
+alarma, el catálogo con ella, «sin MCU» en el resumen y el rojo que llega y se
+va con las muestras), `prueba_sesion` 53 → **54** (`alarma="si"` se lee, y sin
+él no) y `prueba_cruzada` 23 → **31** contra el `mcu-sim` de verdad con
+`placas/fuente_y_masa.xml`: saludo sin MCU, F1 limitando a sus 20 mA con el
+pulsador CORTO, la sobrecorriente a 1 y un solo `T_AVISO`. `prueba_argumentos`
+sigue en 38, con `--mcu` sin omisión en el volcado de prueba.

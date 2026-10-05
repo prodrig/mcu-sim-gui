@@ -59,12 +59,26 @@ int main(int argc, char** argv)
                       "un catalogo sin `valor` -el de un mcu-sim anterior- se lee igual, y el "
                       "mando vale su minimo");
         }
+        {
+            QVector<PiezaGui> f;
+            comprueba(lee_catalogo("<catalogo><pieza idx=\"0\" id=\"F1\" tipo=\"Fuente\">"
+                                   "<observable idx=\"0\" id_obs=\"0\" nombre=\"corriente\" "
+                                   "unidad=\"mA\" min=\"-20\" max=\"20\" interesante=\"si\"/>"
+                                   "<observable idx=\"1\" id_obs=\"1\" nombre=\"sobrecorriente\" "
+                                   "unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\" "
+                                   "alarma=\"si\"/></pieza></catalogo>", f, e) &&
+                          f.size() == 1 && f[0].observables.size() == 2 &&
+                          !f[0].observables[0].alarma && f[0].observables[1].alarma &&
+                          !cat[1].observables[0].alarma,
+                      "`alarma=\"si\"` marca un observable como alarma; sin el atributo -todos "
+                      "los de antes- no lo es");
+        }
 
         PlacaGui p;
         comprueba(junta_placa(PLACA_XML, cat, p, e) && p.nombre == "discovery" &&
                   p.mcus.isEmpty(),
-                  "la placa se junta con el catalogo, con su nombre; sin <mcu>, sin MCU, "
-                  "como la de la Discovery (lo pone sim, y lo dice T_HOLA)");
+                  "la placa se junta con el catalogo, con su nombre; sin <mcu>, sin MCU "
+                  "en la lista (si lo hay, es el de --mcu, y lo dice T_HOLA)");
         PlacaGui p2;
         comprueba(junta_placa("<placa nombre=\"dos\"><mcu tipo=\"STM32F407VG\" id=\"u0\"/>"
                               "<mcu tipo=\"STM32F446RE\" id=\"u1\"/></placa>", cat, p2, e) &&

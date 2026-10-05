@@ -15,6 +15,7 @@
 
 #include <cmath>
 #include <memory>
+#include <utility>
 
 namespace mcusim {
 
@@ -225,13 +226,20 @@ Panel::Panel(const PlacaGui& placa, QWidget* padre) : QWidget(padre)
     for (const PiezaGui& p : placa.piezas)
         for (const ObservableGui& o : p.observables)
             if (QLabel* l = etiquetas.value(quint16(o.id_obs), nullptr)) {
-                ind_.insert(quint16(o.id_obs), {l, o});
+                ind_.insert(quint16(o.id_obs), {l, o, l->parentWidget(), false});
                 pintados_.push_back(quint16(o.id_obs));
             }
 }
 
+bool Panel::en_alarma(const ObservableGui& o, float valor)
+{
+    return o.alarma && valor >= 0.5f;
+}
+
 QString Panel::texto_de(const ObservableGui& o, float valor)
 {
+    if (o.alarma)
+        return en_alarma(o, valor) ? QStringLiteral("⚠ SI") : QStringLiteral("○");
     if (o.min == 0 && o.max == 1 && o.unidad.isEmpty())
         return valor >= 0.5f ? QStringLiteral("●") : QStringLiteral("○");
     QString t = QString::number(double(valor), 'g', 4);
@@ -245,6 +253,20 @@ void Panel::pon_valor(quint16 id_obs, float valor)
     if (it == ind_.constEnd()) return;
     const QString t = texto_de(it->obs, valor);
     if (it->etiqueta->text() != t) it->etiqueta->setText(t);
+    const bool d = en_alarma(it->obs, valor);
+    if (d == it->disparada) return;
+    ind_[id_obs].disparada = d;
+    // Solo al cambiar: la hoja de estilo cuesta, y llegan muestras cada pocos ms
+    const QString rojo = QStringLiteral("color: #c62828; font-weight: bold;");
+    it->etiqueta->setStyleSheet(d ? rojo : QString());
+    // El recuadro de la pieza avisa si alguna de sus alarmas está disparada
+    bool alguna = false;
+    for (const Indicador& x : std::as_const(ind_))
+        if (x.recuadro == it->recuadro && x.disparada) alguna = true;
+    it->recuadro->setProperty("alarma", alguna);
+    it->recuadro->setStyleSheet(alguna ? QStringLiteral("QGroupBox { color: #c62828; "
+                                                        "font-weight: bold; }")
+                                       : QString());
 }
 
 void Panel::activa_mandos(bool si)

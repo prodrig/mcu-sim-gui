@@ -134,6 +134,11 @@ argumentos=--gui localhost:3344 --tiempo-real
 Texto y no POD a propósito: es el mensaje que más va a crecer, y crecer no debe
 romper a nadie. Una clave desconocida se ignora.
 
+**`mcu=` puede ir vacío**, y `firmware=` con él: es una placa **sin MCU**. El
+chip ya no se supone —se declara con `<mcu>` en el XML o con `--mcu`—, y una
+placa que no hace ni lo uno ni lo otro es un circuito sin chip: una `Fuente`,
+una `Gnd` y lo que cuelgue de ellas. La ventana dice entonces «sin MCU».
+
 **`T_VERSION`** — la GUI contesta con la versión que va a hablar, que debe ser
 ≤ `protocolo_max`. Mismo formato:
 
@@ -168,10 +173,14 @@ puede **hacer**. También XML, en el mismo estilo:
     <mando idx="1" nombre="rebote_ms" tipo="continuo" min="0" max="20" valor="2"/>
     <mando idx="2" nombre="rebotes"   tipo="discreto" min="1" max="9"  valor="5"/>
   </pieza>
+  <pieza idx="2" id="F1" tipo="Fuente">
+    <observable idx="0" id_obs="3" nombre="corriente"      unidad="mA" min="-20" max="20" interesante="si"/>
+    <observable idx="1" id_obs="4" nombre="sobrecorriente" unidad=""   min="0"   max="1"  interesante="si" alarma="si"/>
+  </pieza>
 </catalogo>
 ```
 
-Cinco cosas que merecen nombre propio:
+Seis cosas que merecen nombre propio:
 
 * **`idx` de pieza es el índice en el inventario** de `ExtPartBase`, y vale para
   toda la ejecución porque la elaboración de SystemC es estática: después de
@@ -184,6 +193,12 @@ Cinco cosas que merecen nombre propio:
   `encendido` y no `corriente`; la GUI decide, y lo que decide lo dice en
   `T_SUSCRIBE`. Sin esto la pantalla de una placa con cuarenta piezas nace
   ilegible.
+* **`alarma="si"`** dice que un observable de 0 a 1 es un **aviso**: cuando vale
+  1 algo va mal —la sobrecorriente de una `Fuente` o de una `Gnd`— y la ventana
+  tiene que hacerlo notar, no pintarlo como un LED más: lo escribe «⚠ SI» en
+  rojo y pone en rojo el título de su pieza. Solo aparece cuando es cierto, así
+  que los observables de siempre salen igual. Se añadió el 2026-10-05 sin
+  cambiar la versión: una ventana anterior lo ignora y lo pinta ● / ○.
 * **`tipo`** de un mando dice qué control poner, sin decir de qué pieza es:
   `boton` (el máximo mientras está hundido, el mínimo al soltarlo),
   `interruptor` (máximo o mínimo), `continuo` (cualquier valor del rango) y

@@ -9,7 +9,9 @@
 // separados 100 ms, que es lo que programa el blinky. Y desde la fase 5, que
 // unas órdenes al pulsador B1 mandadas antes de arrancar vuelven con su eco en
 // el instante exacto, y que el blinky —que no mira PA0— parpadea igual. Y desde
-// la fase 6, G3: a demanda, un paso exacto, y T_PARA en marcha.
+// la fase 6, G3: a demanda, un paso exacto, y T_PARA en marcha. Y G4, una
+// placa SIN MCU (`placas/fuente_y_masa.xml`): la Fuente F1 limitando a sus
+// 20 mA con el pulsador CORTO pulsado, y su `sobrecorriente`, una alarma.
 //
 // Necesita un `mcu-sim` compilado y su árbol de fuentes, porque las placas y
 // los firmwares están allí. Se le dicen con dos variables de entorno:
@@ -21,7 +23,10 @@
 // fallo-: en el CI de este repositorio no hay un mcu-sim, y no tiene por qué.
 // =============================================================================
 #include <QCoreApplication>
+#include <QHash>
 #include <QProcess>
+
+#include <cmath>
 
 #include "comun.h"
 #include "sesion.h"
@@ -177,6 +182,63 @@ int main(int argc, char** argv)
         comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0 &&
                       p.readAllStandardOutput().contains("la ventana pidio parar"),
                   "y mcu-sim termina con codigo 0, diciendo que se le pidio parar");
+    }
+    // -------------------------------------------------------------------------
+    std::printf("G4 Una placa sin MCU: la Fuente y su sobrecorriente\n");
+    {
+        Sesion s;
+        s.escucha(QHostAddress::LocalHost, 0);
+        int listos = 0, fines = 0;
+        quint64 t_inst = 0;
+        QHash<quint64, QHash<quint16, float>> m;      // instante -> id_obs -> valor
+        QStringList avisos;
+        QObject::connect(&s, &Sesion::listo, [&] { ++listos; });
+        QObject::connect(&s, &Sesion::fin, [&](quint32, qint32, quint64) { ++fines; });
+        QObject::connect(&s, &Sesion::instantanea, [&](quint64 t, quint32) { t_inst = t; });
+        QObject::connect(&s, &Sesion::muestra, [&](quint16 id, float v) { m[t_inst][id] = v; });
+        QObject::connect(&s, &Sesion::aviso,
+                         [&](quint32, quint64, const QString&, const QString& x) { avisos << x; });
+        QProcess p;
+        p.setWorkingDirectory(src);
+        p.start(sim, {"placas/fuente_y_masa.xml", "--ms=30",
+                      "--gui", QStringLiteral("127.0.0.1:%1").arg(s.puerto())});
+        comprueba(espera([&] { return listos == 1; }, 20000) &&
+                      s.hola().value("mcu").isEmpty() && s.placa().mcus.isEmpty(),
+                  "saluda sin MCU: mcu= vacio en T_HOLA y ningun <mcu> en la placa");
+        int cor = -1, sob = -1, corto = -1;
+        bool alarma_bien = false;
+        for (const PiezaGui& pz : s.placa().piezas) {
+            if (pz.id == "CORTO" && !pz.mandos.isEmpty()) corto = pz.idx;
+            if (pz.id != "F1") continue;
+            for (const ObservableGui& o : pz.observables) {
+                if (o.nombre == "corriente") { cor = o.id_obs; alarma_bien = !o.alarma; }
+                if (o.nombre == "sobrecorriente") {
+                    sob = o.id_obs;
+                    alarma_bien = alarma_bien && o.alarma;
+                }
+            }
+        }
+        comprueba(cor >= 0 && sob >= 0 && corto >= 0 && alarma_bien,
+                  "F1 trae `corriente` y `sobrecorriente`, y solo la segunda es una alarma");
+        s.suscribe(1000000, {quint16(cor), quint16(sob)});
+        s.ordena(QVector<Orden>{{10000000ull, quint16(corto), 0, 1.f},
+                                {10000000ull, quint16(corto), 0, 0.f}});
+        comprueba(s.arranca(RIT_LIBRE) && espera([&] { return fines == 1; }, 30000),
+                  "CORTO pulsado de 10 a 20 ms, y 30 ms simulados");
+        const auto a = m.value(5000000ull), b = m.value(15000000ull), c = m.value(25000000ull);
+        comprueba(a.value(quint16(sob), -1) == 0.f && a.value(quint16(cor)) > 8.f &&
+                      a.value(quint16(cor)) < 9.f,
+                  "a los 5 ms, unos 8,5 mA y sin sobrecorriente");
+        comprueba(b.value(quint16(sob), -1) == 1.f &&
+                      std::fabs(b.value(quint16(cor)) - 20.f) < 0.02f,
+                  "a los 15 ms, con el corto, sus 20 mA justos y la sobrecorriente a 1");
+        comprueba(c.value(quint16(sob), -1) == 0.f && c.value(quint16(cor)) > 8.f,
+                  "y a los 25 ms, suelto, todo como al principio");
+        comprueba(avisos.filter("F1: sobrecorriente").size() == 1,
+                  "con un T_AVISO, uno solo, al entrar en limitacion");
+        const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);
+        comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0,
+                  "y mcu-sim termina con codigo 0");
     }
     return resultado();
 }

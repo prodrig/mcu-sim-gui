@@ -25,7 +25,11 @@ La **contraparte de visualización gráfica de
 > Siempre encima* (Ctrl+T) deja la ventana a la vista mientras se trabaja
 > en el IDE; los pulsadores del modelo rebotan, y en marcha se ajusta
 > cuánto dura el rebote —un deslizador que enseña su valor— y cuántas veces
-> rebota —un desplegable— (plan §16). Lo que falta: grabar y reproducir sesiones (fase 8).
+> rebota —un desplegable— (plan §16). **Y una placa puede no llevar MCU**:
+> una `Fuente` y una `Gnd` de `mcu-sim`, con su límite de corriente, se ven
+> aquí con la corriente en mA y la **sobrecorriente como alarma** —«⚠ SI» en
+> rojo, y el título de la pieza también—; arriba, «sin MCU» (plan §18). Lo
+> que falta: grabar y reproducir sesiones (fase 8).
 >
 > Para verlo, con las dos cosas compiladas y una al lado de la otra:
 >

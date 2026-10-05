@@ -20,6 +20,9 @@
 //       el de rango, que ya avisa el modelo- van a la lista de avisos.
 //   G5  (fase 6) el control: el ritmo elegido antes de arrancar, «Pausa» /
 //       «Sigue» según diga el modelo, «Paso» a demanda y «Parar» en marcha.
+//   G6  una placa sin MCU, con una Fuente: el resumen dice «sin MCU», la
+//       corriente se lee en mA y la sobrecorriente -un observable `alarma`-
+//       se pinta en rojo, con el título de su recuadro, y se apaga al volver.
 // =============================================================================
 #include <cmath>
 
@@ -449,6 +452,79 @@ int main(int argc, char** argv)
         m.manda(T_ESTADO, bytes(Estado{F_CORRIENDO, 0, 7000000ull, 0.9, 51}));
         comprueba(espera([&] { return pausa->isEnabled() && pausa->text() == "Pausa"; }),
                   "T_ESTADO CORRIENDO: otra vez 'Pausa'");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("G6 Una placa sin MCU, y una alarma que se nota\n");
+    {
+        ObservableGui so{1, 1, "sobrecorriente", "", 0, 1, true, true};
+        comprueba(Panel::texto_de(so, 0.f) == QString::fromUtf8("○") &&
+                      Panel::texto_de(so, 1.f) == QString::fromUtf8("⚠ SI") &&
+                      !Panel::en_alarma(so, 0.f) && Panel::en_alarma(so, 1.f) &&
+                      !Panel::en_alarma(ObservableGui{0, 0, "encendido", "", 0, 1, true}, 1.f),
+                  "un observable `alarma` se escribe ○ en reposo y ⚠ SI disparado; uno que no "
+                  "lo es, aunque valga 1, no esta en alarma");
+
+        VentanaPrincipal v(0);
+        v.show();
+        auto* resumen = v.findChild<QLabel*>("resumen");
+        ModeloFalso m;
+        m.conecta(v.sesion().puerto());
+        m.manda(T_HOLA, "protocolo_max=1\nplaca=placas/fuente_y_masa.xml\nmcu=\nfirmware=\n");
+        comprueba(m.espera_leidos(1) && m.leido[0].tipo == T_VERSION, "saludo con mcu= vacio");
+        m.version(1);
+        m.manda(T_PLACA,
+                "<placa nombre=\"fuente-y-masa\">\n"
+                "  <componente tipo=\"Fuente\" id=\"F1\" limite_ma=\"20\">\n"
+                "    <pin nombre=\"pin\" nodo=\"vcc\"/>\n"
+                "  </componente>\n"
+                "</placa>\n");
+        m.manda(T_CATALOGO,
+                "<catalogo>\n"
+                "  <pieza idx=\"0\" id=\"F1\" tipo=\"Fuente\">\n"
+                "    <observable idx=\"0\" id_obs=\"0\" nombre=\"corriente\" unidad=\"mA\" "
+                "min=\"-20\" max=\"20\" interesante=\"si\"/>\n"
+                "    <observable idx=\"1\" id_obs=\"1\" nombre=\"sobrecorriente\" unidad=\"\" "
+                "min=\"0\" max=\"1\" interesante=\"si\" alarma=\"si\"/>\n"
+                "  </pieza>\n"
+                "</catalogo>\n");
+        m.manda(T_LISTO);
+        auto* arr = v.findChild<QPushButton*>("arrancar");
+        comprueba(espera([&] { return arr->isEnabled(); }) &&
+                      v.sesion().placa().piezas.size() == 1 &&
+                      v.sesion().placa().piezas[0].observables.size() == 2 &&
+                      !v.sesion().placa().piezas[0].observables[0].alarma &&
+                      v.sesion().placa().piezas[0].observables[1].alarma,
+                  "el catalogo se lee con su alarma: `sobrecorriente` lo es y `corriente` no");
+        comprueba(resumen && resumen->text().contains("fuente-y-masa") &&
+                      resumen->text().contains("sin MCU"),
+                  "el resumen dice \"sin MCU\", no un hueco: \"" +
+                      resumen->text().toStdString() + "\"");
+        arr->click();
+        auto* cor = v.findChild<QLabel*>("obs:0");
+        auto* sob = v.findChild<QLabel*>("obs:1");
+        auto* caja = v.findChild<QGroupBox*>("pieza:0");
+        auto inst = [&](uint64_t t, float c, float s) {
+            CabInstantanea in{t, 2, 0};
+            m.manda(T_INSTANTANEA, bytes(in) + bytes(Muestra{0, 0, c}) + bytes(Muestra{1, 0, s}));
+        };
+        inst(1000000, 8.48f, 0.f);
+        comprueba(cor && sob && caja &&
+                      espera([&] { return cor->text() == "8.48 mA"; }) &&
+                      sob->text() == QString::fromUtf8("○") && sob->styleSheet().isEmpty() &&
+                      !caja->property("alarma").toBool(),
+                  "en reposo: la corriente, 8.48 mA, y la alarma apagada");
+        inst(2000000, 20.f, 1.f);
+        comprueba(espera([&] { return sob->text() == QString::fromUtf8("⚠ SI"); }) &&
+                      cor->text() == "20 mA" && sob->styleSheet().contains("#c62828") &&
+                      caja->property("alarma").toBool() &&
+                      caja->styleSheet().contains("#c62828"),
+                  "con sobrecorriente: 20 mA, ⚠ SI en rojo y el titulo de F1 en rojo");
+        inst(3000000, 8.48f, 0.f);
+        comprueba(espera([&] { return sob->text() == QString::fromUtf8("○"); }) &&
+                      sob->styleSheet().isEmpty() && !caja->property("alarma").toBool() &&
+                      caja->styleSheet().isEmpty(),
+                  "y al pasar, todo vuelve a su color");
     }
 
     return resultado();

@@ -43,6 +43,11 @@
 // pinta ● / ○; cualquier otro, el número con su unidad. Así un LED se ve
 // encendido y una corriente se lee en mA, y un observable de una pieza que
 // esta ventana no ha visto nunca se ve igual de bien.
+//
+// Y UNA ALARMA se nota: un observable que el catálogo marca `alarma="si"` -la
+// sobrecorriente de una Fuente o de una Gnd- se pinta ○ en reposo y, cuando
+// vale 1, «⚠ SI» en rojo y negrita, y el título de su recuadro también se pone
+// en rojo. Tampoco aquí se sabe qué pieza es: lo dice la declaración.
 // =============================================================================
 #ifndef MCU_SIM_GUI_PANEL_H
 #define MCU_SIM_GUI_PANEL_H
@@ -69,6 +74,8 @@ public:
     QVector<quint16> pintados() const { return pintados_; }
 
     static QString texto_de(const ObservableGui& o, float valor);
+    // Si esa muestra es una alarma disparada: un observable `alarma` a 1.
+    static bool en_alarma(const ObservableGui& o, float valor);
 
     // Enciende o apaga TODOS los controles: con el modelo esperando o
     // corriendo, sí; antes del saludo o con el modelo terminado, no.
@@ -79,7 +86,12 @@ signals:
     void orden(quint16 pieza, quint16 mando, float valor);
 
 private:
-    struct Indicador { QLabel* etiqueta; ObservableGui obs; };
+    struct Indicador {
+        QLabel*       etiqueta;
+        ObservableGui obs;
+        QWidget*      recuadro;          // el de su pieza, que también avisa
+        bool          disparada = false; // la alarma, en la última muestra
+    };
     QHash<quint16, Indicador> ind_;
     QVector<quint16>          pintados_;
     QVector<QWidget*>         controles_;

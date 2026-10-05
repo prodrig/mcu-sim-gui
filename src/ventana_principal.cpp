@@ -388,10 +388,13 @@ void VentanaPrincipal::pon_placa()
     const auto& h = ses_.hola();
     QString fw = h.value(QStringLiteral("firmware"));
     if (fw.isEmpty()) fw = tr("sin firmware");
-    // Una placa que no declara su MCU lo recibe implicito de `sim`, y entonces
-    // no esta en el XML: lo dice T_HOLA.
-    const QString mcus = p.mcus.isEmpty() ? h.value(QStringLiteral("mcu"))
-                                          : p.mcus.join(QStringLiteral(", "));
+    // Una placa que no declara su MCU puede recibirlo de `--mcu`, y entonces
+    // no esta en el XML: lo dice T_HOLA. Si tampoco lo dice el, la placa va
+    // sin MCU, que es una placa legitima (una Fuente, una Gnd y lo que
+    // cuelgue) y no un dato que falte.
+    QString mcus = p.mcus.isEmpty() ? h.value(QStringLiteral("mcu"))
+                                    : p.mcus.join(QStringLiteral(", "));
+    if (mcus.isEmpty()) mcus = tr("sin MCU");
     QString texto = tr("<b>%1</b> &nbsp; %2 &nbsp; %3 &nbsp; <i>%4 piezas, %5 indicadores, "
                        "%6 mandos</i>")
                         .arg(p.nombre.toHtmlEscaped(), mcus.toHtmlEscaped(),
