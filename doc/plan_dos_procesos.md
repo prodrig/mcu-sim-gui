@@ -1782,6 +1782,18 @@ ventana usa** —la plataforma `cocoa` y el estilo de macOS—, ejecuta
 comprueba además que **todo `@rpath/…` esté dentro de la `.app`**. La firma, al
 final y una vez: `install_name_tool` rompe la que deja `macdeployqt`.
 
+**El tercero** (2026-10-05) pasó `macdeployqt` limpio y se paró, otra vez, en
+la comprobación: los cuatro frameworks de Qt (QtCore, QtGui, QtWidgets, QtDBus)
+estaban dentro, y todo el que los usaba ya los pedía por `@rpath`, pero su
+**nombre propio** —el `LC_ID_DYLIB`— seguía siendo
+`/opt/homebrew/opt/qtbase/lib/QtCore.framework/…`. El remate solo renombraba
+las dylib sueltas. Ahora renombra **todo** binario cuyo nombre sea de Homebrew,
+framework o no, con su ruta dentro de `Frameworks`; y la lógica se ha probado
+aquí con imitaciones de `otool`, `install_name_tool` y `file` —corrige lo que
+debe, y la comprobación sigue cazando una referencia a Homebrew o un `@rpath`
+que no esté dentro—. Lo que no se puede probar sin un Mac es la firma y el
+arranque.
+
 **Lo que sigue pendiente de la fase 9**: firmar (sigue sin firma: SmartScreen y
 Gatekeeper avisan, y está dicho en las notas de la Release), un instalador que
 lleve **los dos** programas juntos, y bajar el suelo de Linux a 22.04, que pide
