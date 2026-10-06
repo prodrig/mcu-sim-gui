@@ -2,6 +2,7 @@
 
 #include <QFrame>
 #include <QGraphicsEllipseItem>
+#include <QGraphicsPathItem>
 #include <QGraphicsRectItem>
 #include <QGraphicsScene>
 #include <QGraphicsSimpleTextItem>
@@ -17,7 +18,6 @@
 #include <QWheelEvent>
 #include <QWidgetAction>
 #include <QPushButton>
-#include <QScrollArea>
 #include <QSvgRenderer>
 #include <QVBoxLayout>
 
@@ -182,6 +182,12 @@ bool VistaPlaca::pon_capa(const QString& placa_id, bool bandeja, const QByteArra
     cp->informe = inf;
     cp->lienzo = d->lienzo();
     cp->mm = d->mm_por_unidad();
+    // §10: varias placas van a la misma escala si sus dibujos dicen cuánto
+    // miden; el que no lo dice se iguala en altura, y se avisa
+    if (!bandeja && placa_.es_sistema() && origen == QLatin1String("svg") && cp->mm <= 0)
+        cp->informe.avisos << QObject::tr("el dibujo no dice su tamano en milimetros (width y "
+                                          "height en mm): se le pone el alto de la placa mas "
+                                          "alta que si lo dice, o 80 mm");
     cp->raiz = new QGraphicsRectItem;
     cp->raiz->setPen(Qt::NoPen);
     cp->raiz->setBrush(Qt::NoBrush);
@@ -281,6 +287,10 @@ double VistaPlaca::mm_de(const Capa& x) const
 
 const VistaPlaca::Capa* VistaPlaca::primera() const
 {
+    // La primera placa del sistema, que es la que se pone a la izquierda; si
+    // no es un sistema, la primera que llegó
+    for (const SubPlacaGui& sp : placa_.placas)
+        if (const Capa* c = capa(sp.id, false)) return c;
     for (const auto& x : capas_)
         if (!x->bandeja) return x.get();
     return capas_.empty() ? nullptr : capas_.front().get();
@@ -294,30 +304,138 @@ double VistaPlaca::escala(const Capa& c) const
 void VistaPlaca::coloca()
 {
     if (capas_.empty()) return;
-    // Las placas en el orden en que llegaron, y la bandeja de cada una a su
-    // derecha, arriba. La primera, donde está: la escena son sus coordenadas.
-    const Capa* p1 = primera();
-    const double hueco = 8.0 / mm_de(*p1);             // 8 mm entre una cosa y otra
+    // Las placas en el orden del sistema -o en el que llegaron, si no lo
+    // es-, centradas en vertical; la bandeja de cada una a su derecha,
+    // arriba. La primera, donde está: la escena son sus coordenadas.
+    QVector<Capa*> orden;
+    for (const SubPlacaGui& sp : placa_.placas)
+        if (Capa* c = capa(sp.id, false)) orden.push_back(c);
+    for (const auto& c : capas_)
+        if (!c->bandeja && !orden.contains(c.get())) orden.push_back(c.get());
+    const Capa* p1 = orden.isEmpty() ? capas_.front().get() : orden.front();
+    const double mm = mm_de(*p1);
+    const double hueco = 8.0 / mm;                     // 8 mm de la placa a su bandeja
+    const double entre = 30.0 / mm;                    // 30 mm de placa a placa: las líneas
+    double alto = 0;
+    for (Capa* c : orden) alto = std::max(alto, c->lienzo.height() * escala(*c));
     double x = p1->lienzo.left();
-    const double y = p1->lienzo.top();
+    const double y0 = p1->lienzo.top() - (alto - p1->lienzo.height()) / 2;
     QRectF todo;
-    auto pon = [&](Capa& c) {
+    auto pon = [&](Capa& c, double y) {
         const double k = escala(c);
         c.raiz->setScale(k);
         c.raiz->setPos(QPointF(x, y) - c.lienzo.topLeft() * k);
         const QRectF r = c.raiz->mapRectToScene(c.lienzo);
         todo = todo.isNull() ? r : todo.united(r);
-        x = r.right() + hueco;
+        return r;
     };
-    for (const auto& c : capas_) {
-        if (c->bandeja) continue;
-        pon(*c);
-        if (Capa* b = capa(c->placa_id, true)) pon(*b);
+    for (Capa* c : orden) {
+        const double y = y0 + (alto - c->lienzo.height() * escala(*c)) / 2;
+        QRectF r = pon(*c, y);
+        if (Capa* b = capa(c->placa_id, true)) {
+            x = r.right() + hueco;
+            r = pon(*b, r.top());
+        }
+        x = r.right() + entre;
     }
     // Una sola capa: la escena es su dibujo, justo
     if (capas_.size() == 1) scene()->setSceneRect(p1->lienzo);
     else scene()->setSceneRect(todo.adjusted(-hueco / 2, -hueco / 2, hueco / 2, hueco / 2));
+    traza_lineas();
     encaja();
+}
+
+QRectF VistaPlaca::caja_de(const QString& ref) const
+{
+    const int b = ref.indexOf(QLatin1Char('/'));
+    const QString pl = b > 0 ? ref.left(b) : QString();
+    QString el = b > 0 ? ref.mid(b + 1) : ref;
+    const Capa* c = capa(pl, false);
+    if (!c) return QRectF();
+    for (int vuelta = 0; vuelta < 2; ++vuelta) {
+        if (c->dibujo->existe(el)) return c->raiz->mapRectToScene(c->dibujo->caja(el));
+        const int p = el.lastIndexOf(QLatin1Char('.'));
+        if (p <= 0) break;
+        el = el.left(p);
+    }
+    return QRectF();
+}
+
+// Fase 6: una línea por cada par de conectores enchufados y por cada hilo
+// entre placas, de lo que las une en una a lo que las une en la otra. Si el
+// dibujo no tiene el conector, sale del borde de la placa que mira a la otra.
+void VistaPlaca::traza_lineas()
+{
+    for (const Linea& l : std::as_const(lineas_)) delete l.item;
+    lineas_.clear();
+    if (!placa_.es_sistema()) return;
+    const double mm = mm_de(*primera());
+    auto placa_de = [](const QString& r) {
+        const int b = r.indexOf(QLatin1Char('/'));
+        return b > 0 ? r.left(b) : QString();
+    };
+    // Dónde engancha `ref` cuando la línea va hacia `hacia`
+    auto punto = [&](const QString& ref, const QPointF& hacia) {
+        QRectF r = caja_de(ref);
+        if (r.isNull()) r = en_escena(placa_de(ref));
+        if (r.isNull()) return QPointF();
+        const bool derecha = hacia.x() > r.center().x();
+        // Un conector de un dibujo -una tira- engancha por su lado; el borde
+        // de una placa entera, por el centro de ese lado
+        return QPointF(derecha ? r.right() : r.left(), r.center().y());
+    };
+    auto centro = [&](const QString& ref) {
+        QRectF r = caja_de(ref);
+        if (r.isNull()) r = en_escena(placa_de(ref));
+        return r.center();
+    };
+    static const QColor colores[] = {QColor(0xd9, 0x48, 0x1c), QColor(0x1f, 0x77, 0xb4),
+                                     QColor(0x8e, 0x44, 0xad), QColor(0x16, 0xa0, 0x85),
+                                     QColor(0xc0, 0x39, 0x2b), QColor(0x2c, 0x3e, 0x50)};
+    auto traza = [&](const QString& a, const QString& b, bool hilo, const QColor& col,
+                     const QString& ayuda) {
+        if (placa_de(a) == placa_de(b) || !capa(placa_de(a), false) || !capa(placa_de(b), false))
+            return;
+        const QPointF pa = punto(a, centro(b)), pb = punto(b, centro(a));
+        if (pa.isNull() || pb.isNull()) return;
+        // Una curva que sale y entra en horizontal: se ve de dónde a dónde va
+        // aunque cruce por encima de una placa
+        QPainterPath camino(pa);
+        const double dx = std::max(std::abs(pb.x() - pa.x()) * 0.45, 10.0 / mm);
+        const double sa = pb.x() >= pa.x() ? 1 : -1;
+        camino.cubicTo(pa + QPointF(sa * dx, 0), pb - QPointF(sa * dx, 0), pb);
+        auto* it = new QGraphicsPathItem(camino);
+        QPen lapiz(col, 0.8 / mm);
+        if (hilo) lapiz.setStyle(Qt::DashLine);
+        lapiz.setCapStyle(Qt::RoundCap);
+        it->setPen(lapiz);
+        it->setOpacity(0.85);
+        it->setZValue(10);
+        it->setAcceptedMouseButtons(Qt::NoButton);
+        it->setToolTip(ayuda);
+        // Y un punto en cada extremo
+        for (const QPointF& p : {pa, pb}) {
+            const double r = 1.3 / mm;
+            auto* d = new QGraphicsEllipseItem(QRectF(p.x() - r, p.y() - r, 2 * r, 2 * r), it);
+            d->setBrush(col);
+            d->setPen(Qt::NoPen);
+            d->setAcceptedMouseButtons(Qt::NoButton);
+        }
+        scene()->addItem(it);
+        lineas_.push_back({a, b, hilo, pa, pb, it});
+    };
+    for (int k = 0; k < placa_.acoples.size(); ++k) {
+        const AcopleGui& ac = placa_.acoples[k];
+        const QColor col = colores[k % 6];
+        QString como = ac.espejo ? tr(" (en espejo)")
+                     : ac.conectores.size() > 2 ? tr(" (en pila)") : QString();
+        for (int i = 0; i + 1 < ac.conectores.size(); ++i)
+            traza(ac.conectores[i], ac.conectores[i + 1], false, col,
+                  QStringLiteral("%1 ⇄ %2").arg(ac.conectores[i], ac.conectores[i + 1]) + como);
+    }
+    for (const HiloGui& h : placa_.hilos)
+        traza(h.a, h.b, true, QColor(0x55, 0x55, 0x55),
+              tr("hilo %1 - %2").arg(h.a, h.b));
 }
 
 // -----------------------------------------------------------------------------
@@ -840,68 +958,69 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
     : QWidget(padre), placa_(placa)
 {
     setObjectName(QStringLiteral("ilustracion"));
-    auto* exterior = new QVBoxLayout(this);
-    exterior->setContentsMargins(0, 0, 0, 0);
-    auto* desliza = new QScrollArea(this);
-    desliza->setWidgetResizable(true);
-    desliza->setFrameShape(QFrame::NoFrame);
-    exterior->addWidget(desliza);
-    auto* dentro = new QWidget(desliza);
-    auto* v = new QVBoxLayout(dentro);
+    auto* v = new QVBoxLayout(this);
+    v->setContentsMargins(0, 0, 0, 0);
 
     struct Cual { QString id, titulo, ayuda; };
     QVector<Cual> cuales;
     if (!placa.es_sistema()) {
         cuales.push_back({QString(), placa.nombre, QString()});
     } else {
-        for (const SubPlacaGui& s : placa.placas)
-            cuales.push_back({s.id, QStringLiteral("%1 · %2").arg(s.id, s.nombre), s.fichero});
+        const QVector<EnlaceGui> enlaces = placa.enlaces();
+        for (const SubPlacaGui& s : placa.placas) {
+            QStringList ayuda;
+            if (!s.fichero.isEmpty()) ayuda << s.fichero;
+            for (const EnlaceGui& e : enlaces) {
+                if (e.placa_a == s.id) ayuda << tr("unida a %1 por %2").arg(e.placa_b, e.por);
+                else if (e.placa_b == s.id) ayuda << tr("unida a %1 por %2").arg(e.placa_a, e.por);
+            }
+            cuales.push_back({s.id, QStringLiteral("%1 · %2").arg(s.id, s.nombre),
+                              ayuda.join(QLatin1Char('\n'))});
+        }
     }
+    // Fase 6: UN dibujo para todas las placas, una al lado de otra con las
+    // líneas de lo que las une; y encima, una fila por placa
+    vista_ = new VistaPlaca(placa_, this);
+    vista_->setObjectName(QStringLiteral("vista:"));
+    connect(vista_, &VistaPlaca::orden, this, &VistaIlustracion::orden);
     for (const Cual& c : cuales) {
         // Un QFrame, no un QGroupBox: los recuadros del panel son QGroupBox,
         // y las pruebas los cuentan
-        auto* marco = new QFrame(dentro);
+        auto* marco = new QFrame(this);
         marco->setObjectName(QStringLiteral("dibujo:%1").arg(c.id));
         marco->setFrameShape(QFrame::StyledPanel);
-        auto* caja = new QVBoxLayout(marco);
-        auto* cabeza = new QHBoxLayout;
+        auto* fila = new QHBoxLayout(marco);
+        fila->setContentsMargins(6, 2, 6, 2);
         auto* titulo = new QLabel(QStringLiteral("<b>%1</b>").arg(c.titulo.toHtmlEscaped()), marco);
         titulo->setToolTip(c.ayuda);
+        // Fase 5: nace con el dibujo GENERADO, que siempre se puede hacer;
+        // uno de verdad lo sustituye
+        auto* inf = new QLabel(tr("Dibujo generado: la placa no trae el suyo."), marco);
+        inf->setObjectName(QStringLiteral("informe:%1").arg(c.id));
+        inf->setWordWrap(true);
+        inf->setEnabled(false);
         auto* abrir = new QPushButton(tr("Abrir dibujo..."), marco);
         abrir->setObjectName(QStringLiteral("abrir:%1").arg(c.id));
         abrir->setToolTip(tr("Elegir otro SVG para esta placa. El suyo, si lo tiene, lo "
                              "manda mcu-sim."));
         const QString id = c.id;
         connect(abrir, &QPushButton::clicked, this, [this, id] { emit pide_dibujo(id); });
-        cabeza->addWidget(titulo, 1);
-        cabeza->addWidget(abrir);
-        caja->addLayout(cabeza);
-        // Fase 5: nace con el dibujo GENERADO, que siempre se puede hacer;
-        // uno de verdad lo sustituye
-        auto* vista = new VistaPlaca(placa_, marco);
-        vista->setObjectName(QStringLiteral("vista:%1").arg(c.id));
+        fila->addWidget(titulo);
+        fila->addWidget(inf, 1);
+        fila->addWidget(abrir);
+        v->addWidget(marco);
+        recuadros_.insert(c.id, {marco, inf});
         QString e;
-        vista->pon_capa(c.id, false, dibujo_generado(placa_, c.id), {},
-                        QStringLiteral("generado"), e);
-        connect(vista, &VistaPlaca::orden, this, &VistaIlustracion::orden);
-        caja->addWidget(vista, 1);
-        auto* inf = new QLabel(tr("Dibujo generado: la placa no trae el suyo."), marco);
-        inf->setObjectName(QStringLiteral("informe:%1").arg(c.id));
-        inf->setWordWrap(true);
-        inf->setEnabled(false);
-        caja->addWidget(inf);
-        v->addWidget(marco, 1);
-        recuadros_.insert(c.id, {marco, caja, vista, inf});
-        vistas_.insert(c.id, vista);
+        vista_->pon_capa(c.id, false, dibujo_generado(placa_, c.id), {},
+                         QStringLiteral("generado"), e);
     }
-    desliza->setWidget(dentro);
+    v->addWidget(vista_, 1);
 }
 
 bool VistaIlustracion::hay_dibujo() const
 {
-    for (VistaPlaca* v : vistas_)
-        for (const QString& id : placas())
-            if (v->origen(id) == QLatin1String("svg")) return true;
+    for (const QString& id : placas())
+        if (vista_->origen(id) == QLatin1String("svg")) return true;
     return false;
 }
 
@@ -935,7 +1054,7 @@ bool VistaIlustracion::pon_dibujo(const QString& placa_id, const QByteArray& svg
         return false;
     }
     Recuadro& r = *it;
-    VistaPlaca* v = vistas_.value(placa_id);
+    VistaPlaca* v = vista_;
     if (!v->pon_capa(placa_id, false, svg, tabla, QStringLiteral("svg"), error)) {
         // Se queda el que había -el generado, si no había otro-, y se dice
         r.informe->setText(tr("<span style=\"color:#c62828\">El dibujo no sirve: %1</span>")
@@ -972,22 +1091,21 @@ bool VistaIlustracion::pon_dibujo(const QString& placa_id, const QByteArray& svg
 
 void VistaIlustracion::pon_valor(quint16 id_obs, float valor)
 {
-    for (VistaPlaca* v : std::as_const(vistas_)) v->pon_valor(id_obs, valor);
+    vista_->pon_valor(id_obs, valor);
 }
 
 QVector<quint16> VistaIlustracion::observados() const
 {
     QVector<quint16> l;
-    for (VistaPlaca* v : vistas_)
-        for (quint16 id : v->observados())
-            if (!l.contains(id)) l.push_back(id);
+    for (quint16 id : vista_->observados())
+        if (!l.contains(id)) l.push_back(id);
     return l;
 }
 
 void VistaIlustracion::activa_mandos(bool si)
 {
     activos_ = si;
-    for (VistaPlaca* v : std::as_const(vistas_)) v->activa_mandos(si);
+    vista_->activa_mandos(si);
 }
 
 InformeDibujo VistaIlustracion::informe(const QString& placa_id) const

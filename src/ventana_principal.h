@@ -58,9 +58,11 @@
 // Desde la fase 1 de las ilustraciones (`doc/analisis-uso-ilustraciones.md`),
 // el dibujo de cada placa:
 //
-//   * en el centro, dos pestañas: «Ilustración», con un recuadro por placa y
-//     su dibujo SVG si lo tiene, y «Panel», el de siempre. Si hay dibujo, se
-//     enseña la ilustración; el panel sigue ahí, con todo;
+//   * en el centro, dos pestañas: «Ilustración», con el dibujo SVG de cada
+//     placa -el suyo o uno generado (fase 5)-, todas juntas y unidas por
+//     líneas en un sistema (fase 6), y «Panel», el de siempre. Si alguna
+//     placa trae dibujo, se enseña la ilustración; el panel sigue ahí, con
+//     todo;
 //   * (fase 4) el dibujo de cada placa lo manda `mcu-sim` (T_ILUSTRACION), y
 //     se le aplica la tabla de enlaces que la placa trae en T_PLACA;
 //   * «Vista ▸ Abrir dibujo de la placa…» (o el botón de su recuadro) abre

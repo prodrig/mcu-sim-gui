@@ -2163,3 +2163,54 @@ mm, y la J9 de una fila de L2; la bandeja con X3 —que deja ver algo— y sin
 R35 —que no—, a la derecha y a la escala del dibujo, con X3 brillando en ella;
 y la escala de un dibujo que no dice su tamaño. Las de antes, adaptadas: el
 hueco de un recuadro sin dibujo es ahora su generado.
+
+## 26. Ilustraciones, fase 6: varias placas, una al lado de otra
+
+§10 del análisis, con lo que se pidió: **las placas de un sistema una al lado
+de otra, y líneas para las conexiones entre conectores**. Las placas apiladas
+—un shield encima de su Nucleo— no se han hecho.
+
+**Un dibujo para todas.** La pestaña deja de tener un recuadro con su dibujo
+por placa: tiene una **fila por placa** —su nombre, lo encontrado en su
+dibujo y su «Abrir dibujo…»— y debajo **una sola vista** con todas. Cada
+placa es una capa de esa escena (fase 5), en el orden del sistema, centradas
+en vertical, a 30 mm unas de otras y **a la misma escala**: la de sus
+milímetros. Un dibujo que no dice su tamaño se iguala en altura a la placa más
+alta que sí lo dice, y se avisa en su informe. La escena va en las unidades de
+la primera placa, y la bandeja de cada una sigue a su derecha.
+
+**Las líneas** (`VistaPlaca::lineas()`): una por cada par de conectores
+enchufados —en una pila, cada uno con el siguiente, que es el grafo de
+placas de §20—, del color de su acople, y una **de trazos** por cada hilo
+entre placas. Enganchan en el **elemento** del conector en el dibujo de su
+placa —`N/CN5` es el `CN5` del dibujo de `N`, y un generado los trae todos—,
+por el lado que mira a la otra placa; un hilo, en su pin si está dibujado
+(`CN5.7`), en su conector si no, y **en el borde de la placa** si tampoco: el
+pin de un chip, por ejemplo. Son curvas que salen y entran en horizontal, por
+encima de las placas y un poco transparentes, con una ayuda que dice qué unen
+(«N/CN5 ⇄ S/J5», «(en pila)»). Se vuelven a trazar cada vez que cambia un
+dibujo.
+
+**Un detalle que salió al probarlo con la Nucleo de verdad**: la escala de
+cada capa se medía contra la primera capa que se había puesto, y no contra la
+primera placa del sistema; al llegar el dibujo de la Nucleo después de su
+generado, el shield quedaba a 266 mm. Ahora las dos son la primera del
+sistema.
+
+![La Nucleo con su dibujo y el shield generado, unidos por sus cuatro conectores](img/ilustracion-sistema.png)
+
+*`placas/nucleo_y_shield.xml` con el `mcu-sim` de verdad: la Nucleo con su
+dibujo, el shield generado y una línea por conector Arduino. El blinky
+enciende a la vez el LD2 de la Nucleo y el LD_D13 del shield.*
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 134 → **148** (I11): una sola
+vista y una fila por placa; las placas a 30 mm, centradas; las líneas del
+acople y del hilo, de lado a lado de CN5 y J5 y de pin a pin, y su color en
+los píxeles; el dibujo de verdad de la Nucleo a su tamaño, el shield
+recolocado y las líneas saliendo de su CN5; uno sin milímetros, igualado y
+avisado; y la pila, con sus tres líneas —dos de la pila y el hilo, que sale
+del borde de la CPU porque el pin del chip no está dibujado—. A mano, con el
+`mcu-sim` de verdad: `placas/nucleo_y_shield.xml` con el dibujo de la Nucleo
+y el shield generado, sus cuatro conectores unidos y el blinky encendiendo a
+la vez el LD2 de una y el LED de la otra; y `placas/pila_pc104.xml`, tres
+generados en fila.

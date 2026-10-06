@@ -161,6 +161,14 @@ una con qué deja hecho, cómo se comprueba y qué NO entra.
 | 8 | Grabación y reproducción de sesiones | los dos |
 | 9 | Que el precio de los dos procesos no lo pague el alumno | los dos |
 
+Y, aparte del plan, **las ilustraciones**
+([`doc/analisis-uso-ilustraciones.md`](doc/analisis-uso-ilustraciones.md), plan
+§21 a §26): cada placa con su **dibujo SVG** —el que manda `mcu-sim` con la
+placa, o uno que la ventana genera si no trae ninguno—, los LEDs que brillan y
+los botones que se pulsan sobre él, y en un sistema todas las placas una al
+lado de otra con una línea por cada conector enchufado. El panel de siempre
+sigue en su pestaña.
+
 ---
 
 ## Compilar

@@ -77,10 +77,18 @@
 // dibujo, la ventana enseña la ilustración, y el panel sigue en su pestaña,
 // con todo lo que hay, para quien lo quiera.
 //
+// VARIAS PLACAS (fase 6, §10 del análisis): todas en UN dibujo, una al lado
+// de otra en el orden del sistema, centradas y a la misma escala -la de sus
+// milímetros-, con una LÍNEA por cada par de conectores enchufados -en una
+// pila, cada uno con el siguiente-, del color de su acople, y una de trazos
+// por cada hilo. Van de conector a conector, o de pin a pin si están
+// dibujados; si no, desde el borde de la placa que mira a la otra. Apiladas
+// -un shield encima de su Nucleo- no: lo que se pidió es una al lado de otra.
+//
 // Como el panel, cada widget lleva un `objectName` para las pruebas:
-// `dibujo:<placa>` el recuadro, `abrir:<placa>` su botón, `informe:<placa>`
-// lo encontrado, `vista:<placa>` el dibujo, y en la escena `vivo:<pieza>`. En
-// una placa suelta, <placa> es vacío: `dibujo:`.
+// `dibujo:<placa>` la fila de cada placa, `abrir:<placa>` su botón,
+// `informe:<placa>` lo encontrado, `vista:` el dibujo -uno para todas-, y en
+// la escena `vivo:<pieza>`. En una placa suelta, <placa> es vacío: `dibujo:`.
 // =============================================================================
 #ifndef MCU_SIM_GUI_ILUSTRACION_H
 #define MCU_SIM_GUI_ILUSTRACION_H
@@ -99,6 +107,7 @@
 #include "placa.h"
 
 class QGraphicsEllipseItem;
+class QGraphicsPathItem;
 class QGraphicsRectItem;
 class QGraphicsSimpleTextItem;
 class QGraphicsSvgItem;
@@ -136,6 +145,20 @@ public:
     QString origen(const QString& placa_id) const;
     // Dónde ha quedado en la escena el dibujo de una placa, o su bandeja
     QRectF en_escena(const QString& placa_id, bool bandeja = false) const;
+    // Fase 6: las LÍNEAS entre placas, una por cada par de conectores
+    // enchufados -en una pila, cada uno con el siguiente- y una por cada hilo
+    // que va de una placa a otra
+    struct Linea {
+        QString a, b;                 // "N/CN5", "S/J5"; o los dos nodos del hilo
+        bool    hilo = false;
+        QPointF pa, pb;               // dónde empieza y dónde acaba, en la escena
+        QGraphicsPathItem* item = nullptr;
+    };
+    const QVector<Linea>& lineas() const { return lineas_; }
+    // Dónde está en la escena lo que se llama así en su placa: `N/CN5` es el
+    // elemento CN5 del dibujo de N. Si el dibujo no lo tiene, se prueba con lo
+    // que hay antes del punto (`N/CN9.2` -> CN9); si tampoco, nulo.
+    QRectF caja_de(const QString& ref) const;
     // Lo que se encontró en el dibujo de una placa; sin argumento, la primera
     const InformeDibujo& informe(const QString& placa_id) const;
     const InformeDibujo& informe() const;
@@ -187,9 +210,10 @@ protected:
     void showEvent(QShowEvent* e) override;
 
 protected:
-    // Coloca las capas en la escena. Esta, una al lado de otra y cada bandeja
-    // a la derecha de su placa, a la misma escala si dicen su tamaño.
-    virtual void coloca();
+    // Coloca las capas en la escena: las placas una al lado de otra, en el
+    // orden del sistema y centradas en vertical, cada bandeja a la derecha de
+    // su placa, todo a la misma escala (§10); y las líneas entre placas.
+    void coloca();
 
     // Una capa: el dibujo de una placa, o su bandeja
     struct Capa {
@@ -253,6 +277,8 @@ private:
     void abre_menu(QMenu* m, const QPoint& donde);
 
     QHash<int, QGraphicsSvgItem*> vivos_;
+    QVector<Linea>                lineas_;
+    void traza_lineas();
     QVector<Viva>                 vivas_;
     QHash<int, int>               viva_de_;     // pieza -> índice en vivas_
     QHash<quint16, int>           obs_de_;      // id_obs -> índice en vivas_
@@ -290,7 +316,11 @@ public:
     // Fase 2: una muestra, a todos los dibujos; y lo que necesitan entre todos
     void pon_valor(quint16 id_obs, float valor);
     QVector<quint16> observados() const;
-    VistaPlaca* vista(const QString& placa_id) const { return vistas_.value(placa_id, nullptr); }
+    // La vista donde está esa placa: desde la fase 6, una para todas
+    VistaPlaca* vista(const QString& placa_id) const
+    {
+        return recuadros_.contains(placa_id) ? vista_ : nullptr;
+    }
     // Lo que se encontró en el dibujo de esa placa; vacío si no tiene
     InformeDibujo informe(const QString& placa_id) const;
     // Fase 3: los mandos de todos los dibujos, los de ahora y los que vengan
@@ -303,15 +333,15 @@ signals:
     void orden(quint16 pieza, quint16 mando, float valor);
 
 private:
+    // La fila de cada placa, encima del dibujo: su nombre, lo que se ha
+    // encontrado en su dibujo y el botón para abrir otro
     struct Recuadro {
         QWidget*     marco = nullptr;
-        QVBoxLayout* caja = nullptr;
-        QWidget*     contenido = nullptr;     // la vista
         QLabel*      informe = nullptr;
     };
     PlacaGui                     placa_;
     QHash<QString, Recuadro>     recuadros_;
-    QHash<QString, VistaPlaca*>  vistas_;
+    VistaPlaca*                  vista_ = nullptr;
     bool                         activos_ = false;
 };
 

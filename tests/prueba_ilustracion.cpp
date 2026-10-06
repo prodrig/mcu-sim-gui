@@ -37,9 +37,15 @@
 //       glifo de cada pieza por su declaración, los conectores con su forma y
 //       su numeración, en milímetros, y que funciona como uno de verdad; la
 //       BANDEJA con lo que a un dibujo le falta; la escala de cada cosa.
+//   I11 (fase 6) varias placas: todas en un dibujo, una al lado de otra a la
+//       misma escala y centradas, con una línea por cada par de conectores
+//       enchufados -en una pila, cada uno con el siguiente- y una de trazos
+//       por cada hilo, de conector a conector o, si no está dibujado, desde
+//       el borde de la placa.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
+#include <QGraphicsPathItem>
 #include <QGraphicsRectItem>
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsSvgItem>
@@ -1013,6 +1019,119 @@ int main(int argc, char** argv)
                            dm.lienzo().height() * 25.0 / 80.0) < 0.01,
                   "un dibujo sin milimetros mide 80 mm de alto: 25 unidades son 80 mm, y la "
                   "bandeja se escala a eso");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I11 Varias placas: una al lado de otra, con lineas entre conectores\n");
+    {
+        // El sistema de prueba, con sus conectores descritos como los manda el
+        // mcu-sim de ahora
+        QByteArray sx(SISTEMA_XML);
+        sx.replace("<placa id=\"N\" nombre=\"nucleo-f446re\" fichero=\"nucleo_f446re.xml\"/>",
+                   "<placa id=\"N\" nombre=\"nucleo-f446re\" fichero=\"nucleo_f446re.xml\">\n"
+                   "    <conector ref=\"N/CN5\" filas=\"1\" columnas=\"10\" numeracion=\"zigzag\" acople=\"0\"/>\n"
+                   "  </placa>");
+        sx.replace("<placa id=\"S\" nombre=\"shield-leds\" fichero=\"shield_leds.xml\"/>",
+                   "<placa id=\"S\" nombre=\"shield-leds\" fichero=\"shield_leds.xml\">\n"
+                   "    <conector ref=\"S/J5\" filas=\"1\" columnas=\"10\" numeracion=\"zigzag\" acople=\"0\"/>\n"
+                   "  </placa>");
+        const PlacaGui s = placa_de(sx.constData(), CATALOGO_SISTEMA_XML);
+        VistaIlustracion il(s);
+        il.resize(900, 500);
+        il.show();
+        espera([] { return false; }, 50);
+        VistaPlaca* v = il.vista("N");
+        comprueba(v && v == il.vista("S") && !il.vista("Z") && il.findChild<QWidget*>("dibujo:N") &&
+                      il.findChild<QWidget*>("dibujo:S") && il.findChild<QPushButton*>("abrir:S") &&
+                      il.findChildren<VistaPlaca*>().size() == 1,
+                  "un solo dibujo para las dos placas, y encima una fila por placa con su boton");
+        if (!v) return resultado();
+        QRectF n = v->en_escena("N"), sr = v->en_escena("S");
+        comprueba(std::abs(sr.left() - n.right() - 30) < 0.01 &&
+                      std::abs(sr.center().y() - n.center().y()) < 0.01,
+                  "una al lado de otra, en el orden del sistema, a 30 mm y centradas: los dos "
+                  "generados estan en milimetros, y la escena tambien");
+        comprueba(v->lineas().size() == 2 && !v->lineas()[0].hilo && v->lineas()[1].hilo &&
+                      v->lineas()[0].a == "N/CN5" && v->lineas()[0].b == "S/J5" &&
+                      v->lineas()[0].item->toolTip() == QString::fromUtf8("N/CN5 ⇄ S/J5"),
+                  "dos lineas: la del acople CN5-J5 y la del hilo, que va de trazos");
+        const QRectF cn5 = v->caja_de("N/CN5"), j5 = v->caja_de("S/J5");
+        const VistaPlaca::Linea& l0 = v->lineas()[0];
+        comprueba(!cn5.isNull() && !j5.isNull() && std::abs(l0.pa.x() - cn5.right()) < 0.01 &&
+                      std::abs(l0.pa.y() - cn5.center().y()) < 0.01 &&
+                      std::abs(l0.pb.x() - j5.left()) < 0.01,
+                  "de conector a conector: sale por el lado de CN5 que mira al shield y entra "
+                  "por el de J5 que mira a la Nucleo");
+        const VistaPlaca::Linea& l1 = v->lineas()[1];
+        const QRectF p7 = v->caja_de("N/CN5.7"), p8 = v->caja_de("S/J5.8");
+        comprueba(l1.a == "N/CN5.7" && std::abs(l1.pa.x() - p7.right()) < 0.01 &&
+                      std::abs(l1.pb.x() - p8.left()) < 0.01 &&
+                      l1.item->pen().style() == Qt::DashLine,
+                  "el hilo, de pin a pin: del 7 de CN5 al 8 de J5");
+        l1.item->setVisible(false);          // va casi por el mismo sitio
+        const QImage img = v->imagen(1200);
+        l1.item->setVisible(true);
+        const QPointF medio = l0.item->path().pointAtPercent(0.5);
+        comprueba(parecido(en(img, *v, medio.x(), medio.y()), qRgb(0xd9, 0x48, 0x1c), 70),
+                  "y se ve: a mitad de camino, el color de la linea, " +
+                      hex(en(img, *v, medio.x(), medio.y())).toStdString());
+
+        // Un dibujo de verdad en N: a su escala -70 mm en 70 unidades- y las
+        // lineas, a su CN5
+        QString e;
+        comprueba(il.pon_dibujo("N", DIBUJO_NUCLEO, {}, e) && v->origen("N") == "svg",
+                  "el dibujo de la Nucleo, en N");
+        n = v->en_escena("N");
+        sr = v->en_escena("S");
+        const QRectF cn5b = v->caja_de("N/CN5");
+        comprueba(std::abs(n.width() - 70) < 0.01 && std::abs(sr.left() - n.right() - 30) < 0.01 &&
+                      v->lineas().size() == 2 && std::abs(v->lineas()[0].pa.x() - cn5b.right()) < 0.01 &&
+                      std::abs(v->lineas()[0].pa.y() - cn5b.center().y()) < 0.01,
+                  "lo pone a su tamano, recoloca el shield, y la linea sale ahora del CN5 del "
+                  "dibujo");
+        comprueba(v->lineas()[1].a == "N/CN5.7" &&
+                      std::abs(v->lineas()[1].pa.x() - cn5b.right()) < 0.01,
+                  "el hilo, sin un CN5.7 dibujado, sale de CN5");
+        comprueba(!il.informe("N").avisos.join(" ").contains("no dice su tamano"),
+                  "un dibujo que si dice sus milimetros no avisa de su tamano");
+        const QByteArray sin_mm = QByteArray(DIBUJO_NUCLEO).replace(" width=\"70mm\" height=\"80mm\"", "");
+        il.pon_dibujo("N", sin_mm, {}, e);
+        n = v->en_escena("N");
+        sr = v->en_escena("S");
+        comprueba(il.informe("N").avisos.join(" ").contains("no dice su tamano") &&
+                      std::abs(n.height() - sr.height()) < 0.01,
+                  "y uno que no lo dice se iguala en altura a la placa que si lo dice, y se "
+                  "avisa");
+
+        // Una pila: cada conector con el siguiente, y el hilo de un pin del chip
+        const char* CAT_PILA =
+            "<catalogo>\n"
+            "  <pieza idx=\"0\" id=\"CPU/J1\" tipo=\"Conector\"/>\n"
+            "  <pieza idx=\"1\" id=\"L1/J1\" tipo=\"Conector\"/>\n"
+            "  <pieza idx=\"2\" id=\"L2/J1\" tipo=\"Conector\"/>\n"
+            "  <pieza idx=\"3\" id=\"L2/J9\" tipo=\"Conector\"/>\n"
+            "</catalogo>\n";
+        const PlacaGui pila = placa_de(PILA_XML, CAT_PILA);
+        VistaIlustracion ip(pila);
+        VistaPlaca* vp = ip.vista("CPU");
+        const QRectF cpu = vp->en_escena("CPU"), rl1 = vp->en_escena("L1"),
+                     rl2 = vp->en_escena("L2");
+        comprueba(rl1.left() > cpu.right() && rl2.left() > rl1.right(),
+                  "la pila, CPU, L1 y L2 de izquierda a derecha");
+        QStringList pares;
+        for (const VistaPlaca::Linea& l : vp->lineas())
+            pares << l.a + (l.hilo ? " ~ " : " - ") + l.b;
+        comprueba(pares == QStringList({"CPU/J1 - L1/J1", "L1/J1 - L2/J1",
+                                        "CPU/u0.PA2 ~ L2/J9.1"}) &&
+                      vp->lineas()[0].item->toolTip().endsWith("(en pila)"),
+                  "tres lineas: cada conector de la pila con el siguiente, y el hilo: \"" +
+                      pares.join(", ").toStdString() + "\"");
+        const VistaPlaca::Linea& h = vp->lineas()[2];
+        comprueba(std::abs(h.pa.x() - cpu.right()) < 0.01 &&
+                      std::abs(h.pa.y() - cpu.center().y()) < 0.01 &&
+                      std::abs(h.pb.x() - vp->caja_de("L2/J9.1").left()) < 0.01,
+                  "un pin de chip no esta dibujado: el hilo sale del borde de la CPU, y llega "
+                  "al pin 1 de J9 de L2");
     }
 
     return resultado();
