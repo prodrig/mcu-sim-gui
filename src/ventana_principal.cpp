@@ -223,6 +223,7 @@ void VentanaPrincipal::construye()
         statusBar()->showMessage(tr("mcu-sim conectado; saludando"));
     });
     connect(&ses_, &Sesion::placa_lista, this, &VentanaPrincipal::pon_placa);
+    connect(&ses_, &Sesion::ilustracion, this, &VentanaPrincipal::llega_dibujo);
     connect(&ses_, &Sesion::listo, this, [this] {
         // Antes de arrancar: asi la secuencia se repite al picosegundo
         suscribe();
@@ -469,24 +470,52 @@ bool VentanaPrincipal::abre_dibujo(const QString& placa_id, const QByteArray& sv
     QStringList cuales{placa_id};
     for (const QString& id : ilus_->placas())
         if (id != placa_id && !nombre.isEmpty() && ilus_->nombre_de(id) == nombre) cuales << id;
+    if (!pon_dibujos(cuales, svg, QString(), error)) return false;
+    if (!nombre.isEmpty()) dibujos_.insert(nombre, svg);
+    return true;
+}
+
+// Pone un dibujo en esas placas, cada una con SU tabla de enlaces -la que
+// llegó en T_PLACA-, y dice en los avisos lo que ha encontrado en cada una.
+bool VentanaPrincipal::pon_dibujos(const QStringList& cuales, const QByteArray& svg,
+                                   const QString& fichero, QString* error)
+{
+    QString e;
     for (const QString& id : cuales) {
-        const QString quien = id.isEmpty() ? tr("dibujo") : tr("dibujo de %1").arg(id);
-        if (!ilus_->pon_dibujo(id, svg, {}, e)) {
+        QString quien = id.isEmpty() ? tr("dibujo") : tr("dibujo de %1").arg(id);
+        if (!fichero.isEmpty()) quien += QStringLiteral(" (%1)").arg(fichero);
+        if (!ilus_->pon_dibujo(id, svg, ses_.placa().tabla_de(id), e)) {
             pon_aviso(proto::N_AVISO, 0, quien, tr("no sirve: %1").arg(e));
             if (error) *error = e;
             return false;
         }
-        const InformeDibujo& inf = ilus_->vista(id)->informe();
+        const InformeDibujo& inf = ilus_->informe(id);
         const QStringList det = inf.detalle();
         pon_aviso(det.isEmpty() ? proto::N_INFO : proto::N_AVISO, 0, quien, inf.resumen());
         for (const QString& l : det) pon_aviso(proto::N_INFO, 0, quien, l);
     }
-    if (!nombre.isEmpty()) dibujos_.insert(nombre, svg);
     vistas_->setCurrentWidget(ilus_);
     // Un dibujo que llega con el modelo ya esperando o corriendo necesita sus
     // observables: se vuelve a suscribir, y vale la última suscripción
     suscribe();
     return true;
+}
+
+// Un dibujo que manda el modelo (T_ILUSTRACION): el de la placa, el que la
+// acompaña. Manda sobre uno abierto a mano y recordado.
+void VentanaPrincipal::llega_dibujo(int i)
+{
+    if (!ilus_ || i < 0 || i >= ses_.ilustraciones().size()) return;
+    const Sesion::Ilustracion& il = ses_.ilustraciones()[i];
+    QStringList cuales;
+    for (const QString& id : il.placas) {
+        if (ilus_->placas().contains(id)) cuales << id;
+        else
+            pon_aviso(proto::N_AVISO, 0, tr("dibujo"),
+                      tr("%1 es de la placa \"%2\", y no hay ninguna que se llame asi")
+                          .arg(il.fichero, id));
+    }
+    if (!cuales.isEmpty()) pon_dibujos(cuales, il.svg, il.fichero);
 }
 
 // Lo que pinta el panel y, detrás, lo que necesita la ilustración que el

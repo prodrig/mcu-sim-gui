@@ -20,6 +20,7 @@ Sesion::Sesion(QObject* padre) : QObject(padre)
         hola_.clear();
         placa_xml_.clear();
         placa_ = PlacaGui();
+        ilus_.clear();
         emit conectado();
     });
     connect(&cx_, &Conexion::mensaje, this, &Sesion::llega);
@@ -38,6 +39,20 @@ quint16 Sesion::elige_version(long protocolo_max)
 {
     if (protocolo_max < 1) return 0;
     return quint16(std::min<long>(protocolo_max, proto::VERSION_PROTO));
+}
+
+// Las cabeceras hasta la primera línea en blanco, como T_HOLA, y detrás el SVG
+// tal cual. `placas=` vacío es la placa suelta.
+bool Sesion::lee_ilustracion(const QByteArray& cuerpo, Ilustracion& i)
+{
+    const int b = cuerpo.indexOf("\n\n");
+    if (b < 0) return false;
+    const QHash<QString, QString> c = claves(cuerpo.left(b + 1));
+    i.placas = c.value(QStringLiteral("placas")).split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    if (i.placas.isEmpty()) i.placas << QString();
+    i.fichero = c.value(QStringLiteral("fichero"));
+    i.svg = cuerpo.mid(b + 2);
+    return true;
 }
 
 QHash<QString, QString> Sesion::claves(const QByteArray& texto)
@@ -89,6 +104,17 @@ void Sesion::llega(quint16 tipo, const QByteArray& cuerpo)
         }
         for (const QString& a : placa_.avisos) emit problema(a);
         emit placa_lista();
+        break;
+    }
+    case T_ILUSTRACION: {
+        Ilustracion i;
+        if (!lee_ilustracion(cuerpo, i)) {
+            emit problema(tr("un T_ILUSTRACION sin la linea en blanco que separa las "
+                             "cabeceras del dibujo: se ignora"));
+            break;
+        }
+        ilus_.push_back(i);
+        emit ilustracion(int(ilus_.size()) - 1);
         break;
     }
     case T_LISTO:

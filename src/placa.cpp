@@ -129,6 +129,13 @@ bool lee_catalogo(const QByteArray& xml, QVector<PiezaGui>& piezas, QString& err
     return true;
 }
 
+QVector<EnlaceTabla> PlacaGui::tabla_de(const QString& placa_id) const
+{
+    if (placa_id.isEmpty()) return tabla;
+    const SubPlacaGui* s = subplaca(placa_id);
+    return s ? s->tabla : QVector<EnlaceTabla>();
+}
+
 bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
                  PlacaGui& placa, QString& error)
 {
@@ -165,12 +172,18 @@ bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
                       r.name() == QLatin1String("sistema"))) {
             raiz = true;
             placa.nombre = texto(a, "nombre");
+            placa.ilustracion = texto(a, "ilustracion");
+        } else if (r.name() == QLatin1String("enlace")) {
+            // La tabla de enlaces de la placa abierta, o de la suelta
+            EnlaceTabla e{texto(a, "pieza"), texto(a, "elemento"), texto(a, "efecto")};
+            (sub >= 0 ? placa.placas[sub].tabla : placa.tabla).push_back(e);
         } else if (r.name() == QLatin1String("placa")) {
             // Una placa DENTRO de un <sistema>, con lo que la describe dentro
             SubPlacaGui s;
             s.id      = texto(a, "id");
             s.nombre  = texto(a, "nombre");
             s.fichero = texto(a, "fichero");
+            s.ilustracion = texto(a, "ilustracion");
             bool ok = false;
             const int n = a.value(QLatin1String("piezas")).toInt(&ok);
             if (ok) s.n_piezas = n;

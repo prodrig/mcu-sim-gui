@@ -16,7 +16,8 @@
 // la Nucleo y un shield sin MCU, y el blinky encendiendo a la vez el LD2 de
 // una placa y el LED del shield, que está en la otra. Y G6, una PILA
 // (`placas/pila_pc104.xml`): un acople de tres conectores, lo que T_PLACA
-// cuenta de cada placa para poder dibujarla, y el mismo pin en las tres.
+// cuenta de cada placa para poder dibujarla, y el mismo pin en las tres. Y
+// desde las ilustraciones, en G5, el dibujo de la Nucleo en T_ILUSTRACION.
 //
 // Necesita un `mcu-sim` compilado y su árbol de fuentes, porque las placas y
 // los firmwares están allí. Se le dicen con dos variables de entorno:
@@ -267,6 +268,13 @@ int main(int argc, char** argv)
                       s.placa().placas[0].id == "N" && s.placa().placas[1].id == "S" &&
                       s.placa().acoples.size() == 4,
                   "saluda en la version 2 con un <sistema>: placas N y S, y cuatro acoples");
+        // Desde las ilustraciones: la Nucleo trae su dibujo, el shield no
+        comprueba(s.ilustraciones().size() == 1 &&
+                      s.ilustraciones()[0].placas == QStringList({"N"}) &&
+                      s.ilustraciones()[0].fichero == "nucleo_f446re.svg" &&
+                      s.ilustraciones()[0].svg.contains("id=\"LD2\""),
+                  "y un T_ILUSTRACION: el dibujo de la Nucleo, para la placa N, con su LD2; "
+                  "el shield no tiene");
         int ld2 = -1, d13 = -1;
         bool casan = !s.placa().piezas.isEmpty();
         for (const PiezaGui& pz : s.placa().piezas) {

@@ -66,8 +66,9 @@
 // modelo lo dicen las muestras -la tapa hundida es `pulsado`-.
 //
 // La pestaña tiene un recuadro por placa -uno, si no es un sistema-, con su
-// dibujo o, si no tiene, un hueco con «Abrir dibujo…». Mientras `mcu-sim` no
-// mande los dibujos (fase 4), se abren a mano.
+// dibujo o, si no tiene, un hueco con «Abrir dibujo…». El dibujo de una placa
+// lo manda `mcu-sim` en el saludo (T_ILUSTRACION, fase 4), con la tabla de
+// enlaces de la placa; a mano se abre otro, para probar uno nuevo.
 //
 // LA ILUSTRACIÓN NO SUSTITUYE AL PANEL (decidido el 2026-10-06): si hay
 // dibujo, la ventana enseña la ilustración, y el panel sigue en su pestaña,
@@ -238,6 +239,8 @@ public:
     void pon_valor(quint16 id_obs, float valor);
     QVector<quint16> observados() const;
     VistaPlaca* vista(const QString& placa_id) const { return vistas_.value(placa_id, nullptr); }
+    // Lo que se encontró en el dibujo de esa placa; vacío si no tiene
+    InformeDibujo informe(const QString& placa_id) const;
     // Fase 3: los mandos de todos los dibujos, los de ahora y los que vengan
     void activa_mandos(bool si);
 

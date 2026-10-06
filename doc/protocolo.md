@@ -111,6 +111,7 @@ mcu-sim                                   mcu-sim-gui
    |<---------------- T_VERSION ----------------|
    |----------------- T_PLACA ----------------->|   XML de --netlist
    |---------------- T_CATALOGO --------------->|   observables y mandos
+   |------------ T_ILUSTRACION ... ------------>|   el dibujo de cada placa, si hay
    |----------------- T_LISTO ----------------->|   "elaborado y esperando"
    |<--------------- T_SUSCRIBE ----------------|   qué quiero ver, cada cuánto
    |<--------------- T_ORDENES  ----------------|   (opcional, 0..n veces)
@@ -275,6 +276,41 @@ Seis cosas que merecen nombre propio:
   Se añadió el 2026-10-03 sin cambiar la versión del protocolo, porque es un
   atributo más: una ventana que no lo conoce lo ignora, y una que sí, ante un
   `mcu-sim` que no lo manda, toma el mínimo.
+
+**`T_ILUSTRACION`** (`0x0005`, añadido el 2026-10-06 sin subir la versión:
+una ventana que no lo conoce lo salta por su longitud) — el **dibujo SVG** de
+una o varias placas, **uno por fichero**, entre `T_CATALOGO` y los avisos de la
+placa; también con `--valida`. Cuerpo de texto: las cabeceras al estilo de
+`T_HOLA` hasta la primera línea en blanco, y detrás el SVG tal cual.
+
+```
+placas=L1 L2
+fichero=pc104_leds.svg
+
+<svg xmlns="http://www.w3.org/2000/svg" ...>...</svg>
+```
+
+`placas` son los ids de las placas del sistema que usan ese dibujo —el mismo
+módulo dos veces en una pila se manda una vez—; **vacío en una placa suelta**.
+`fichero` es solo el nombre, para decirlo: la ventana no lee ficheros de
+`mcu-sim`, que puede estar en otra máquina. Lo que dice `mcu-sim` de cada placa
+—cuál es su dibujo, la tabla de enlaces— está en su `doc/parts.md` §2.6; lo
+que hace la ventana con él, en `doc/analisis-uso-ilustraciones.md`.
+
+En **`T_PLACA`** va lo que la placa DECLARA de su dibujo: `ilustracion="x.svg"`
+en la raíz `<placa>` de una placa suelta, o en la `<placa id>` de un sistema, y
+dentro la **tabla de enlaces**, como se escribe en la placa:
+
+```xml
+<placa id="N" nombre="nucleo-f446re" fichero="nucleo_f446re.xml" ilustracion="nucleo.svg" piezas="6">
+  <ilustracion>
+    <enlace pieza="LD2" elemento="led-verde" efecto="brillo"/>
+  </ilustracion>
+  ...
+```
+
+La `pieza` es el nombre DENTRO de su placa (`LD2`, no `N/LD2`): el dibujo es
+de una placa, y en él no hay barras.
 
 **`T_LISTO`** — sin cuerpo. Quiere decir: *la placa está construida, el catálogo
 es el que has recibido, y estoy parado esperándote.*

@@ -697,8 +697,8 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
         titulo->setToolTip(c.ayuda);
         auto* abrir = new QPushButton(tr("Abrir dibujo..."), marco);
         abrir->setObjectName(QStringLiteral("abrir:%1").arg(c.id));
-        abrir->setToolTip(tr("Elegir el SVG de esta placa. Mientras mcu-sim no los mande, "
-                             "los dibujos se abren a mano."));
+        abrir->setToolTip(tr("Elegir otro SVG para esta placa. El suyo, si lo tiene, lo "
+                             "manda mcu-sim."));
         const QString id = c.id;
         connect(abrir, &QPushButton::clicked, this, [this, id] { emit pide_dibujo(id); });
         cabeza->addWidget(titulo, 1);
@@ -789,6 +789,12 @@ void VistaIlustracion::activa_mandos(bool si)
 {
     activos_ = si;
     for (VistaPlaca* v : std::as_const(vistas_)) v->activa_mandos(si);
+}
+
+InformeDibujo VistaIlustracion::informe(const QString& placa_id) const
+{
+    VistaPlaca* v = vista(placa_id);
+    return v ? v->informe() : InformeDibujo();
 }
 
 } // namespace mcusim

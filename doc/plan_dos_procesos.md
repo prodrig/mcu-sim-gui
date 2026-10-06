@@ -2072,3 +2072,40 @@ apagados hasta T_LISTO, un clic que sale como T_ORDENES y apagados otra vez
 con T_FIN. A mano, contra el `mcu-sim` de verdad con
 `placas/nucleo_y_shield.xml` y el dibujo de ejemplo de la Nucleo en `N`: el
 blinky enciende el LD2 del dibujo a la vez que el del panel.
+
+## 24. Ilustraciones, fase 4: el dibujo lo manda `mcu-sim`
+
+Hasta aquí el dibujo se abría a mano. Ahora **viaja con la placa**, como se
+decidió: `mcu-sim` lo encuentra —el que declara la placa con
+`ilustracion="x.svg"`, o el SVG que se llama como ella— y lo manda en el
+saludo. Lo de aquel lado está en su `doc/parts.md` §2.6.
+
+**`T_ILUSTRACION`** (`0x0005`, `doc/protocolo.md` §3): uno por **fichero**,
+entre el catálogo y `T_LISTO`, con las placas que lo usan —el mismo módulo dos
+veces en una pila, una vez— y el SVG tal cual tras las cabeceras. Es un tipo
+nuevo y **la versión no sube**: una ventana anterior lo salta. `protocolo.h` y
+`proto_io.h` —que sabe que es conocido— cambian aquí primero, como siempre.
+
+**La tabla de enlaces llega en `T_PLACA`**: la placa la escribe en su XML
+(`<ilustracion><enlace pieza elemento efecto/></ilustracion>`) y `mcu-sim` la
+reenvía dentro de la raíz o de la `<placa id>` de cada placa del sistema.
+`PlacaGui::tabla_de(id)` la da, y es la que la ventana aplica a cada dibujo,
+llegue del modelo o se abra a mano.
+
+**En la ventana**, `Sesion` lee cada `T_ILUSTRACION` (`ilustraciones()` y la
+señal `ilustracion`) y la ventana lo pone en sus placas como si se hubiera
+abierto: el informe a los avisos —ahora diciendo de qué fichero es—, la
+pestaña Ilustración delante y la suscripción otra vez si hiciera falta. Un
+dibujo del modelo **manda** sobre uno abierto a mano y recordado; una placa
+que el modelo nombra y no existe se dice.
+
+**Lo que no se ha hecho, decidido así**: la biblioteca de dibujos de la
+propia ventana (§6 c del análisis) —los dibujos viven junto a las placas— y
+los atributos `mcusim:` en el SVG —basta el id y la tabla—.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 107 → **118** (I9: leer un
+`T_ILUSTRACION`, la tabla en `T_PLACA` de una placa suelta y de un sistema, y
+la ventana poniendo cada dibujo en su placa con su tabla) y `prueba_cruzada`
+43 → **44**, contra el `mcu-sim` de verdad: `placas/nucleo_y_shield.xml` trae
+un `T_ILUSTRACION` con el dibujo de la Nucleo para la placa N, y ninguno para
+el shield. En `mcu-sim`, `make gui-sistema` C10.

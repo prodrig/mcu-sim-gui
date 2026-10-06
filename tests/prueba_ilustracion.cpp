@@ -30,6 +30,9 @@
 //       y nada de eso con los mandos apagados.
 //   I8  (fase 3) en la ventana: con T_LISTO se encienden, un clic en el dibujo
 //       sale como T_ORDENES, y con T_FIN se apagan.
+//   I9  (fase 4) el dibujo lo manda el modelo: T_ILUSTRACION leído, la tabla
+//       de enlaces en T_PLACA -de una placa suelta y de las de un sistema-, y
+//       la ventana poniendo cada dibujo en sus placas, con su tabla.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -795,6 +798,88 @@ int main(int argc, char** argv)
                   "mando 0, 1");
         m.manda(T_FIN, bytes(Fin{M_VENTANA, 0, 1000000ull}));
         comprueba(espera([&] { return !vp->mandos_activos(); }), "y con T_FIN se apagan");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I9 El dibujo lo manda el modelo: T_ILUSTRACION y la tabla de T_PLACA\n");
+    {
+        Sesion::Ilustracion il;
+        comprueba(Sesion::lee_ilustracion("placas=L1 L2\nfichero=pc104_leds.svg\n\n<svg/>", il) &&
+                      il.placas == QStringList({"L1", "L2"}) && il.fichero == "pc104_leds.svg" &&
+                      il.svg == "<svg/>",
+                  "T_ILUSTRACION: las placas, el fichero y, tras la linea en blanco, el SVG "
+                  "tal cual");
+        comprueba(Sesion::lee_ilustracion("placas=\nfichero=a.svg\n\n<svg>\n\n</svg>", il) &&
+                      il.placas == QStringList({QString()}) && il.svg == "<svg>\n\n</svg>",
+                  "placas= vacio es la placa suelta; y el SVG puede llevar lineas en blanco");
+        comprueba(!Sesion::lee_ilustracion("placas=N\n<svg/>", il),
+                  "sin la linea en blanco no es un T_ILUSTRACION");
+
+        QByteArray xml(PLACA_XML);
+        xml.replace("<placa nombre=\"discovery\">",
+                    "<placa nombre=\"discovery\" ilustracion=\"discovery.svg\">\n"
+                    "  <ilustracion>\n"
+                    "    <enlace pieza=\"X3\" elemento=\"cristal\" efecto=\"ninguno\"/>\n"
+                    "  </ilustracion>");
+        const PlacaGui p = placa_de(xml.constData(), CATALOGO_XML);
+        comprueba(p.ilustracion == "discovery.svg" && p.tabla.size() == 1 &&
+                      p.tabla[0].pieza == "X3" && p.tabla[0].elemento == "cristal" &&
+                      p.tabla[0].efecto == "ninguno" && p.tabla_de(QString()).size() == 1,
+                  "T_PLACA trae el dibujo declarado de la placa y su tabla de enlaces");
+        QByteArray sx(SISTEMA_XML);
+        sx.replace("<placa id=\"S\" nombre=\"shield-leds\" fichero=\"shield_leds.xml\"/>",
+                   "<placa id=\"S\" nombre=\"shield-leds\" fichero=\"shield_leds.xml\" "
+                   "ilustracion=\"shield.svg\">\n"
+                   "    <ilustracion><enlace pieza=\"LD_D13\" elemento=\"rojo\"/></ilustracion>\n"
+                   "  </placa>");
+        const PlacaGui s = placa_de(sx.constData(), CATALOGO_SISTEMA_XML);
+        comprueba(s.subplaca("S") && s.subplaca("S")->ilustracion == "shield.svg" &&
+                      s.tabla_de("S").size() == 1 && s.tabla_de("S")[0].pieza == "LD_D13" &&
+                      s.tabla_de("N").isEmpty() && s.tabla.isEmpty(),
+                  "y en un sistema, la de cada placa en la suya");
+
+        VentanaPrincipal v(0);
+        v.show();
+        auto* vistas = v.findChild<QTabWidget*>("vistas");
+        auto* avisos = v.findChild<QListWidget*>("avisos");
+        ModeloFalso m;
+        m.conecta(v.sesion().puerto());
+        m.manda(T_HOLA, "protocolo_max=1\nplaca=placas/discovery.xml\n");
+        m.espera_leidos(1);
+        m.version(1);
+        m.manda(T_PLACA, xml.toStdString());
+        m.manda(T_CATALOGO, CATALOGO_XML);
+        m.manda(T_ILUSTRACION, std::string("placas=\nfichero=discovery.svg\n\n") + DIBUJO);
+        m.manda(T_LISTO);
+        auto* arr = v.findChild<QPushButton*>("arrancar");
+        comprueba(espera([&] { return arr->isEnabled(); }), "saludo con un T_ILUSTRACION");
+        auto* ilus = v.findChild<VistaIlustracion*>("ilustracion");
+        VistaPlaca* vp = ilus ? ilus->vista(QString()) : nullptr;
+        comprueba(vp && vistas->currentWidget() == ilus &&
+                      ilus->informe(QString()).resumen().startsWith("3 de 4 piezas") &&
+                      vp->efecto(0) == "ninguno",
+                  "la ventana lo pone sin que nadie abra nada, y se ve la ilustracion; con "
+                  "la tabla de la placa, X3 es el cristal -3 de 4- y sin efecto");
+        comprueba(hay_aviso(avisos, "dibujo (discovery.svg)") && hay_aviso(avisos, "3 de 4"),
+                  "los avisos dicen de que fichero es lo encontrado");
+        m.s.disconnectFromHost();
+        espera([&] { return v.sesion().estado() == Sesion::Estado::Terminada; });
+
+        ModeloFalso m2;
+        m2.conecta(v.sesion().puerto());
+        m2.manda(T_HOLA, "protocolo_max=2\nplaca=placas/nucleo_y_shield.xml\n");
+        m2.espera_leidos(1);
+        m2.version(2);
+        m2.manda(T_PLACA, SISTEMA_XML);
+        m2.manda(T_CATALOGO, CATALOGO_SISTEMA_XML);
+        m2.manda(T_ILUSTRACION, std::string("placas=N Z\nfichero=nucleo.svg\n\n") + DIBUJO_NUCLEO);
+        m2.manda(T_LISTO);
+        comprueba(espera([&] { return arr->isEnabled(); }), "y otro, con un sistema");
+        ilus = v.findChild<VistaIlustracion*>("ilustracion");
+        comprueba(ilus && ilus->vista("N") && ilus->informe("N").resumen() == "2 de 2 piezas en el dibujo",
+                  "el dibujo va a la placa N");
+        comprueba(hay_aviso(avisos, "es de la placa \"Z\""),
+                  "y una placa que no existe se dice, sin mas");
     }
 
     return resultado();

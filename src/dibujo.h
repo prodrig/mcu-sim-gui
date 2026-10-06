@@ -8,8 +8,8 @@
 // CÓMO SE ENCUENTRA CADA PIEZA (decidido el 2026-10-06), de más a menos fuerte:
 //
 //   1. la TABLA DE ENLACES de la placa: `pieza` -> `elemento`. Es para los
-//      dibujos que no se quieren tocar. Hoy la rellena quien llama; cuando
-//      `mcu-sim` mande la tabla del XML de la placa (fase 4), saldrá de ahí;
+//      dibujos que no se quieren tocar. La escribe el XML de la placa, y
+//      llega en T_PLACA (fase 4);
 //   2. el ID: el elemento con `id="LD2"` es la pieza `LD2`. En un sistema se
 //      compara con el nombre de la pieza DENTRO de su placa (`id_local`): el
 //      dibujo es de una placa, y en él no hay barras.
@@ -43,13 +43,7 @@ class QSvgRenderer;
 
 namespace mcusim {
 
-// Una línea de la tabla de enlaces: qué elemento del dibujo es una pieza, y,
-// si se quiere, qué efecto le toca (fase 2).
-struct EnlaceTabla {
-    QString pieza;            // el nombre en la placa: "LD2", no "N/LD2"
-    QString elemento;         // el id en el SVG
-    QString efecto;           // "", "brillo", "hundido", "ninguno"
-};
+// La tabla de enlaces, `EnlaceTabla`, está en placa.h: llega con la placa.
 
 // Una pieza encontrada en el dibujo
 struct EnlaceDibujo {

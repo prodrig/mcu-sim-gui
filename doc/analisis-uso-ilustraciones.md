@@ -8,9 +8,9 @@
 > su espacio de nombres será `mcusim`); la ilustración **no sustituye** al
 > panel —si hay dibujo se enseña ella, y el panel sigue en su pestaña—; y los
 > dibujos **viajan con la placa**, sin biblioteca propia en la ventana.
-> **Hechas las fases 1, 2 y 3** (§13): plan §21, §22 y §23. Lo que queda
-> —`T_ILUSTRACION`, el dibujo generado, varias placas juntas— necesita a
-> `mcu-sim` o viene después.
+> **Hechas las fases 1 a 4** (§13): plan §21 a §24. La 4, sin biblioteca
+> propia y sin atributos `mcusim:`, como se decidió: el dibujo lo manda
+> `mcu-sim` (`T_ILUSTRACION`) y la tabla de enlaces llega en `T_PLACA`.
 
 ## 1. La pregunta
 

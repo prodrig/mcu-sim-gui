@@ -10,6 +10,9 @@
 //   T_PLACA     -> se guarda;
 //   T_CATALOGO  -> se lee y se junta con la placa: `placa()` y la señal
 //                  `placa_lista()`. La ventana se construye con eso;
+//   T_ILUSTRACION -> (desde las ilustraciones) el dibujo de una o varias
+//                  placas, después del catálogo: `ilustraciones()` y la señal
+//                  `ilustracion()`;
 //   T_LISTO     -> el modelo está construido y ESPERANDO. `arranca()` manda
 //                  T_ARRANCA; `para()`, T_PARA;
 //   T_FIN       -> se acabó, con motivo, código e instante.
@@ -73,6 +76,17 @@ public:
     quint16         version() const { return version_; }
     const QHash<QString, QString>& hola() const { return hola_; }
     const PlacaGui& placa() const { return placa_; }
+    // Un dibujo que ha mandado el modelo: las placas que lo usan -sus ids en
+    // el sistema, o una vacía si la placa va suelta-, el nombre del fichero
+    // y el SVG tal cual.
+    struct Ilustracion {
+        QStringList placas;
+        QString     fichero;
+        QByteArray  svg;
+    };
+    const QVector<Ilustracion>& ilustraciones() const { return ilus_; }
+    // Lee el cuerpo de un T_ILUSTRACION. Pública porque se prueba sola.
+    static bool lee_ilustracion(const QByteArray& cuerpo, Ilustracion& i);
 
     // T_ARRANCA. El ritmo (proto::RIT_REAL con su factor, RIT_LIBRE o
     // RIT_DEMANDA, que arranca en pausa) y la ventana de tiempo: 0 es la de
@@ -116,6 +130,7 @@ signals:
     void conectado();
     void hola_recibido();
     void placa_lista();                     // placa y catálogo leídos y juntos
+    void ilustracion(int i);                // ha llegado ilustraciones()[i]
     void listo();                           // T_LISTO
     void fin(quint32 motivo, qint32 codigo, quint64 t_sim_ns);
     void desconectado(const QString& motivo);
@@ -139,6 +154,7 @@ private:
     QHash<QString, QString> hola_;
     QByteArray              placa_xml_;
     PlacaGui                placa_;
+    QVector<Ilustracion>    ilus_;
     quint64                 perdidas_ = 0;
     quint64                 ecos_ = 0;
     quint32                 ritmo_ = proto::RIT_REAL;

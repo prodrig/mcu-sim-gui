@@ -61,9 +61,11 @@
 //   * en el centro, dos pestañas: «Ilustración», con un recuadro por placa y
 //     su dibujo SVG si lo tiene, y «Panel», el de siempre. Si hay dibujo, se
 //     enseña la ilustración; el panel sigue ahí, con todo;
-//   * «Vista ▸ Abrir dibujo de la placa…» (o el botón de su recuadro) abre un
-//     SVG a mano, mientras `mcu-sim` no los mande. Lo que se ha encontrado en
-//     él -y lo que no- va a la lista de avisos;
+//   * (fase 4) el dibujo de cada placa lo manda `mcu-sim` (T_ILUSTRACION), y
+//     se le aplica la tabla de enlaces que la placa trae en T_PLACA;
+//   * «Vista ▸ Abrir dibujo de la placa…» (o el botón de su recuadro) abre
+//     otro SVG a mano. Lo que se ha encontrado en él -y lo que no- va a la
+//     lista de avisos;
 //   * (fase 2) los observables se ven en el dibujo -el brillo de un LED, la
 //     tapa hundida, la alarma, las etiquetas-, y la suscripción es la UNIÓN
 //     de lo que pintan el panel y la ilustración;
@@ -154,6 +156,9 @@ private:
     void ordena(quint16 pieza, quint16 mando, float v);
     void pon_controles();
     void suscribe();
+    bool pon_dibujos(const QStringList& cuales, const QByteArray& svg, const QString& fichero,
+                     QString* error = nullptr);
+    void llega_dibujo(int i);
     void construye();
     void escucha();
     void consola(const QString& texto, const QString& color = QString());

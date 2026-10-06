@@ -72,6 +72,15 @@ struct PiezaGui {
     bool    en_placa  = false;
 };
 
+// Una línea de la TABLA DE ENLACES del dibujo de una placa: qué elemento del
+// SVG es una pieza, y, si se quiere, qué efecto le toca. La dice el XML de la
+// placa (`<ilustracion><enlace .../></ilustracion>`), y llega en T_PLACA.
+struct EnlaceTabla {
+    QString pieza;            // el nombre en la placa: "LD2", no "N/LD2"
+    QString elemento;         // el id en el SVG
+    QString efecto;           // "", "brillo", "hundido", "ninguno"
+};
+
 // UNA PLACA DE UN <sistema>, descrita entera: es lo que hace falta para
 // DIBUJAR el sistema algún día -un rectángulo por placa, sus conectores con su
 // forma, y líneas entre ellos- sin deducir nada de los prefijos. Hoy la ventana
@@ -87,6 +96,10 @@ struct SubPlacaGui {
     int     n_piezas = -1;            // -1: un mcu-sim que no lo dice
     QStringList mcus;                 // "N/u0 (STM32F446RE)"
     QVector<ConectorGui> conectores;
+    // El dibujo que DECLARA (`ilustracion=`), y su tabla de enlaces. El SVG
+    // llega aparte, en T_ILUSTRACION.
+    QString              ilustracion;
+    QVector<EnlaceTabla> tabla;
 };
 // Un acople: DOS conectores enchufados, o VARIOS en pila (PC/104), con las
 // placas a las que pertenece cada uno, en el mismo orden.
@@ -112,6 +125,11 @@ struct PlacaGui {
     QVector<AcopleGui>   acoples;
     QVector<HiloGui>     hilos;
     int                  n_hilos = 0;     // = hilos.size()
+    // Lo mismo que SubPlacaGui::ilustracion y ::tabla, para una placa suelta
+    QString              ilustracion;
+    QVector<EnlaceTabla> tabla;
+    // La tabla de una placa: su id en el sistema, o vacío si no lo es
+    QVector<EnlaceTabla> tabla_de(const QString& placa_id) const;
     bool es_sistema() const { return !placas.isEmpty(); }
     // El grafo de placas: una arista por cada par de placas VECINAS en un
     // acople -en una pila, cada una con la siguiente, en el orden del
