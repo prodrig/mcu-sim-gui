@@ -67,6 +67,9 @@
 //   * (fase 2) los observables se ven en el dibujo -el brillo de un LED, la
 //     tapa hundida, la alarma, las etiquetas-, y la suscripción es la UNIÓN
 //     de lo que pintan el panel y la ilustración;
+//   * (fase 3) los mandos se tocan en el dibujo: un clic, Ctrl+clic, la rueda
+//     y el botón derecho, y sus órdenes salen por el mismo sitio que las del
+//     panel;
 //   * la ventana RECUERDA cada dibujo abierto por el nombre de la placa: al
 //     volver a lanzar, o en las dos placas iguales de una pila, sale solo.
 //
@@ -143,7 +146,12 @@ private:
     void pon_relojes(quint64 t_sim_ns, double t_pared_s, quint64 deltas);
     void pon_eco(quint64 t_sim_ns, quint16 pieza, quint16 mando, float valor,
                  quint32 resultado);
-    void apaga_mandos() { if (panel_) panel_->activa_mandos(false); }
+    void apaga_mandos()
+    {
+        if (panel_) panel_->activa_mandos(false);
+        if (ilus_) ilus_->activa_mandos(false);
+    }
+    void ordena(quint16 pieza, quint16 mando, float v);
     void pon_controles();
     void suscribe();
     void construye();

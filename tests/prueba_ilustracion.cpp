@@ -23,6 +23,13 @@
 //   I6  (fase 2) en la ventana: un dibujo abierto con el modelo esperando
 //       vuelve a suscribir, con lo que el panel no pinta, y las muestras
 //       llegan al dibujo.
+//   I7  (fase 3) los mandos con el ratón: un boton se pulsa y se suelta, y
+//       con Ctrl+clic se queda; un interruptor cambia con cada clic, también
+//       con doble clic; un continuo abre su deslizador y uno discreto su caja;
+//       la rueda; el menú del botón derecho con todos los mandos; el cursor;
+//       y nada de eso con los mandos apagados.
+//   I8  (fase 3) en la ventana: con T_LISTO se encienden, un clic en el dibujo
+//       sale como T_ORDENES, y con T_FIN se apagan.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -33,6 +40,12 @@
 #include <QGroupBox>
 #include <QLabel>
 #include <QListWidget>
+#include <QMenu>
+#include <QMouseEvent>
+#include <QSlider>
+#include <QSpinBox>
+#include <QWheelEvent>
+#include <QContextMenuEvent>
 #include <QAction>
 #include <QPushButton>
 #include <QScrollArea>
@@ -129,6 +142,70 @@ bool hay_aviso(QListWidget* l, const QString& trozo)
 const QRgb VERDE_PCB = qRgb(0x1e, 0x5a, 0x3a);
 
 int luz(QRgb c) { return qRed(c) + qGreen(c) + qBlue(c); }
+
+// Una placa con un mando de cada tipo como PRIMERO de su pieza, y un LED sin
+// mandos
+const char* PLACA_MANDOS =
+    "<placa nombre=\"mandos\">\n"
+    "  <componente tipo=\"Button\" id=\"B1\"><pin nombre=\"pin\" nodo=\"PA0\"/></componente>\n"
+    "  <componente tipo=\"Interruptor\" id=\"SW\"><pin nombre=\"a\" nodo=\"PA1\"/></componente>\n"
+    "  <componente tipo=\"Pot\" id=\"POT\"><pin nombre=\"c\" nodo=\"PA2\"/></componente>\n"
+    "  <componente tipo=\"Selector\" id=\"SEL\"><pin nombre=\"c\" nodo=\"PA3\"/></componente>\n"
+    "  <componente tipo=\"Led\" id=\"LD\"><pin nombre=\"anodo\" nodo=\"PA4\"/></componente>\n"
+    "</placa>\n";
+const char* CATALOGO_MANDOS =
+    "<catalogo>\n"
+    "  <pieza idx=\"0\" id=\"B1\" tipo=\"Button\">\n"
+    "    <observable idx=\"0\" id_obs=\"0\" nombre=\"pulsado\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\"/>\n"
+    "    <mando idx=\"0\" nombre=\"pulsar\" tipo=\"boton\" min=\"0\" max=\"1\" valor=\"0\"/>\n"
+    "    <mando idx=\"1\" nombre=\"rebote_ms\" tipo=\"continuo\" min=\"0\" max=\"20\" valor=\"2\"/>\n"
+    "    <mando idx=\"2\" nombre=\"rebotes\" tipo=\"discreto\" min=\"1\" max=\"9\" valor=\"5\"/>\n"
+    "  </pieza>\n"
+    "  <pieza idx=\"1\" id=\"SW\" tipo=\"Interruptor\">\n"
+    "    <mando idx=\"0\" nombre=\"conmuta\" tipo=\"interruptor\" min=\"0\" max=\"1\" valor=\"0\"/>\n"
+    "  </pieza>\n"
+    "  <pieza idx=\"2\" id=\"POT\" tipo=\"Pot\">\n"
+    "    <mando idx=\"0\" nombre=\"giro\" tipo=\"continuo\" min=\"0\" max=\"10\" valor=\"5\"/>\n"
+    "  </pieza>\n"
+    "  <pieza idx=\"3\" id=\"SEL\" tipo=\"Selector\">\n"
+    "    <mando idx=\"0\" nombre=\"posicion\" tipo=\"discreto\" min=\"0\" max=\"3\" valor=\"1\"/>\n"
+    "  </pieza>\n"
+    "  <pieza idx=\"4\" id=\"LD\" tipo=\"Led\">\n"
+    "    <observable idx=\"0\" id_obs=\"1\" nombre=\"encendido\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\"/>\n"
+    "  </pieza>\n"
+    "</catalogo>\n";
+const char* DIBUJO_MANDOS =
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 25\">\n"
+    "  <rect x=\"0\" y=\"0\" width=\"100\" height=\"25\" fill=\"#dddddd\"/>\n"
+    "  <rect id=\"B1\"  x=\"5\"  y=\"5\" width=\"12\" height=\"12\" fill=\"#3050c0\"/>\n"
+    "  <rect id=\"SW\"  x=\"25\" y=\"5\" width=\"12\" height=\"12\" fill=\"#30a030\"/>\n"
+    "  <rect id=\"POT\" x=\"45\" y=\"5\" width=\"12\" height=\"12\" fill=\"#a03030\"/>\n"
+    "  <rect id=\"SEL\" x=\"65\" y=\"5\" width=\"12\" height=\"12\" fill=\"#a0a030\"/>\n"
+    "  <circle id=\"LD\" cx=\"90\" cy=\"11\" r=\"5\" fill=\"#ff0000\"/>\n"
+    "</svg>\n";
+
+// El ratón, como lo mandaría Qt: a la superficie de la vista
+void raton(QGraphicsView* v, QEvent::Type t, const QPoint& p,
+           Qt::KeyboardModifiers mod = Qt::NoModifier, Qt::MouseButton b = Qt::LeftButton)
+{
+    QMouseEvent e(t, QPointF(p), QPointF(v->viewport()->mapToGlobal(p)), b,
+                  t == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::MouseButtons(b), mod);
+    QCoreApplication::sendEvent(v->viewport(), &e);
+}
+void clic(QGraphicsView* v, const QPoint& p, Qt::KeyboardModifiers mod = Qt::NoModifier)
+{
+    raton(v, QEvent::MouseButtonPress, p, mod);
+    raton(v, QEvent::MouseButtonRelease, p, mod);
+}
+void rueda(QGraphicsView* v, const QPoint& p, int muescas)
+{
+    QWheelEvent e(QPointF(p), QPointF(v->viewport()->mapToGlobal(p)), QPoint(),
+                  QPoint(0, 120 * muescas), Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase,
+                  false);
+    QCoreApplication::sendEvent(v->viewport(), &e);
+}
+
+struct OrdenVista { int pieza, mando; float valor; };
 
 // Una placa sin MCU con una Fuente, como la de prueba_ventana G6, y su dibujo
 const char* PLACA_FUENTE =
@@ -398,11 +475,12 @@ int main(int argc, char** argv)
         comprueba(espera([&] { return v.sesion().estado() == Sesion::Estado::Terminada; }),
                   "el modelo se va");
 
+        ilus->setProperty("vieja", true);     // la de antes: no vale encontrarla
         ModeloFalso m2;
         saluda(m2);
         comprueba(espera([&] {
                       auto* i = v.findChild<VistaIlustracion*>("ilustracion");
-                      return i && i != ilus && i->vista("N");
+                      return i && !i->property("vieja").isValid() && i->vista("N");
                   }) && vistas->currentWidget() == v.findChild<VistaIlustracion*>("ilustracion"),
                   "otro modelo con la misma Nucleo: su dibujo sale solo, que la ventana lo "
                   "recuerda por el nombre de la placa, y se ve la ilustracion");
@@ -538,6 +616,185 @@ int main(int argc, char** argv)
                   "y una instantanea enciende el LED del dibujo y hunde su boton");
         auto* enc = v.findChild<QLabel*>("obs:1");
         comprueba(enc && enc->text() == QString::fromUtf8("●"), "a la vez que el panel");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I7 Los mandos sobre el dibujo, con el raton\n");
+    {
+        const PlacaGui p = placa_de(PLACA_MANDOS, CATALOGO_MANDOS);
+        QString e;
+        std::unique_ptr<VistaPlaca> v(VistaPlaca::crea(p, QString(), DIBUJO_MANDOS, {}, e));
+        comprueba(v != nullptr, "la vista se construye " + e.toStdString());
+        if (!v) return resultado();
+        v->resize(800, 200);
+        v->show();
+        espera([] { return false; }, 50);
+        std::vector<OrdenVista> o;
+        QObject::connect(v.get(), &VistaPlaca::orden,
+                         [&](quint16 pz, quint16 m, float x) { o.push_back({pz, m, x}); });
+        auto ultima = [&](int pz, int m, float x) {
+            return !o.empty() && o.back().pieza == pz && o.back().mando == m &&
+                   o.back().valor == x;
+        };
+        const QPoint b1 = v->donde(0), sw = v->donde(1), pot = v->donde(2), sel = v->donde(3),
+                     ld = v->donde(4);
+        comprueba(b1.x() > 0 && sw.x() > b1.x() && ld.x() > sel.x(),
+                  "cada pieza tiene donde pinchar");
+        comprueba(v->vivo(0)->toolTip().contains("Ctrl+clic") &&
+                      v->vivo(2)->toolTip().contains("clic o rueda: giro") &&
+                      !v->vivo(4)->toolTip().contains("clic"),
+                  "la ayuda dice que hace el raton en cada una, y nada en un LED");
+
+        clic(v.get(), b1);
+        comprueba(o.empty() && !v->mandos_activos(), "con los mandos apagados, un clic no ordena");
+
+        v->activa_mandos(true);
+        raton(v.get(), QEvent::MouseButtonPress, b1);
+        comprueba(o.size() == 1 && ultima(0, 0, 1.f) && v->vivo(0)->scale() < 1,
+                  "pulsar B1 ordena pulsar = 1, y la tapa se hunde al momento, sin esperar "
+                  "la muestra");
+        raton(v.get(), QEvent::MouseButtonRelease, b1);
+        comprueba(o.size() == 2 && ultima(0, 0, 0.f) && v->vivo(0)->scale() == 1,
+                  "soltarlo, pulsar = 0, y vuelve");
+        clic(v.get(), b1, Qt::ControlModifier);
+        comprueba(o.size() == 3 && ultima(0, 0, 1.f) && v->vivo(0)->scale() < 1,
+                  "Ctrl+clic lo deja hundido: una orden, y al soltar el raton, ninguna");
+        clic(v.get(), b1);
+        comprueba(o.size() == 3 && v->vivo(0)->scale() < 1,
+                  "con el «switch» puesto, un clic normal no ordena nada: ni al bajar ni, "
+                  "sobre todo, al subir");
+        clic(v.get(), b1, Qt::ControlModifier);
+        comprueba(o.size() == 4 && ultima(0, 0, 0.f) && v->vivo(0)->scale() == 1,
+                  "y otro Ctrl+clic lo suelta");
+
+        clic(v.get(), sw);
+        comprueba(o.size() == 5 && ultima(1, 0, 1.f), "un interruptor: un clic, a 1");
+        clic(v.get(), sw);
+        comprueba(o.size() == 6 && ultima(1, 0, 0.f), "otro, a 0");
+        raton(v.get(), QEvent::MouseButtonPress, sw);
+        raton(v.get(), QEvent::MouseButtonRelease, sw);
+        raton(v.get(), QEvent::MouseButtonDblClick, sw);
+        raton(v.get(), QEvent::MouseButtonRelease, sw);
+        comprueba(o.size() == 8 && ultima(1, 0, 0.f),
+                  "y un doble clic son dos cambios, no uno");
+
+        clic(v.get(), pot);
+        QMenu* menu = v->menu_abierto();
+        auto* des = menu ? menu->findChild<QSlider*>("mando:2:0") : nullptr;
+        comprueba(menu && menu->objectName() == "emergente:2" && des && des->value() == 500 &&
+                      des->isEnabled() && o.size() == 8,
+                  "un continuo: el clic abre su deslizador, donde esta el modelo -5 de 10-, "
+                  "sin ordenar nada");
+        if (des) des->setValue(800);
+        comprueba(o.size() == 9 && ultima(2, 0, 8.f), "moverlo ordena: 8");
+        // Con un menú abierto, Qt no deja llegar la rueda a otra ventana: se cierra
+        if (v->menu_abierto()) v->menu_abierto()->close();
+        rueda(v.get(), pot, 1);
+        comprueba(o.size() == 10 && ultima(2, 0, 8.5f),
+                  "la rueda, un veinteavo del rango por muesca: 8,5");
+        rueda(v.get(), pot, 10);
+        comprueba(o.size() == 11 && ultima(2, 0, 10.f), "sin pasar del maximo");
+        clic(v.get(), sel);
+        auto* caja = v->menu_abierto() ? v->menu_abierto()->findChild<QSpinBox*>("mando:3:0")
+                                       : nullptr;
+        comprueba(caja && caja->value() == 1 && caja->maximum() == 3 && (!menu || menu != v->menu_abierto()),
+                  "uno discreto, su caja numerica, en su valor; y el menu de antes se cierra");
+        if (caja) caja->setValue(3);
+        comprueba(o.size() == 12 && ultima(3, 0, 3.f), "elegir el 3 lo ordena");
+        if (v->menu_abierto()) v->menu_abierto()->close();
+        rueda(v.get(), sel, -2);
+        comprueba(o.size() == 13 && ultima(3, 0, 1.f), "la rueda, de uno en uno: 3 - 2 = 1");
+        rueda(v.get(), sel, -5);
+        rueda(v.get(), sel, -1);
+        comprueba(o.size() == 14 && ultima(3, 0, 0.f), "hasta el minimo, y de ahi no baja");
+
+        clic(v.get(), ld);
+        rueda(v.get(), ld, 1);
+        comprueba(o.size() == 14, "una pieza sin mandos no hace nada");
+
+        {
+            QContextMenuEvent ce(QContextMenuEvent::Mouse, b1, v->viewport()->mapToGlobal(b1));
+            QCoreApplication::sendEvent(v->viewport(), &ce);
+        }
+        QMenu* m0 = v->menu_abierto();
+        QAction* fija = nullptr;
+        if (m0)
+            for (QAction* a : m0->actions())
+                if (a->objectName() == "mando:0:0") fija = a;
+        auto* rebote = m0 ? m0->findChild<QSlider*>("mando:0:1") : nullptr;
+        auto* rebotes = m0 ? m0->findChild<QSpinBox*>("mando:0:2") : nullptr;
+        comprueba(m0 && m0->objectName() == "menu:0" && fija && fija->isCheckable() &&
+                      !fija->isChecked() && rebote && rebote->value() == 100 && rebotes &&
+                      rebotes->value() == 5,
+                  "el boton derecho: todos los mandos de B1 -dejarlo hundido, el rebote en 2 "
+                  "de 20 y los rebotes en 5-");
+        if (fija) fija->setChecked(true);
+        comprueba(o.size() == 15 && ultima(0, 0, 1.f) && v->vivo(0)->scale() < 1,
+                  "dejarlo hundido desde el menu es el Ctrl+clic");
+        if (rebotes) rebotes->setValue(7);
+        comprueba(o.size() == 16 && ultima(0, 2, 7.f), "y los rebotes, 7");
+        clic(v.get(), b1, Qt::ControlModifier);
+        comprueba(o.size() == 17 && ultima(0, 0, 0.f), "Ctrl+clic suelta lo que puso el menu");
+
+        {
+            QMouseEvent mv(QEvent::MouseMove, QPointF(b1), QPointF(v->viewport()->mapToGlobal(b1)),
+                           Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(v->viewport(), &mv);
+        }
+        const bool mano = v->viewport()->cursor().shape() == Qt::PointingHandCursor;
+        {
+            QMouseEvent mv(QEvent::MouseMove, QPointF(ld), QPointF(v->viewport()->mapToGlobal(ld)),
+                           Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(v->viewport(), &mv);
+        }
+        comprueba(mano && v->viewport()->cursor().shape() == Qt::ArrowCursor,
+                  "sobre una pieza con mandos el cursor es una mano; sobre un LED, no");
+
+        clic(v.get(), pot);
+        raton(v.get(), QEvent::MouseButtonPress, b1);
+        v->activa_mandos(false);
+        comprueba(!v->menu_abierto() || !v->menu_abierto()->isVisible(),
+                  "apagar los mandos cierra el menu abierto");
+        raton(v.get(), QEvent::MouseButtonRelease, b1);
+        const std::size_t n = o.size();
+        clic(v.get(), sw);
+        rueda(v.get(), sel, 1);
+        comprueba(o.size() == n && v->vivo(0)->scale() == 1,
+                  "y, apagados, ni el clic, ni la rueda, ni el boton que estaba abajo");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I8 La ventana: las ordenes del dibujo llegan al modelo\n");
+    {
+        VentanaPrincipal v(0);
+        v.resize(1000, 700);
+        v.show();
+        ModeloFalso m;
+        m.conecta(v.sesion().puerto());
+        m.manda(T_HOLA, "protocolo_max=1\nplaca=placas/mandos.xml\n");
+        m.espera_leidos(1);
+        m.version(1);
+        m.manda(T_PLACA, PLACA_MANDOS);
+        m.manda(T_CATALOGO, CATALOGO_MANDOS);
+        espera([&] { return v.findChild<VistaIlustracion*>("ilustracion"); });
+        v.abre_dibujo(QString(), DIBUJO_MANDOS);
+        auto* ilus = v.findChild<VistaIlustracion*>("ilustracion");
+        VistaPlaca* vp = ilus ? ilus->vista(QString()) : nullptr;
+        espera([] { return false; }, 100);
+        comprueba(vp && !vp->mandos_activos(), "antes de T_LISTO, los mandos del dibujo, apagados");
+        if (!vp) return resultado();
+        m.manda(T_LISTO);
+        comprueba(espera([&] { return vp->mandos_activos(); }),
+                  "con T_LISTO se encienden, con los del panel");
+        m.espera_leidos(2);
+        const std::size_t antes = m.leido.size();
+        clic(vp, vp->donde(1));
+        comprueba(m.espera_leidos(antes + 1) && m.leido.back().tipo == T_ORDENES &&
+                      m.leido.back().cuerpo == QByteArray::fromStdString(bytes(Orden{0, 1, 0, 1.f})),
+                  "un clic en el interruptor del dibujo sale como T_ORDENES: pieza 1, "
+                  "mando 0, 1");
+        m.manda(T_FIN, bytes(Fin{M_VENTANA, 0, 1000000ull}));
+        comprueba(espera([&] { return !vp->mandos_activos(); }), "y con T_FIN se apagan");
     }
 
     return resultado();

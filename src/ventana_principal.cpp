@@ -229,6 +229,7 @@ void VentanaPrincipal::construye()
         pon_controles();
         // Lo que se toque desde ya se aplica en t = 0 (doc/protocolo.md §5)
         if (panel_) panel_->activa_mandos(true);
+        if (ilus_) ilus_->activa_mandos(true);
         statusBar()->showMessage(tr("el modelo esta construido y esperando: pulsa Arrancar"));
     });
     connect(&ses_, &Sesion::fin, this, &VentanaPrincipal::termina);
@@ -429,11 +430,7 @@ void VentanaPrincipal::pon_placa()
         texto += tr(" &nbsp; <b>(solo validacion: no se simulara)</b>");
     resumen_->setText(texto);
     panel_ = construye_panel(p);
-    connect(panel_, &Panel::orden, this, [this](quint16 pieza, quint16 mando, float v) {
-        if (!ses_.ordena(pieza, mando, v))
-            statusBar()->showMessage(tr("no se puede ordenar: el modelo no esta esperando "
-                                        "ni corriendo"));
-    });
+    connect(panel_, &Panel::orden, this, &VentanaPrincipal::ordena);
     centro_->setWidget(panel_);
 
     // La ilustración: un recuadro por placa, con el dibujo que se recuerde de
@@ -445,6 +442,8 @@ void VentanaPrincipal::pon_placa()
     ilus_ = new VistaIlustracion(p, vistas_);
     connect(ilus_, &VistaIlustracion::pide_dibujo, this,
             [this](const QString& id) { elige_dibujo(id); });
+    // Las órdenes del dibujo salen por el mismo sitio que las del panel
+    connect(ilus_, &VistaIlustracion::orden, this, &VentanaPrincipal::ordena);
     vistas_->insertTab(0, ilus_, tr("Ilustracion"));
     act_dibujo_->setEnabled(true);
     for (const QString& id : ilus_->placas()) {
@@ -542,6 +541,13 @@ void VentanaPrincipal::elige_dibujo(const QString& placa_id)
         statusBar()->showMessage(tr("dibujo %1").arg(QFileInfo(f).fileName()));
     else
         statusBar()->showMessage(tr("%1 no sirve como dibujo: %2").arg(QFileInfo(f).fileName(), e));
+}
+
+void VentanaPrincipal::ordena(quint16 pieza, quint16 mando, float v)
+{
+    if (!ses_.ordena(pieza, mando, v))
+        statusBar()->showMessage(tr("no se puede ordenar: el modelo no esta esperando "
+                                    "ni corriendo"));
 }
 
 void VentanaPrincipal::pon_aviso(quint32 nivel, quint64 t_sim_ns, const QString& origen,

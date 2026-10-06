@@ -7,8 +7,15 @@
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsSvgItem>
 #include <QHBoxLayout>
+#include <QContextMenuEvent>
 #include <QLabel>
+#include <QMenu>
+#include <QMouseEvent>
 #include <QPainter>
+#include <QSlider>
+#include <QSpinBox>
+#include <QWheelEvent>
+#include <QWidgetAction>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSvgRenderer>
@@ -74,6 +81,7 @@ VistaPlaca::VistaPlaca(QWidget* padre) : QGraphicsView(padre)
     setFrameShape(QFrame::NoFrame);
     setMinimumHeight(260);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    viewport()->setMouseTracking(true);
     parpadeo_.setInterval(PARPADEO_MS);
     connect(&parpadeo_, &QTimer::timeout, this, &VistaPlaca::parpadea);
 }
@@ -166,8 +174,26 @@ void VistaPlaca::prepara(const PlacaGui& placa)
         w.caja = e.caja;
         w.ayuda = w.item->toolTip();
         bool boton = false;
-        for (const MandoGui& m : pz.mandos)
+        for (const MandoGui& m : pz.mandos) {
             if (m.tipo == QLatin1String("boton")) boton = true;
+            w.mandos.push_back(m);
+            w.valor.push_back(float(m.valor));
+            w.dedo.push_back(0);
+            w.fijo.push_back(0);
+            w.enviado.push_back(0);
+        }
+        // La ayuda dice qué hace el ratón
+        if (!w.mandos.isEmpty()) {
+            const MandoGui& m = w.mandos[0];
+            const QString como =
+                m.tipo == QLatin1String("interruptor") ? QObject::tr("clic: cambia %1")
+              : m.tipo == QLatin1String("continuo") || m.tipo == QLatin1String("discreto")
+                    ? QObject::tr("clic o rueda: %1")
+                    : QObject::tr("clic: %1 · Ctrl+clic: lo deja hundido");
+            w.ayuda += QLatin1Char('\n') + como.arg(m.nombre) +
+                       QObject::tr(" · boton derecho: todos sus mandos");
+            w.item->setToolTip(w.ayuda);
+        }
         bool alarmas = false;
         QVector<const ObservableGui*> rotulos;
         for (const ObservableGui& o : pz.observables) {
@@ -284,9 +310,13 @@ void VistaPlaca::repinta(Viva& w)
         }
         if (w.halo->opacity() != op) w.halo->setOpacity(op);
     }
-    // La tapa hundida
+    // La tapa hundida: lo dice la muestra o, sin esperarla, el ratón
     if (w.efecto == QLatin1String("hundido")) {
-        const bool h = w.o01 >= 0 && w.valores.value(quint16(w.o01), sin_valor) >= 0.5f;
+        w.hundido_obs = w.o01 >= 0 && w.valores.value(quint16(w.o01), sin_valor) >= 0.5f;
+        bool mano = false;
+        if (!w.mandos.isEmpty() && w.mandos[0].tipo == QLatin1String("boton"))
+            mano = w.dedo[0] || w.fijo[0];
+        const bool h = w.hundido_obs || mano;
         if (h != w.hundido) {
             w.hundido = h;
             w.item->setScale(h ? 0.88 : 1.0);
@@ -400,6 +430,237 @@ QPointF VistaPlaca::en_imagen(const QPointF& p, int ancho) const
     return (p - l.topLeft()) * k;
 }
 
+// -----------------------------------------------------------------------------
+// Fase 3: los mandos
+// -----------------------------------------------------------------------------
+int VistaPlaca::viva_en(const QPoint& p) const
+{
+    // Lo de encima -halos, contornos, etiquetas- no cuenta: solo un vivo
+    for (QGraphicsItem* it : items(p)) {
+        const QVariant d = it->data(0);
+        if (d.isValid()) return viva_de_.value(d.toInt(), -1);
+    }
+    return -1;
+}
+
+QPoint VistaPlaca::donde(int pieza) const
+{
+    const int i = viva_de_.value(pieza, -1);
+    return i < 0 ? QPoint(-1, -1) : mapFromScene(vivas_[i].caja.center());
+}
+
+void VistaPlaca::manda(Viva& w, int m, float v)
+{
+    w.valor[m] = v;
+    emit orden(quint16(w.pieza), quint16(w.mandos[m].idx), v);
+}
+
+// Como en el panel: hundido si lo está el dedo O el «switch», y solo se
+// ordena cuando eso cambia
+void VistaPlaca::ordena_boton(Viva& w, int m)
+{
+    const bool ahora = w.dedo[m] || w.fijo[m];
+    if (ahora != bool(w.enviado[m])) {
+        w.enviado[m] = ahora;
+        manda(w, m, float(ahora ? w.mandos[m].max : w.mandos[m].min));
+    }
+    repinta(w);
+}
+
+void VistaPlaca::mueve(Viva& w, int m, float v)
+{
+    const MandoGui& md = w.mandos[m];
+    v = std::clamp(v, float(md.min), float(md.max));
+    if (md.tipo == QLatin1String("discreto")) v = float(std::lround(v));
+    if (v != w.valor[m]) manda(w, m, v);
+}
+
+// El control de un mando continuo o discreto, para un menú: su nombre, un
+// deslizador o una caja numérica, y su valor
+QWidget* VistaPlaca::control(Viva& w, int m, QWidget* padre)
+{
+    const int i = viva_de_.value(w.pieza);
+    const MandoGui md = w.mandos[m];
+    auto* fila = new QWidget(padre);
+    auto* h = new QHBoxLayout(fila);
+    h->setContentsMargins(8, 4, 8, 4);
+    h->addWidget(new QLabel(md.nombre, fila));
+    const QString nombre = QStringLiteral("mando:%1:%2").arg(w.pieza).arg(md.idx);
+    if (md.tipo == QLatin1String("discreto")) {
+        auto* sb = new QSpinBox(fila);
+        sb->setObjectName(nombre);
+        sb->setRange(int(std::ceil(md.min)), int(std::floor(md.max)));
+        sb->setValue(int(std::lround(w.valor[m])));
+        connect(sb, &QSpinBox::valueChanged, this,
+                [this, i, m](int v) { mueve(vivas_[i], m, float(v)); });
+        sb->setEnabled(activos_);
+        h->addWidget(sb);
+    } else {
+        auto* s = new QSlider(Qt::Horizontal, fila);
+        s->setObjectName(nombre);
+        s->setRange(0, 1000);
+        s->setMinimumWidth(160);
+        auto* num = new QLabel(fila);
+        num->setObjectName(QStringLiteral("valor:%1:%2").arg(w.pieza).arg(md.idx));
+        num->setMinimumWidth(num->fontMetrics().horizontalAdvance(QStringLiteral("00000.0")));
+        const float lo = float(md.min), hi = float(md.max);
+        const double f = hi > lo ? (w.valor[m] - lo) / (hi - lo) : 0.0;
+        s->setValue(qBound(0, int(f * 1000.0 + 0.5), 1000));
+        num->setText(QString::number(double(w.valor[m]), 'g', 4));
+        connect(s, &QSlider::valueChanged, this, [this, i, m, lo, hi, num](int v) {
+            const float x = lo + (hi - lo) * float(v) / 1000.f;
+            num->setText(QString::number(double(x), 'g', 4));
+            mueve(vivas_[i], m, x);
+        });
+        s->setEnabled(activos_);
+        h->addWidget(s, 1);
+        h->addWidget(num);
+    }
+    return fila;
+}
+
+void VistaPlaca::abre_menu(QMenu* m, const QPoint& donde)
+{
+    if (menu_) menu_->close();
+    m->setAttribute(Qt::WA_DeleteOnClose);
+    menu_ = m;
+    m->popup(donde);
+}
+
+void VistaPlaca::mousePressEvent(QMouseEvent* e)
+{
+    const int i = e->button() == Qt::LeftButton && activos_ ? viva_en(e->pos()) : -1;
+    if (i < 0 || vivas_[i].mandos.isEmpty()) {
+        QGraphicsView::mousePressEvent(e);
+        return;
+    }
+    Viva& w = vivas_[i];
+    const MandoGui& m = w.mandos[0];
+    if (m.tipo == QLatin1String("interruptor")) {
+        manda(w, 0, float(w.valor[0] >= (m.min + m.max) / 2 ? m.min : m.max));
+    } else if (m.tipo == QLatin1String("continuo") || m.tipo == QLatin1String("discreto")) {
+        auto* menu = new QMenu(this);
+        menu->setObjectName(QStringLiteral("emergente:%1").arg(w.pieza));
+        auto* a = new QWidgetAction(menu);
+        a->setDefaultWidget(control(w, 0, menu));
+        menu->addAction(a);
+        abre_menu(menu, e->globalPosition().toPoint());
+    } else {                                    // "boton", y lo que no se conozca
+        if (e->modifiers() & Qt::ControlModifier) {
+            w.fijo[0] = !w.fijo[0];
+        } else {
+            w.dedo[0] = 1;
+            pulsada_ = i;
+            mando_pulsado_ = 0;
+        }
+        ordena_boton(w, 0);
+    }
+    e->accept();
+}
+
+void VistaPlaca::mouseReleaseEvent(QMouseEvent* e)
+{
+    if (e->button() == Qt::LeftButton && pulsada_ >= 0) {
+        Viva& w = vivas_[pulsada_];
+        const int m = mando_pulsado_;
+        w.dedo[m] = 0;
+        pulsada_ = mando_pulsado_ = -1;
+        ordena_boton(w, m);
+        e->accept();
+        return;
+    }
+    QGraphicsView::mouseReleaseEvent(e);
+}
+
+// Un doble clic es, para Qt, una pulsación que no viene como tal: sin esto,
+// dos clics rápidos a un interruptor lo cambiarían una sola vez
+void VistaPlaca::mouseDoubleClickEvent(QMouseEvent* e)
+{
+    mousePressEvent(e);
+}
+
+void VistaPlaca::mouseMoveEvent(QMouseEvent* e)
+{
+    const int i = activos_ ? viva_en(e->pos()) : -1;
+    const bool mano = i >= 0 && !vivas_[i].mandos.isEmpty();
+    viewport()->setCursor(mano ? Qt::PointingHandCursor : Qt::ArrowCursor);
+    QGraphicsView::mouseMoveEvent(e);
+}
+
+void VistaPlaca::wheelEvent(QWheelEvent* e)
+{
+    const int i = activos_ ? viva_en(e->position().toPoint()) : -1;
+    if (i >= 0 && !vivas_[i].mandos.isEmpty()) {
+        Viva& w = vivas_[i];
+        const MandoGui& m = w.mandos[0];
+        const bool discreto = m.tipo == QLatin1String("discreto");
+        if (discreto || m.tipo == QLatin1String("continuo")) {
+            const int pasos = e->angleDelta().y() / 120;
+            const double paso = discreto ? 1.0 : (m.max - m.min) / 20.0;
+            if (pasos != 0) mueve(w, 0, float(w.valor[0] + pasos * paso));
+            e->accept();
+            return;
+        }
+    }
+    QGraphicsView::wheelEvent(e);
+}
+
+// Todos los mandos de la pieza, con el botón derecho. Apagados si el modelo
+// no espera ni corre, pero se ven: así se sabe qué tiene.
+void VistaPlaca::contextMenuEvent(QContextMenuEvent* e)
+{
+    const int i = viva_en(e->pos());
+    if (i < 0 || vivas_[i].mandos.isEmpty()) {
+        QGraphicsView::contextMenuEvent(e);
+        return;
+    }
+    Viva& w = vivas_[i];
+    auto* menu = new QMenu(this);
+    menu->setObjectName(QStringLiteral("menu:%1").arg(w.pieza));
+    menu->addSection(w.ayuda.section(QLatin1Char('\n'), 0, 0));
+    for (int m = 0; m < w.mandos.size(); ++m) {
+        const MandoGui& md = w.mandos[m];
+        if (md.tipo == QLatin1String("continuo") || md.tipo == QLatin1String("discreto")) {
+            auto* a = new QWidgetAction(menu);
+            a->setDefaultWidget(control(w, m, menu));
+            menu->addAction(a);
+            continue;
+        }
+        const bool interruptor = md.tipo == QLatin1String("interruptor");
+        QAction* a = menu->addAction(interruptor ? md.nombre
+                                                 : tr("%1: dejarlo hundido").arg(md.nombre));
+        a->setObjectName(QStringLiteral("mando:%1:%2").arg(w.pieza).arg(md.idx));
+        a->setCheckable(true);
+        a->setChecked(interruptor ? w.valor[m] >= (md.min + md.max) / 2 : bool(w.fijo[m]));
+        a->setEnabled(activos_);
+        connect(a, &QAction::toggled, this, [this, i, m, interruptor](bool si) {
+            Viva& x = vivas_[i];
+            if (interruptor) {
+                manda(x, m, float(si ? x.mandos[m].max : x.mandos[m].min));
+            } else {
+                x.fijo[m] = si;
+                ordena_boton(x, m);
+            }
+        });
+    }
+    abre_menu(menu, e->globalPos());
+    e->accept();
+}
+
+void VistaPlaca::activa_mandos(bool si)
+{
+    activos_ = si;
+    if (si) return;
+    // Apagados: lo que estaba a medias se olvida, y el menú se cierra
+    if (pulsada_ >= 0) {
+        vivas_[pulsada_].dedo[mando_pulsado_] = 0;
+        repinta(vivas_[pulsada_]);
+    }
+    pulsada_ = mando_pulsado_ = -1;
+    if (menu_) menu_->close();
+    viewport()->setCursor(Qt::ArrowCursor);
+}
+
 // =============================================================================
 // VistaIlustracion
 // =============================================================================
@@ -499,6 +760,8 @@ bool VistaIlustracion::pon_dibujo(const QString& placa_id, const QByteArray& svg
     r.contenido = v;
     r.caja->setStretchFactor(v, 1);
     vistas_.insert(placa_id, v);
+    connect(v, &VistaPlaca::orden, this, &VistaIlustracion::orden);
+    v->activa_mandos(activos_);
 
     const InformeDibujo& inf = v->informe();
     const QStringList det = inf.detalle();
@@ -520,6 +783,12 @@ QVector<quint16> VistaIlustracion::observados() const
         for (quint16 id : v->observados())
             if (!l.contains(id)) l.push_back(id);
     return l;
+}
+
+void VistaIlustracion::activa_mandos(bool si)
+{
+    activos_ = si;
+    for (VistaPlaca* v : std::as_const(vistas_)) v->activa_mandos(si);
 }
 
 } // namespace mcusim

@@ -2028,3 +2028,47 @@ etiqueta en mA, centrada debajo; la ayuda con todos los valores; y en la
 ventana, la suscripción nueva al abrir el dibujo —la del panel y, detrás, la
 corriente del LED— y una instantánea que enciende el LED del dibujo y hunde
 su botón a la vez que el panel.
+
+## 23. Ilustraciones, fase 3: los mandos sobre el dibujo
+
+Lo que se le puede hacer a una pieza, **sobre su dibujo**: §9 de
+`doc/analisis-uso-ilustraciones.md`. El clic es para el **primer mando** que
+declara la pieza, y lo que hace lo dice su tipo, como en el panel:
+
+| El primer mando | Con el ratón sobre el elemento |
+| :--- | :--- |
+| `boton` | Hundido mientras el ratón está abajo —el máximo— y suelto al soltarlo —el mínimo—. **Ctrl+clic** lo deja hundido hasta el siguiente Ctrl+clic: el «switch» del panel (§16). Hundido si lo está uno U otro, y solo se ordena cuando eso cambia. La tapa se hunde al momento, sin esperar la muestra |
+| `interruptor` | Cada clic lo cambia; un doble clic, dos veces |
+| `continuo` | Un clic abre encima un deslizador, con su nombre y su valor; la rueda lo mueve un veinteavo del rango por muesca |
+| `discreto` | Lo mismo con una caja numérica; la rueda, de uno en uno |
+
+**Con el botón derecho, un menú con todos los mandos** de la pieza: los que
+no son el primero —el rebote de un pulsador— están ahí y, como siempre, en el
+panel. Sobre una pieza con mandos el cursor es una mano, y su ayuda dice qué
+hace el ratón. Los mandos del dibujo **se encienden y se apagan con los del
+panel** —con T_LISTO, con T_FIN, al irse el modelo—, y al apagarse se olvida
+un botón a medio pulsar y se cierra el menú abierto. Las órdenes salen por
+`VistaIlustracion::orden` al mismo `Sesion::ordena` que las del panel: el
+modelo no distingue de dónde viene una orden.
+
+**Cada vista lleva su propio estado** de cada mando: el «switch» del panel y
+el Ctrl+clic del dibujo no se ven el uno al otro, y cada control nace en el
+`valor` del catálogo. Lo que de verdad hay en el modelo lo dicen las muestras:
+la tapa hundida es `pulsado`. Juntarlos haría falta si se quiere que el
+deslizador de un dibujo siga al del panel; de momento no se ha echado en
+falta.
+
+Una cosa de Qt que se ve en las pruebas: **con un menú abierto, la rueda no
+llega a otra ventana**: primero se cierra el menú.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 75 → **107**, con el ratón de
+verdad —eventos a la superficie de la vista, sin QtTest—: el boton al bajar y
+al subir y su tapa al momento, Ctrl+clic y lo que no ordena un clic normal con
+él puesto; el interruptor, también con doble clic; el deslizador y la caja del
+clic, en el valor del modelo; la rueda, con sus topes; el menú del botón
+derecho con los tres mandos de un pulsador; el cursor; nada con los mandos
+apagados, ni el botón que estaba abajo; y en la ventana, los mandos del dibujo
+apagados hasta T_LISTO, un clic que sale como T_ORDENES y apagados otra vez
+con T_FIN. A mano, contra el `mcu-sim` de verdad con
+`placas/nucleo_y_shield.xml` y el dibujo de ejemplo de la Nucleo en `N`: el
+blinky enciende el LD2 del dibujo a la vez que el del panel.

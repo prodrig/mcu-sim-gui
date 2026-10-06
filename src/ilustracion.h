@@ -41,6 +41,30 @@
 // corriente de un LED-: la ventana se suscribe a la UNIÓN de lo que pintan
 // las dos vistas (`observados()`).
 //
+// LOS MANDOS SOBRE EL DIBUJO (fase 3, §9 del análisis). El clic es para el
+// PRIMER mando que declara la pieza, según su tipo, como en el panel:
+//
+//   * boton:       hundido mientras el ratón está abajo -el máximo-, y suelto
+//                  al soltarlo -el mínimo-. CTRL+CLIC lo deja hundido hasta el
+//                  siguiente Ctrl+clic: el «switch» del panel. Está hundido si
+//                  lo está uno U otro, y solo se ordena cuando eso cambia; y
+//                  se ve hundido al momento, sin esperar a la muestra;
+//   * interruptor: cada clic lo cambia;
+//   * continuo:    un clic abre encima un deslizador, con su nombre y su
+//                  valor; la rueda del ratón lo mueve a pasos de un veinteavo
+//                  del rango;
+//   * discreto:    lo mismo, con una caja numérica, y la rueda de uno en uno.
+//
+// Con el BOTÓN DERECHO, un menú con TODOS los mandos de la pieza: los que no
+// son el primero -el rebote de un pulsador- están ahí y, como siempre, en el
+// panel. Sobre una pieza con mandos el cursor es una mano. Los mandos se
+// encienden y se apagan con los del panel, y las órdenes salen por la misma
+// señal, así que el modelo no distingue de dónde viene una orden.
+//
+// Cada vista lleva su propio estado de cada mando: el «switch» del panel y el
+// Ctrl+clic del dibujo no se ven el uno al otro. Lo que de verdad hay en el
+// modelo lo dicen las muestras -la tapa hundida es `pulsado`-.
+//
 // La pestaña tiene un recuadro por placa -uno, si no es un sistema-, con su
 // dibujo o, si no tiene, un hueco con «Abrir dibujo…». Mientras `mcu-sim` no
 // mande los dibujos (fase 4), se abren a mano.
@@ -60,6 +84,8 @@
 #include <QGraphicsView>
 #include <QHash>
 #include <QImage>
+#include <QMenu>
+#include <QPointer>
 #include <QTimer>
 #include <QWidget>
 
@@ -114,7 +140,25 @@ public:
 
     static constexpr int PARPADEO_MS = 500;
 
+    // Fase 3. Los mandos: apagados hasta que el modelo espera o corre
+    void activa_mandos(bool si);
+    bool mandos_activos() const { return activos_; }
+    // Dónde hay que pinchar, en la vista, para tocar una pieza
+    QPoint donde(int pieza) const;
+    // El menú que está abierto -el deslizador de un clic o el del botón
+    // derecho-, o nullptr. Para las pruebas.
+    QMenu* menu_abierto() const { return menu_.data(); }
+
+signals:
+    void orden(quint16 pieza, quint16 mando, float valor);
+
 protected:
+    void mousePressEvent(QMouseEvent* e) override;
+    void mouseReleaseEvent(QMouseEvent* e) override;
+    void mouseDoubleClickEvent(QMouseEvent* e) override;
+    void mouseMoveEvent(QMouseEvent* e) override;
+    void wheelEvent(QWheelEvent* e) override;
+    void contextMenuEvent(QContextMenuEvent* e) override;
     void resizeEvent(QResizeEvent* e) override;
     void showEvent(QShowEvent* e) override;
 
@@ -137,11 +181,23 @@ private:
         QHash<quint16, float> valores;       // lo último de cada observable
         QString ayuda;                       // «LD4 · Led», sin los valores
         bool    alarma = false;              // alguna disparada
-        bool    hundido = false;
+        bool    hundido = false;             // como se ve ahora
+        bool    hundido_obs = false;         // lo que dice la muestra
+        // Fase 3: sus mandos, lo último que se ha ordenado de cada uno y, de
+        // los de tipo boton, el dedo y el «switch»
+        QVector<MandoGui> mandos;
+        QVector<float>    valor;
+        QVector<char>     dedo, fijo, enviado;
     };
     void prepara(const PlacaGui& placa);
     void repinta(Viva& v);
     void parpadea();
+    int  viva_en(const QPoint& p) const;
+    void manda(Viva& w, int m, float v);
+    void ordena_boton(Viva& w, int m);
+    void mueve(Viva& w, int m, float v);         // continuo y discreto
+    QWidget* control(Viva& w, int m, QWidget* padre);
+    void abre_menu(QMenu* m, const QPoint& donde);
 
     std::unique_ptr<DibujoPlaca>  dibujo_;
     std::unique_ptr<QSvgRenderer> rend_fondo_;
@@ -154,6 +210,10 @@ private:
     QHash<quint16, ObservableGui> decl_;        // id_obs -> su declaración
     QHash<quint16, QGraphicsSimpleTextItem*> etiquetas_;
     QTimer                        parpadeo_;
+    bool                          activos_ = false;
+    int                           pulsada_ = -1;   // la viva con el dedo encima
+    int                           mando_pulsado_ = -1;
+    QPointer<QMenu>               menu_;
     bool                          fase_ = true; // del parpadeo: contorno visible
 };
 
@@ -178,10 +238,14 @@ public:
     void pon_valor(quint16 id_obs, float valor);
     QVector<quint16> observados() const;
     VistaPlaca* vista(const QString& placa_id) const { return vistas_.value(placa_id, nullptr); }
+    // Fase 3: los mandos de todos los dibujos, los de ahora y los que vengan
+    void activa_mandos(bool si);
 
 signals:
     // Se ha pulsado «Abrir dibujo…» en el recuadro de esa placa
     void pide_dibujo(const QString& placa_id);
+    // Una orden de cualquiera de sus dibujos
+    void orden(quint16 pieza, quint16 mando, float valor);
 
 private:
     struct Recuadro {
@@ -193,6 +257,7 @@ private:
     PlacaGui                     placa_;
     QHash<QString, Recuadro>     recuadros_;
     QHash<QString, VistaPlaca*>  vistas_;
+    bool                         activos_ = false;
 };
 
 } // namespace mcusim
