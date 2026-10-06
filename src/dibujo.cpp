@@ -114,6 +114,8 @@ DibujoPlaca::~DibujoPlaca() = default;
 bool DibujoPlaca::carga(const QByteArray& svg, QString& error)
 {
     svg_.clear();
+    ancho_.clear();
+    alto_.clear();
     ids_.clear();
     repetidos_.clear();
     avisos_.clear();
@@ -142,6 +144,8 @@ bool DibujoPlaca::carga(const QByteArray& svg, QString& error)
         if (raiz) {
             raiz = false;
             es_svg = n == QLatin1String("svg");
+            ancho_ = r.attributes().value(QLatin1String("width")).toString().trimmed();
+            alto_ = r.attributes().value(QLatin1String("height")).toString().trimmed();
         }
         bool fuera = false;
         if (n == QLatin1String("image")) {
@@ -209,6 +213,31 @@ bool DibujoPlaca::girado(const QString& id) const
     if (!existe(id)) return false;
     const QTransform t = rend_->transformForElement(id);
     return !qFuzzyIsNull(t.m12()) || !qFuzzyIsNull(t.m21());
+}
+
+namespace {
+// "84mm" -> 84; "8.4cm" -> 84; "2in" -> 50,8; sin unidad, px o % -> 0
+double en_mm(const QString& t)
+{
+    static const struct { const char* u; double mm; } unidades[] = {
+        {"mm", 1.0}, {"cm", 10.0}, {"in", 25.4}, {"pt", 25.4 / 72.0}, {"pc", 25.4 / 6.0}};
+    for (const auto& u : unidades)
+        if (t.endsWith(QLatin1String(u.u))) {
+            bool ok = false;
+            const double v = t.chopped(2).trimmed().toDouble(&ok);
+            return ok && v > 0 ? v * u.mm : 0.0;
+        }
+    return 0.0;
+}
+} // namespace
+
+double DibujoPlaca::mm_por_unidad() const
+{
+    const QRectF l = lienzo();
+    const double w = en_mm(ancho_), h = en_mm(alto_);
+    if (w > 0 && l.width() > 0) return w / l.width();
+    if (h > 0 && l.height() > 0) return h / l.height();
+    return 0.0;
 }
 
 QRectF DibujoPlaca::lienzo() const

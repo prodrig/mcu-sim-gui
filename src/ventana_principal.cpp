@@ -449,7 +449,8 @@ void VentanaPrincipal::pon_placa()
     act_dibujo_->setEnabled(true);
     for (const QString& id : ilus_->placas()) {
         const auto d = dibujos_.constFind(ilus_->nombre_de(id));
-        if (d != dibujos_.constEnd() && !ilus_->vista(id)) abre_dibujo(id, *d);
+        if (d != dibujos_.constEnd() && ilus_->origen(id) != QLatin1String("svg"))
+            abre_dibujo(id, *d);
     }
     vistas_->setCurrentWidget(ilus_->hay_dibujo() ? static_cast<QWidget*>(ilus_) : centro_);
 }

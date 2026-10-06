@@ -33,6 +33,10 @@
 //   I9  (fase 4) el dibujo lo manda el modelo: T_ILUSTRACION leído, la tabla
 //       de enlaces en T_PLACA -de una placa suelta y de las de un sistema-, y
 //       la ventana poniendo cada dibujo en sus placas, con su tabla.
+//   I10 (fase 5) el dibujo GENERADO de una placa que no trae el suyo: el
+//       glifo de cada pieza por su declaración, los conectores con su forma y
+//       su numeración, en milímetros, y que funciona como uno de verdad; la
+//       BANDEJA con lo que a un dibujo le falta; la escala de cada cosa.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -56,6 +60,7 @@
 
 #include "comun.h"
 #include "dibujo.h"
+#include "generado.h"
 #include "ilustracion.h"
 #include "placa.h"
 #include "ventana_principal.h"
@@ -417,16 +422,17 @@ int main(int argc, char** argv)
                   "con la placa, las dos pestanas; sin dibujo se ve el panel");
         auto* ilus = v.findChild<VistaIlustracion*>("ilustracion");
         comprueba(ilus && ilus->findChild<QWidget*>("dibujo:") &&
-                      ilus->findChild<QLabel*>("hueco:") &&
+                      ilus->findChild<VistaPlaca*>("vista:") &&
+                      ilus->origen(QString()) == "generado" &&
                       ilus->findChild<QPushButton*>("abrir:") && !ilus->hay_dibujo(),
-                  "la ilustracion: un recuadro, con un hueco y su boton para abrir el dibujo");
+                  "la ilustracion: un recuadro, con el dibujo GENERADO (fase 5) y su boton "
+                  "para abrir otro; un generado no cuenta como dibujo de la placa");
 
         comprueba(v.abre_dibujo(QString(), DIBUJO, &e), "se abre el dibujo a mano");
         auto* vp = ilus->findChild<VistaPlaca*>("vista:");
         auto* inf = ilus->findChild<QLabel*>("informe:");
-        comprueba(vp && !ilus->findChild<QLabel*>("hueco:") &&
-                      vistas->currentWidget() == ilus,
-                  "y se ve: el hueco deja sitio al dibujo, y la pestana pasa a la ilustracion");
+        comprueba(vp && ilus->origen(QString()) == "svg" && vistas->currentWidget() == ilus,
+                  "y se ve: el dibujo sustituye al generado, y la pestana pasa a la ilustracion");
         comprueba(inf && inf->isVisible() && inf->text().startsWith("2 de 4 piezas") &&
                       inf->toolTip().contains("serigrafia"),
                   "el recuadro dice lo que ha encontrado, y el detalle en la ayuda");
@@ -468,12 +474,12 @@ int main(int argc, char** argv)
                       ilus->findChild<QPushButton*>("abrir:S"),
                   "en un sistema, un recuadro por placa, cada uno con su boton");
         QString e;
-        comprueba(v.abre_dibujo("N", DIBUJO_NUCLEO, &e) && ilus->vista("N") &&
-                      !ilus->vista("S") && ilus->findChild<QLabel*>("hueco:S"),
+        comprueba(v.abre_dibujo("N", DIBUJO_NUCLEO, &e) && ilus->origen("N") == "svg" &&
+                      ilus->origen("S") == "generado",
                   "el dibujo de N va a N; S sigue sin dibujo");
-        comprueba(ilus->vista("N")->informe().resumen() == "2 de 2 piezas en el dibujo",
+        comprueba(ilus->informe("N").resumen() == "2 de 2 piezas en el dibujo",
                   "y en N se encuentran sus dos piezas: \"" +
-                      ilus->vista("N")->informe().resumen().toStdString() + "\"");
+                      ilus->informe("N").resumen().toStdString() + "\"");
         m.s.disconnectFromHost();
         comprueba(espera([&] { return v.sesion().estado() == Sesion::Estado::Terminada; }),
                   "el modelo se va");
@@ -483,7 +489,7 @@ int main(int argc, char** argv)
         saluda(m2);
         comprueba(espera([&] {
                       auto* i = v.findChild<VistaIlustracion*>("ilustracion");
-                      return i && !i->property("vieja").isValid() && i->vista("N");
+                      return i && !i->property("vieja").isValid() && i->origen("N") == "svg";
                   }) && vistas->currentWidget() == v.findChild<VistaIlustracion*>("ilustracion"),
                   "otro modelo con la misma Nucleo: su dibujo sale solo, que la ventana lo "
                   "recuerda por el nombre de la placa, y se ve la ilustracion");
@@ -876,10 +882,137 @@ int main(int argc, char** argv)
         m2.manda(T_LISTO);
         comprueba(espera([&] { return arr->isEnabled(); }), "y otro, con un sistema");
         ilus = v.findChild<VistaIlustracion*>("ilustracion");
-        comprueba(ilus && ilus->vista("N") && ilus->informe("N").resumen() == "2 de 2 piezas en el dibujo",
+        comprueba(ilus && ilus->origen("N") == "svg" &&
+                      ilus->informe("N").resumen() == "2 de 2 piezas en el dibujo",
                   "el dibujo va a la placa N");
         comprueba(hay_aviso(avisos, "es de la placa \"Z\""),
                   "y una placa que no existe se dice, sin mas");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I10 El dibujo generado, y la bandeja\n");
+    {
+        const PlacaGui d = placa_de(PLACA_XML, CATALOGO_XML);
+        const PlacaGui mds = placa_de(PLACA_MANDOS, CATALOGO_MANDOS);
+        const PlacaGui f = placa_de(PLACA_FUENTE, CATALOGO_FUENTE);
+        comprueba(glifo_de(d.piezas[1]) == "piloto" && glifo_de(d.piezas[2]) == "boton" &&
+                      glifo_de(d.piezas[3]) == "pieza" && glifo_de(f.piezas[0]) == "medida" &&
+                      glifo_de(mds.piezas[1]) == "interruptor" &&
+                      glifo_de(mds.piezas[2]) == "mando" && glifo_de(mds.piezas[3]) == "mando",
+                  "el glifo de cada pieza sale de lo que declara: un 0/1 es un piloto, un "
+                  "boton un boton, un continuo o un discreto un mando giratorio, una medida "
+                  "un recuadro, y lo que no declara nada una pieza gris");
+
+        DibujoPlaca g;
+        QString e;
+        comprueba(g.carga(dibujo_generado(mds, QString()), e) && g.mm_por_unidad() == 1.0,
+                  "el generado es un SVG que se lee como cualquier otro, en milimetros");
+        const InformeDibujo ig = g.enlaza(mds, QString(), {});
+        comprueba(ig.enlaces.size() == 5 && ig.sin_elemento.isEmpty() &&
+                      ig.repetidos.isEmpty(),
+                  "con todas las piezas de la placa, por su id: " + ig.resumen().toStdString());
+        std::unique_ptr<VistaPlaca> vg(
+            VistaPlaca::crea(mds, QString(), dibujo_generado(mds, QString()), {}, e));
+        vg->resize(600, 400);
+        vg->show();
+        espera([] { return false; }, 50);
+        std::vector<OrdenVista> o;
+        QObject::connect(vg.get(), &VistaPlaca::orden,
+                         [&](quint16 pz, quint16 m, float x) { o.push_back({pz, m, x}); });
+        vg->activa_mandos(true);
+        clic(vg.get(), vg->donde(1));
+        comprueba(o.size() == 1 && o[0].pieza == 1 && o[0].valor == 1.f &&
+                      vg->efecto(4) == "brillo" && vg->efecto(0) == "hundido",
+                  "y se usa igual: el interruptor generado se cambia con un clic, el piloto "
+                  "brilla y el boton se hunde");
+
+        // Un sistema: cada placa con sus chips y sus conectores de verdad
+        const char* CAT_PILA =
+            "<catalogo>\n"
+            "  <pieza idx=\"0\" id=\"CPU/J1\" tipo=\"Conector\"/>\n"
+            "  <pieza idx=\"1\" id=\"L1/J1\" tipo=\"Conector\"/>\n"
+            "  <pieza idx=\"2\" id=\"L2/J1\" tipo=\"Conector\"/>\n"
+            "  <pieza idx=\"3\" id=\"L1/LD1\" tipo=\"Led\">\n"
+            "    <observable idx=\"0\" id_obs=\"0\" nombre=\"encendido\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "  <pieza idx=\"4\" id=\"L2/J9\" tipo=\"Conector\"/>\n"
+            "</catalogo>\n";
+        const PlacaGui pila = placa_de(PILA_XML, CAT_PILA);
+        const QByteArray cpu = dibujo_generado(pila, "CPU");
+        DibujoPlaca gc;
+        comprueba(gc.carga(cpu, e) && gc.existe("J1") && gc.existe("J1.1") && gc.existe("J1.64") &&
+                      !gc.existe("J1.65") && cpu.contains(">u0<") && cpu.contains("STM32F407VG") &&
+                      cpu.contains("CPU · pc104-cpu"),
+                  "la CPU de la pila: su nombre, su chip con su tipo y su J1 de 64 pines, "
+                  "cada uno con su id");
+        const QRectF p1 = gc.caja("J1.1"), p2 = gc.caja("J1.2"), p3 = gc.caja("J1.3");
+        comprueba(std::abs(p2.x() - p1.x()) < 0.01 && p2.y() > p1.y() + 2 &&
+                      std::abs(p3.x() - p1.x() - 2.54) < 0.01 && std::abs(p3.y() - p1.y()) < 0.01 &&
+                      std::abs(gc.caja("J1").width() - (32 * 2.54 + 1)) < 0.25,
+                  "en zigzag, como dice T_PLACA: el 2 debajo del 1, el 3 al lado, a 2,54 mm; "
+                  "32 columnas (con el trazo, " + std::to_string(gc.caja("J1").width()) + " mm)");
+        const QByteArray l2 = dibujo_generado(pila, "L2");
+        DibujoPlaca gl;
+        comprueba(gl.carga(l2, e) && gl.existe("J9.8") &&
+                      std::abs(gl.caja("J9.2").y() - gl.caja("J9.1").y()) < 0.01 &&
+                      gl.caja("J9.2").x() > gl.caja("J9.1").x() && !l2.contains(">u0<"),
+                  "y la J9 de L2, de una fila: los pines uno al lado de otro; L2 no lleva chip");
+        const InformeDibujo il = gl.enlaza(pila, "L2", {});
+        comprueba(il.enlaces.size() == 2 && il.sin_elemento.isEmpty(),
+                  "sus conectores son sus piezas: J1 y J9, encontrados por id");
+
+        // La bandeja
+        VentanaPrincipal v(0);
+        v.show();
+        ModeloFalso m;
+        m.conecta(v.sesion().puerto());
+        saluda_hasta_listo(m);
+        auto* arr = v.findChild<QPushButton*>("arrancar");
+        espera([&] { return arr->isEnabled(); });
+        auto* ilus = v.findChild<VistaIlustracion*>("ilustracion");
+        VistaPlaca* vp = ilus ? ilus->vista(QString()) : nullptr;
+        comprueba(vp && vp->origen(QString()) == "generado" && !vp->tiene(QString(), true) &&
+                      vp->vivo(0) && vp->vivo(1) && vp->vivo(2) && vp->vivo(3),
+                  "sin dibujo, el generado, con las cuatro piezas, y sin bandeja");
+        comprueba(!v.abre_dibujo(QString(), "<svg", &e) && vp->origen(QString()) == "generado" &&
+                      v.findChild<QLabel*>("informe:")->text().contains("no sirve"),
+                  "un dibujo que no se puede leer: se dice, y se queda el generado");
+        v.abre_dibujo(QString(), DIBUJO);
+        auto* inf = v.findChild<QLabel*>("informe:");
+        const QRectF placa = vp->en_escena(QString()), bandeja = vp->en_escena(QString(), true);
+        comprueba(vp->origen(QString()) == "svg" && vp->tiene(QString(), true) &&
+                      inf->text().endsWith("en la bandeja: X3"),
+                  "con el dibujo de prueba, a X3 -que deja ver algo- le toca la bandeja; a R35, "
+                  "que no deja ver ni tocar nada, no: \"" + inf->text().toStdString() + "\"");
+        comprueba(bandeja.left() > placa.right() && std::abs(bandeja.top() - placa.top()) < 0.01 &&
+                      vp->vivo(0) && vp->en_escena(QString(), true)
+                                         .contains(vp->vivo(0)->sceneBoundingRect().center()),
+                  "la bandeja, a la derecha del dibujo y arriba; X3 esta en ella");
+        DibujoPlaca db;
+        OpcionesGenerado ob;
+        ob.solo = {0};
+        db.carga(dibujo_generado(d, QString(), ob), e);
+        comprueba(std::abs(bandeja.height() - db.lienzo().height() * 2) < 0.01,
+                  "a la escala del dibujo: este dice medir 100 mm en 200 unidades, asi que un "
+                  "milimetro de la bandeja son dos unidades de la escena");
+        vp->pon_valor(0, 1.f);
+        comprueba(vp->halo(0) && vp->halo(0)->opacity() == 1.0 &&
+                      vp->halo(0)->parentItem() == vp->vivo(0)->parentItem(),
+                  "y en la bandeja X3 brilla como en cualquier otro dibujo");
+        v.abre_dibujo(QString(), dibujo_generado(d, QString()));
+        comprueba(!vp->tiene(QString(), true), "un dibujo con todas las piezas no lleva bandeja");
+
+        // Un dibujo que no dice su tamano: se le suponen 80 mm de alto
+        std::unique_ptr<VistaPlaca> vm(VistaPlaca::crea(mds, QString(), DIBUJO_MANDOS, {}, e));
+        OpcionesGenerado om;
+        om.solo = {4};
+        vm->pon_capa(QString(), true, dibujo_generado(mds, QString(), om), {}, "generado", e);
+        DibujoPlaca dm;
+        dm.carga(dibujo_generado(mds, QString(), om), e);
+        comprueba(std::abs(vm->en_escena(QString(), true).height() -
+                           dm.lienzo().height() * 25.0 / 80.0) < 0.01,
+                  "un dibujo sin milimetros mide 80 mm de alto: 25 unidades son 80 mm, y la "
+                  "bandeja se escala a eso");
     }
 
     return resultado();

@@ -115,6 +115,8 @@ qt_add_library(pantalla STATIC
     src/dialogo_lanzamiento.cpp
     src/dibujo.h
     src/dibujo.cpp
+    src/generado.h
+    src/generado.cpp
     src/ilustracion.h
     src/ilustracion.cpp
 )

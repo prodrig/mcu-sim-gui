@@ -91,6 +91,11 @@ public:
     bool girado(const QString& id) const;
     // El tamaño del dibujo (su viewBox)
     QRectF lienzo() const;
+    // Cuántos milímetros mide una unidad del dibujo, si su `width` o su
+    // `height` lo dicen en una medida de verdad (mm, cm, in, pt, pc); 0 si no
+    // lo dicen -sin unidad, en px o en %-. Es lo que pone varias placas a la
+    // misma escala (§10 del análisis).
+    double mm_por_unidad() const;
     // El renderer del dibujo ENTERO, para pintar los elementos vivos
     QSvgRenderer* renderer() const { return rend_.get(); }
 
@@ -108,6 +113,7 @@ public:
 private:
     QByteArray svg_;
     QStringList ids_, repetidos_, avisos_;
+    QString ancho_, alto_;            // `width` y `height` de la raíz, tal cual
     std::unique_ptr<QSvgRenderer> rend_;
 };
 

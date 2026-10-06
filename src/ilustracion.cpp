@@ -23,6 +23,7 @@
 
 #include <cmath>
 
+#include "generado.h"
 #include "panel.h"
 
 namespace mcusim {
@@ -72,7 +73,8 @@ QColor mezcla(const QColor& a, const QColor& b, double t, int alfa)
 // =============================================================================
 // VistaPlaca
 // =============================================================================
-VistaPlaca::VistaPlaca(QWidget* padre) : QGraphicsView(padre)
+VistaPlaca::VistaPlaca(const PlacaGui& placa, QWidget* padre)
+    : QGraphicsView(padre), placa_(placa)
 {
     setScene(new QGraphicsScene(this));
     setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
@@ -96,9 +98,71 @@ VistaPlaca* VistaPlaca::crea(const PlacaGui& placa, const QString& placa_id,
                              const QByteArray& svg, const QVector<EnlaceTabla>& tabla,
                              QString& error, QWidget* padre)
 {
+    auto* v = new VistaPlaca(placa, padre);
+    if (!v->pon_capa(placa_id, false, svg, tabla, QStringLiteral("svg"), error)) {
+        delete v;
+        return nullptr;
+    }
+    return v;
+}
+
+VistaPlaca::Capa* VistaPlaca::capa(const QString& placa_id, bool bandeja) const
+{
+    for (const auto& c : capas_)
+        if (c->placa_id == placa_id && c->bandeja == bandeja) return c.get();
+    return nullptr;
+}
+
+bool VistaPlaca::tiene(const QString& placa_id, bool bandeja) const
+{
+    return capa(placa_id, bandeja) != nullptr;
+}
+
+QString VistaPlaca::origen(const QString& placa_id) const
+{
+    const Capa* c = capa(placa_id, false);
+    return c ? c->origen : QString();
+}
+
+QRectF VistaPlaca::en_escena(const QString& placa_id, bool bandeja) const
+{
+    const Capa* c = capa(placa_id, bandeja);
+    return c ? c->raiz->mapRectToScene(c->lienzo) : QRectF();
+}
+
+const InformeDibujo& VistaPlaca::informe(const QString& placa_id) const
+{
+    static const InformeDibujo vacio;
+    const Capa* c = capa(placa_id, false);
+    return c ? c->informe : vacio;
+}
+
+const InformeDibujo& VistaPlaca::informe() const
+{
+    static const InformeDibujo vacio;
+    for (const auto& c : capas_)
+        if (!c->bandeja) return c->informe;
+    return vacio;
+}
+
+const DibujoPlaca& VistaPlaca::dibujo() const
+{
+    return *capas_.front()->dibujo;
+}
+
+QGraphicsSvgItem* VistaPlaca::fondo() const
+{
+    return capas_.empty() ? nullptr : capas_.front()->fondo;
+}
+
+bool VistaPlaca::pon_capa(const QString& placa_id, bool bandeja, const QByteArray& svg,
+                          const QVector<EnlaceTabla>& tabla, const QString& origen,
+                          QString& error)
+{
     auto d = std::make_unique<DibujoPlaca>();
-    if (!d->carga(svg, error)) return nullptr;
-    const InformeDibujo inf = d->enlaza(placa, placa_id, tabla);
+    if (!d->carga(svg, error)) return false;
+    // Una bandeja solo lleva sus piezas; la tabla es del dibujo de la placa
+    InformeDibujo inf = d->enlaza(placa_, placa_id, bandeja ? QVector<EnlaceTabla>() : tabla);
 
     // El fondo, sin los elementos vivos
     QSet<QString> vivos;
@@ -106,29 +170,39 @@ VistaPlaca* VistaPlaca::crea(const PlacaGui& placa, const QString& placa_id,
     auto rf = std::make_unique<QSvgRenderer>();
     if (!rf->load(d->sin(vivos)) || !rf->isValid()) {
         error = QObject::tr("Qt SVG no puede pintar el dibujo sin sus piezas");
-        return nullptr;
+        return false;
     }
+    // Sirve: fuera el que hubiera
+    quita_capa(placa_id, bandeja);
 
-    auto* v = new VistaPlaca(padre);
-    v->informe_ = inf;
-    const QRectF lienzo = d->lienzo();
-    v->scene()->setSceneRect(lienzo);
+    auto cp = std::make_unique<Capa>();
+    cp->placa_id = placa_id;
+    cp->bandeja = bandeja;
+    cp->origen = origen;
+    cp->informe = inf;
+    cp->lienzo = d->lienzo();
+    cp->mm = d->mm_por_unidad();
+    cp->raiz = new QGraphicsRectItem;
+    cp->raiz->setPen(Qt::NoPen);
+    cp->raiz->setBrush(Qt::NoBrush);
+    cp->raiz->setData(1, placa_id);
+    scene()->addItem(cp->raiz);
 
     // El fondo pinta el documento entero en (0,0)-(tamaño por omisión), que
-    // está en píxeles -o en lo que digan width y height-; la escena está en
-    // las unidades del viewBox, que son las de los elementos. Se lleva de lo
-    // uno a lo otro.
-    v->fondo_ = new QGraphicsSvgItem;
-    v->fondo_->setSharedRenderer(rf.get());
-    v->fondo_->setObjectName(QStringLiteral("fondo"));
+    // está en píxeles -o en lo que digan width y height-; la capa está en las
+    // unidades del viewBox, que son las de los elementos. Se lleva de lo uno a
+    // lo otro.
+    const QRectF lienzo = cp->lienzo;
+    cp->fondo = new QGraphicsSvgItem(cp->raiz);
+    cp->fondo->setSharedRenderer(rf.get());
+    cp->fondo->setObjectName(bandeja ? QStringLiteral("bandeja") : QStringLiteral("fondo"));
     const QSizeF ds = rf->defaultSize();
     if (ds.width() > 0 && ds.height() > 0)
-        v->fondo_->setTransform(QTransform::fromScale(lienzo.width() / ds.width(),
+        cp->fondo->setTransform(QTransform::fromScale(lienzo.width() / ds.width(),
                                                       lienzo.height() / ds.height()) *
                                 QTransform::fromTranslate(lienzo.x(), lienzo.y()));
-    v->fondo_->setCacheMode(QGraphicsItem::DeviceCoordinateCache);
-    v->fondo_->setZValue(0);
-    v->scene()->addItem(v->fondo_);
+    cp->fondo->setCacheMode(QGraphicsItem::DeviceCoordinateCache);
+    cp->fondo->setZValue(0);
 
     // Cada elemento vivo, donde estaba: el item pinta el elemento en
     // (0,0)-(su caja sin las transformaciones de sus grupos); se le pone en el
@@ -136,7 +210,7 @@ VistaPlaca* VistaPlaca::crea(const PlacaGui& placa, const QString& placa_id,
     // `boundsOnElement` no aplica.
     QSvgRenderer* r = d->renderer();
     for (const EnlaceDibujo& e : inf.enlaces) {
-        auto* it = new QGraphicsSvgItem;
+        auto* it = new QGraphicsSvgItem(cp->raiz);
         it->setSharedRenderer(r);
         it->setElementId(e.elemento);
         const QRectF b = r->boundsOnElement(e.elemento);
@@ -145,30 +219,118 @@ VistaPlaca* VistaPlaca::crea(const PlacaGui& placa, const QString& placa_id,
         it->setObjectName(QStringLiteral("vivo:%1").arg(e.pieza));
         it->setData(0, e.pieza);
         it->setZValue(1);
-        const PiezaGui& pz = placa.piezas[e.pieza];
+        const PiezaGui& pz = placa_.piezas[e.pieza];
         QString ayuda = QStringLiteral("%1 · %2").arg(pz.id_local, pz.tipo);
         if (e.por == QLatin1String("tabla"))
             ayuda += QObject::tr("\n(el elemento «%1», por la tabla de enlaces)").arg(e.elemento);
         it->setToolTip(ayuda);
-        v->scene()->addItem(it);
-        v->vivos_.insert(e.pieza, it);
+        vivos_.insert(e.pieza, it);
     }
-    v->dibujo_ = std::move(d);
-    v->rend_fondo_ = std::move(rf);
-    v->prepara(placa);
-    return v;
+    cp->dibujo = std::move(d);
+    cp->rend_fondo = std::move(rf);
+    Capa& ref = *cp;
+    capas_.push_back(std::move(cp));
+    prepara(ref);
+    coloca();
+    return true;
+}
+
+void VistaPlaca::quita_capa(const QString& placa_id, bool bandeja)
+{
+    Capa* c = capa(placa_id, bandeja);
+    if (!c) return;
+    // Lo que estuviera a medias con sus piezas se olvida
+    if (menu_) menu_->close();
+    pulsada_ = mando_pulsado_ = -1;
+    QVector<Viva> quedan;
+    for (const Viva& w : std::as_const(vivas_)) {
+        if (w.capa != c) {
+            quedan.push_back(w);
+            continue;
+        }
+        vivos_.remove(w.pieza);
+        for (quint16 id : w.obs) {
+            etiquetas_.remove(id);
+            decl_.remove(id);
+        }
+    }
+    vivas_ = quedan;
+    reindexa();
+    delete c->raiz;                      // y con ella todo lo suyo
+    capas_.erase(std::find_if(capas_.begin(), capas_.end(),
+                              [c](const auto& x) { return x.get() == c; }));
+    bool alguna = false;
+    for (const Viva& w : std::as_const(vivas_)) alguna = alguna || w.alarma;
+    if (!alguna) parpadeo_.stop();
+    coloca();
+}
+
+// §10: si el dibujo dice su tamaño en milímetros, ese; si no, se le supone el
+// alto de la placa más alta que sí lo diga -o 80 mm, lo de una placa de
+// tamaño corriente-, que es «igualar la altura». La escena va en las unidades
+// de la primera placa.
+double VistaPlaca::mm_de(const Capa& x) const
+{
+    if (x.mm > 0) return x.mm;
+    double alto_ref = 0;
+    for (const auto& o : capas_)
+        if (!o->bandeja && o->mm > 0) alto_ref = std::max(alto_ref, o->lienzo.height() * o->mm);
+    if (alto_ref <= 0) alto_ref = 80.0;
+    return x.lienzo.height() > 0 ? alto_ref / x.lienzo.height() : 1.0;
+}
+
+const VistaPlaca::Capa* VistaPlaca::primera() const
+{
+    for (const auto& x : capas_)
+        if (!x->bandeja) return x.get();
+    return capas_.empty() ? nullptr : capas_.front().get();
+}
+
+double VistaPlaca::escala(const Capa& c) const
+{
+    return mm_de(c) / mm_de(*primera());
+}
+
+void VistaPlaca::coloca()
+{
+    if (capas_.empty()) return;
+    // Las placas en el orden en que llegaron, y la bandeja de cada una a su
+    // derecha, arriba. La primera, donde está: la escena son sus coordenadas.
+    const Capa* p1 = primera();
+    const double hueco = 8.0 / mm_de(*p1);             // 8 mm entre una cosa y otra
+    double x = p1->lienzo.left();
+    const double y = p1->lienzo.top();
+    QRectF todo;
+    auto pon = [&](Capa& c) {
+        const double k = escala(c);
+        c.raiz->setScale(k);
+        c.raiz->setPos(QPointF(x, y) - c.lienzo.topLeft() * k);
+        const QRectF r = c.raiz->mapRectToScene(c.lienzo);
+        todo = todo.isNull() ? r : todo.united(r);
+        x = r.right() + hueco;
+    };
+    for (const auto& c : capas_) {
+        if (c->bandeja) continue;
+        pon(*c);
+        if (Capa* b = capa(c->placa_id, true)) pon(*b);
+    }
+    // Una sola capa: la escena es su dibujo, justo
+    if (capas_.size() == 1) scene()->setSceneRect(p1->lienzo);
+    else scene()->setSceneRect(todo.adjusted(-hueco / 2, -hueco / 2, hueco / 2, hueco / 2));
+    encaja();
 }
 
 // -----------------------------------------------------------------------------
 // Fase 2: qué efecto lleva cada pieza dibujada, sin conocer su tipo, y lo que
 // se le pone encima. Todo nace apagado: lo enciende la primera muestra.
-void VistaPlaca::prepara(const PlacaGui& placa)
+void VistaPlaca::prepara(Capa& cp)
 {
-    const QRectF lienzo = scene()->sceneRect();
+    const QRectF lienzo = cp.lienzo;
     const double grosor = std::max(lienzo.width(), lienzo.height()) / 300.0;
-    for (const EnlaceDibujo& e : informe_.enlaces) {
-        const PiezaGui& pz = placa.piezas[e.pieza];
+    for (const EnlaceDibujo& e : cp.informe.enlaces) {
+        const PiezaGui& pz = placa_.piezas[e.pieza];
         Viva w;
+        w.capa = &cp;
         w.pieza = e.pieza;
         w.item = vivos_.value(e.pieza);
         w.caja = e.caja;
@@ -199,7 +361,6 @@ void VistaPlaca::prepara(const PlacaGui& placa)
         for (const ObservableGui& o : pz.observables) {
             decl_.insert(quint16(o.id_obs), o);
             w.obs.push_back(quint16(o.id_obs));
-            obs_de_.insert(quint16(o.id_obs), int(vivas_.size()));
             if (o.alarma) alarmas = true;
             else if (es_01(o)) { if (w.o01 < 0) w.o01 = o.id_obs; }
             else if (!o.unidad.isEmpty() && w.intensidad < 0 && o.max != o.min) {
@@ -214,14 +375,14 @@ void VistaPlaca::prepara(const PlacaGui& placa)
                                    w.efecto != QLatin1String("hundido") &&
                                    w.efecto != QLatin1String("ninguno"))) {
             if (!e.efecto.isEmpty())
-                informe_.avisos << QObject::tr("%1: el efecto «%2» no existe; se usa el que "
+                cp.informe.avisos << QObject::tr("%1: el efecto «%2» no existe; se usa el que "
                                                "toca").arg(pz.id_local, e.efecto);
             w.efecto = w.o01 < 0 ? QStringLiteral("ninguno")
                      : boton     ? QStringLiteral("hundido")
                                  : QStringLiteral("brillo");
         }
         if (w.efecto == QLatin1String("brillo")) {
-            w.color = color_de(dibujo_->renderer(), e.elemento);
+            w.color = color_de(cp.dibujo->renderer(), e.elemento);
             // Un halo redondo, tres veces más ancho que el elemento, del color
             // de este y más claro en el centro
             const double r = std::max(w.caja.width(), w.caja.height()) * 1.5;
@@ -230,32 +391,31 @@ void VistaPlaca::prepara(const PlacaGui& placa)
             g.setColorAt(0.0, mezcla(w.color, Qt::white, 0.55, 235));
             g.setColorAt(0.35, mezcla(w.color, Qt::white, 0.2, 170));
             g.setColorAt(1.0, mezcla(w.color, Qt::white, 0.0, 0));
-            w.halo = new QGraphicsEllipseItem(QRectF(c.x() - r, c.y() - r, 2 * r, 2 * r));
+            w.halo = new QGraphicsEllipseItem(QRectF(c.x() - r, c.y() - r, 2 * r, 2 * r),
+                                              cp.raiz);
             w.halo->setBrush(g);
             w.halo->setPen(Qt::NoPen);
             w.halo->setOpacity(0);
             w.halo->setZValue(2);
             w.halo->setAcceptedMouseButtons(Qt::NoButton);
-            scene()->addItem(w.halo);
         } else if (w.efecto == QLatin1String("hundido")) {
             w.item->setTransformOriginPoint(w.item->boundingRect().center());
         }
         if (alarmas) {
             const double m = grosor * 2;
-            w.contorno = new QGraphicsRectItem(w.caja.adjusted(-m, -m, m, m));
+            w.contorno = new QGraphicsRectItem(w.caja.adjusted(-m, -m, m, m), cp.raiz);
             w.contorno->setPen(QPen(QColor(0xc6, 0x28, 0x28), grosor * 1.5));
             w.contorno->setBrush(Qt::NoBrush);
             w.contorno->setZValue(3);
             w.contorno->setVisible(false);
             w.contorno->setAcceptedMouseButtons(Qt::NoButton);
-            scene()->addItem(w.contorno);
         }
         // Las etiquetas, una debajo de otra, bajo el elemento; de un alto que
         // se lea al tamaño de la placa entera
         double y = w.caja.bottom() + grosor;
         const double alto = std::max(lienzo.height() / 40.0, w.caja.height() * 0.3);
         for (const ObservableGui* o : rotulos) {
-            auto* t = new QGraphicsSimpleTextItem(QStringLiteral("—"));
+            auto* t = new QGraphicsSimpleTextItem(QStringLiteral("—"), cp.raiz);
             QFont f = t->font();
             f.setPixelSize(20);
             f.setBold(true);
@@ -267,12 +427,23 @@ void VistaPlaca::prepara(const PlacaGui& placa)
             t->setZValue(4);
             t->setData(1, w.caja.center().x());
             t->setAcceptedMouseButtons(Qt::NoButton);
-            scene()->addItem(t);
             etiquetas_.insert(quint16(o->id_obs), t);
             y += alto;
         }
-        viva_de_.insert(w.pieza, int(vivas_.size()));
         vivas_.push_back(w);
+    }
+    reindexa();
+}
+
+// Los índices de pieza y de observable a su viva, después de poner o quitar
+// una capa
+void VistaPlaca::reindexa()
+{
+    viva_de_.clear();
+    obs_de_.clear();
+    for (int i = 0; i < vivas_.size(); ++i) {
+        viva_de_.insert(vivas_[i].pieza, i);
+        for (quint16 id : vivas_[i].obs) obs_de_.insert(id, i);
     }
 }
 
@@ -446,7 +617,8 @@ int VistaPlaca::viva_en(const QPoint& p) const
 QPoint VistaPlaca::donde(int pieza) const
 {
     const int i = viva_de_.value(pieza, -1);
-    return i < 0 ? QPoint(-1, -1) : mapFromScene(vivas_[i].caja.center());
+    return i < 0 ? QPoint(-1, -1)
+                 : mapFromScene(vivas_[i].capa->raiz->mapToScene(vivas_[i].caja.center()));
 }
 
 void VistaPlaca::manda(Viva& w, int m, float v)
@@ -704,22 +876,39 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
         cabeza->addWidget(titulo, 1);
         cabeza->addWidget(abrir);
         caja->addLayout(cabeza);
-        auto* hueco = new QLabel(tr("Esta placa no tiene dibujo. Sus piezas estan en la "
-                                    "pestana Panel."), marco);
-        hueco->setObjectName(QStringLiteral("hueco:%1").arg(c.id));
-        hueco->setAlignment(Qt::AlignCenter);
-        hueco->setEnabled(false);
-        hueco->setMinimumHeight(80);
-        caja->addWidget(hueco, 1);
-        auto* inf = new QLabel(marco);
+        // Fase 5: nace con el dibujo GENERADO, que siempre se puede hacer;
+        // uno de verdad lo sustituye
+        auto* vista = new VistaPlaca(placa_, marco);
+        vista->setObjectName(QStringLiteral("vista:%1").arg(c.id));
+        QString e;
+        vista->pon_capa(c.id, false, dibujo_generado(placa_, c.id), {},
+                        QStringLiteral("generado"), e);
+        connect(vista, &VistaPlaca::orden, this, &VistaIlustracion::orden);
+        caja->addWidget(vista, 1);
+        auto* inf = new QLabel(tr("Dibujo generado: la placa no trae el suyo."), marco);
         inf->setObjectName(QStringLiteral("informe:%1").arg(c.id));
         inf->setWordWrap(true);
-        inf->hide();
+        inf->setEnabled(false);
         caja->addWidget(inf);
         v->addWidget(marco, 1);
-        recuadros_.insert(c.id, {marco, caja, hueco, inf});
+        recuadros_.insert(c.id, {marco, caja, vista, inf});
+        vistas_.insert(c.id, vista);
     }
     desliza->setWidget(dentro);
+}
+
+bool VistaIlustracion::hay_dibujo() const
+{
+    for (VistaPlaca* v : vistas_)
+        for (const QString& id : placas())
+            if (v->origen(id) == QLatin1String("svg")) return true;
+    return false;
+}
+
+QString VistaIlustracion::origen(const QString& placa_id) const
+{
+    VistaPlaca* v = vista(placa_id);
+    return v ? v->origen(placa_id) : QString();
 }
 
 QStringList VistaIlustracion::placas() const
@@ -746,28 +935,38 @@ bool VistaIlustracion::pon_dibujo(const QString& placa_id, const QByteArray& svg
         return false;
     }
     Recuadro& r = *it;
-    VistaPlaca* v = VistaPlaca::crea(placa_, placa_id, svg, tabla, error, r.marco);
-    if (!v) {
+    VistaPlaca* v = vistas_.value(placa_id);
+    if (!v->pon_capa(placa_id, false, svg, tabla, QStringLiteral("svg"), error)) {
+        // Se queda el que había -el generado, si no había otro-, y se dice
         r.informe->setText(tr("<span style=\"color:#c62828\">El dibujo no sirve: %1</span>")
                                .arg(error.toHtmlEscaped()));
         r.informe->setToolTip(QString());
-        r.informe->show();
+        r.informe->setEnabled(true);
         return false;
     }
-    v->setObjectName(QStringLiteral("vista:%1").arg(placa_id));
-    r.caja->replaceWidget(r.contenido, v);
-    delete r.contenido;           // el hueco, o el dibujo de antes
-    r.contenido = v;
-    r.caja->setStretchFactor(v, 1);
-    vistas_.insert(placa_id, v);
-    connect(v, &VistaPlaca::orden, this, &VistaIlustracion::orden);
+    // La BANDEJA: lo que el dibujo no trae y deja ver o tocar algo, al lado,
+    // con sus glifos de siempre. Ninguna pieza se pierde por no estar dibujada
+    const InformeDibujo& inf = v->informe(placa_id);
+    const QVector<int> sueltas = para_bandeja(placa_, placa_id, inf.sin_elemento);
+    QString en_bandeja;
+    if (sueltas.isEmpty()) {
+        v->quita_capa(placa_id, true);
+    } else {
+        OpcionesGenerado o;
+        o.solo = sueltas;
+        o.titulo = tr("sin dibujar");
+        QString e;
+        v->pon_capa(placa_id, true, dibujo_generado(placa_, placa_id, o), {},
+                    QStringLiteral("generado"), e);
+        QStringList l;
+        for (int i : sueltas) l << placa_.piezas[i].id_local;
+        en_bandeja = tr("; en la bandeja: %1").arg(l.join(QStringLiteral(", ")));
+    }
     v->activa_mandos(activos_);
-
-    const InformeDibujo& inf = v->informe();
     const QStringList det = inf.detalle();
-    r.informe->setText(inf.resumen().toHtmlEscaped());
+    r.informe->setText((inf.resumen() + en_bandeja).toHtmlEscaped());
     r.informe->setToolTip(det.join(QLatin1Char('\n')));
-    r.informe->show();
+    r.informe->setEnabled(true);
     return true;
 }
 
@@ -794,7 +993,7 @@ void VistaIlustracion::activa_mandos(bool si)
 InformeDibujo VistaIlustracion::informe(const QString& placa_id) const
 {
     VistaPlaca* v = vista(placa_id);
-    return v ? v->informe() : InformeDibujo();
+    return v ? v->informe(placa_id) : InformeDibujo();
 }
 
 } // namespace mcusim

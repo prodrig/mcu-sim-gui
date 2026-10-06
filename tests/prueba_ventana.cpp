@@ -280,17 +280,20 @@ int main(int argc, char** argv)
                   resumen->text().contains("blinky.bin"),
                   "y la ventana tiene su panel: cuatro piezas, y arriba la placa, el MCU "
                   "y el firmware");
-        // Fase 4: con T_LISTO, la ventana se suscribe a lo que pinta
+        // Fase 4: con T_LISTO, la ventana se suscribe a lo que pinta. Y desde
+        // las ilustraciones (su fase 5), a lo que necesita el dibujo generado
+        // de la placa: la corriente del LED, para su brillo, detrás
         CabSuscribe cs{};
         comprueba(m.espera_leidos(2) && m.leido[1].tipo == T_SUSCRIBE &&
-                  m.leido[1].cuerpo.size() == int(sizeof cs + 3 * 2) &&
+                  m.leido[1].cuerpo.size() == int(sizeof cs + 4 * 2) &&
                   (std::memcpy(&cs, m.leido[1].cuerpo.constData(), sizeof cs), true) &&
-                  cs.periodo_ns_lo == VentanaPrincipal::PERIODO_NS && cs.n == 3 &&
+                  cs.periodo_ns_lo == VentanaPrincipal::PERIODO_NS && cs.n == 4 &&
                   m.leido[1].cuerpo.mid(int(sizeof cs)) ==
                       QByteArray::fromStdString(bytes(uint16_t(0)) + bytes(uint16_t(1)) +
-                                                bytes(uint16_t(3))),
+                                                bytes(uint16_t(3)) + bytes(uint16_t(2))),
                   "con T_LISTO, y ANTES de arrancar, se suscribe a los tres observables "
-                  "que pinta, a 60 Hz simulados");
+                  "que pinta el panel y, detras, a la corriente del LED que pide el dibujo "
+                  "generado, a 60 Hz simulados");
         // Fase 5: con T_LISTO los mandos se activan, y lo que se toque antes de
         // arrancar sale ya: el modelo lo aplicara en t = 0
         auto* pulsar = v.findChild<QPushButton*>("mando:2:0");

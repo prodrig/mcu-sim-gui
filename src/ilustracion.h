@@ -66,9 +66,12 @@
 // modelo lo dicen las muestras -la tapa hundida es `pulsado`-.
 //
 // La pestaña tiene un recuadro por placa -uno, si no es un sistema-, con su
-// dibujo o, si no tiene, un hueco con «Abrir dibujo…». El dibujo de una placa
-// lo manda `mcu-sim` en el saludo (T_ILUSTRACION, fase 4), con la tabla de
-// enlaces de la placa; a mano se abre otro, para probar uno nuevo.
+// dibujo y su botón «Abrir dibujo…». El dibujo de una placa lo manda `mcu-sim`
+// en el saludo (T_ILUSTRACION, fase 4), con la tabla de enlaces de la placa; a
+// mano se abre otro, para probar uno nuevo. Y si no tiene ninguno, la ventana
+// le GENERA uno con lo que sabe de ella (fase 5, `generado.h`): ninguna placa
+// se queda sin ilustración, y ninguna pieza sin sitio -las que a un dibujo le
+// faltan van a su BANDEJA, al lado-.
 //
 // LA ILUSTRACIÓN NO SUSTITUYE AL PANEL (decidido el 2026-10-06): si hay
 // dibujo, la ventana enseña la ilustración, y el panel sigue en su pestaña,
@@ -105,21 +108,41 @@ class QVBoxLayout;
 
 namespace mcusim {
 
-// El dibujo de UNA placa, con sus piezas vivas encima
+// Los dibujos de una o varias placas en UNA escena, con sus piezas vivas
+// encima. Cada dibujo es una CAPA: el de una placa -el suyo o uno generado- y,
+// si a ese le faltan piezas, su BANDEJA (fase 5). Cada capa cuelga de un item
+// raíz que la coloca y la escala; dentro, todo va en las coordenadas de su
+// dibujo. La escena está en las de la primera placa: con una sola capa, la
+// escena ES el dibujo, como en la fase 1.
 class VistaPlaca : public QGraphicsView {
     Q_OBJECT
 public:
-    // nullptr, y `error` dice por qué, si el SVG no sirve
+    explicit VistaPlaca(const PlacaGui& placa, QWidget* padre = nullptr);
+    // Una vista con el dibujo de una placa. nullptr, y `error` dice por qué,
+    // si el SVG no sirve
     static VistaPlaca* crea(const PlacaGui& placa, const QString& placa_id,
                             const QByteArray& svg, const QVector<EnlaceTabla>& tabla,
                             QString& error, QWidget* padre = nullptr);
     ~VistaPlaca() override;
 
-    const InformeDibujo& informe() const { return informe_; }
-    const DibujoPlaca&   dibujo() const { return *dibujo_; }
+    // Pone el dibujo de una placa -o su bandeja-, o lo cambia, y vuelve a
+    // colocarlo todo. `origen` es "svg" o "generado". false, y `error` dice
+    // por qué, si el SVG no sirve: entonces se queda el que había.
+    bool pon_capa(const QString& placa_id, bool bandeja, const QByteArray& svg,
+                  const QVector<EnlaceTabla>& tabla, const QString& origen, QString& error);
+    void quita_capa(const QString& placa_id, bool bandeja);
+    bool tiene(const QString& placa_id, bool bandeja = false) const;
+    // "svg", "generado", o vacío si esa placa no está
+    QString origen(const QString& placa_id) const;
+    // Dónde ha quedado en la escena el dibujo de una placa, o su bandeja
+    QRectF en_escena(const QString& placa_id, bool bandeja = false) const;
+    // Lo que se encontró en el dibujo de una placa; sin argumento, la primera
+    const InformeDibujo& informe(const QString& placa_id) const;
+    const InformeDibujo& informe() const;
+    const DibujoPlaca&   dibujo() const;
     // El elemento vivo de una pieza (su `idx`), o nullptr si no está dibujada
     QGraphicsSvgItem* vivo(int pieza) const { return vivos_.value(pieza, nullptr); }
-    QGraphicsSvgItem* fondo() const { return fondo_; }
+    QGraphicsSvgItem* fondo() const;
     // La escena entera en una imagen de ese ancho, con el alto que le toque.
     // Para las pruebas, y para quien quiera guardar lo que se ve.
     QImage imagen(int ancho) const;
@@ -163,11 +186,39 @@ protected:
     void resizeEvent(QResizeEvent* e) override;
     void showEvent(QShowEvent* e) override;
 
+protected:
+    // Coloca las capas en la escena. Esta, una al lado de otra y cada bandeja
+    // a la derecha de su placa, a la misma escala si dicen su tamaño.
+    virtual void coloca();
+
+    // Una capa: el dibujo de una placa, o su bandeja
+    struct Capa {
+        QString placa_id;
+        bool    bandeja = false;
+        QString origen;                          // "svg" o "generado"
+        std::unique_ptr<DibujoPlaca>  dibujo;
+        std::unique_ptr<QSvgRenderer> rend_fondo;
+        InformeDibujo informe;
+        QGraphicsRectItem* raiz = nullptr;       // todo lo suyo cuelga de aquí
+        QGraphicsSvgItem*  fondo = nullptr;
+        QRectF  lienzo;                          // su viewBox
+        double  mm = 0;                          // mm por unidad; 0, no lo dice
+    };
+    Capa* capa(const QString& placa_id, bool bandeja) const;
+    // Lo que mide en la escena una unidad de esa capa, con la regla de §10
+    double escala(const Capa& c) const;
+    // Los milímetros de una unidad de esa capa: los que dice, o los que se le
+    // suponen igualando la altura
+    double mm_de(const Capa& c) const;
+    const Capa* primera() const;
+    std::vector<std::unique_ptr<Capa>> capas_;
+    PlacaGui placa_;
+
 private:
-    VistaPlaca(QWidget* padre);
     void encaja();
     // Una pieza dibujada: su elemento, lo que se le pone encima y lo que sabe
     struct Viva {
+        Capa*   capa = nullptr;
         int     pieza = -1;
         QGraphicsSvgItem* item = nullptr;
         QRectF  caja;
@@ -190,7 +241,8 @@ private:
         QVector<float>    valor;
         QVector<char>     dedo, fijo, enviado;
     };
-    void prepara(const PlacaGui& placa);
+    void prepara(Capa& c);
+    void reindexa();
     void repinta(Viva& v);
     void parpadea();
     int  viva_en(const QPoint& p) const;
@@ -200,10 +252,6 @@ private:
     QWidget* control(Viva& w, int m, QWidget* padre);
     void abre_menu(QMenu* m, const QPoint& donde);
 
-    std::unique_ptr<DibujoPlaca>  dibujo_;
-    std::unique_ptr<QSvgRenderer> rend_fondo_;
-    InformeDibujo                 informe_;
-    QGraphicsSvgItem*             fondo_ = nullptr;
     QHash<int, QGraphicsSvgItem*> vivos_;
     QVector<Viva>                 vivas_;
     QHash<int, int>               viva_de_;     // pieza -> índice en vivas_
@@ -218,7 +266,7 @@ private:
     bool                          fase_ = true; // del parpadeo: contorno visible
 };
 
-// La pestaña: un recuadro por placa, con su dibujo o un hueco para abrirlo
+// La pestaña: un recuadro por placa, con su dibujo -el suyo o uno generado-
 class VistaIlustracion : public QWidget {
     Q_OBJECT
 public:
@@ -234,7 +282,11 @@ public:
     // `error` dicen por qué, si el SVG no sirve: entonces se queda el de antes.
     bool pon_dibujo(const QString& placa_id, const QByteArray& svg,
                     const QVector<EnlaceTabla>& tabla, QString& error);
-    bool hay_dibujo() const { return !vistas_.isEmpty(); }
+    // Si alguna placa tiene un dibujo DE VERDAD -no generado-: es lo que hace
+    // que la ventana enseñe primero la ilustración
+    bool hay_dibujo() const;
+    // "svg" o "generado"
+    QString origen(const QString& placa_id) const;
     // Fase 2: una muestra, a todos los dibujos; y lo que necesitan entre todos
     void pon_valor(quint16 id_obs, float valor);
     QVector<quint16> observados() const;
@@ -254,7 +306,7 @@ private:
     struct Recuadro {
         QWidget*     marco = nullptr;
         QVBoxLayout* caja = nullptr;
-        QWidget*     contenido = nullptr;     // el hueco o la vista
+        QWidget*     contenido = nullptr;     // la vista
         QLabel*      informe = nullptr;
     };
     PlacaGui                     placa_;

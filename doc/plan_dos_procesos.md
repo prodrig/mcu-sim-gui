@@ -2109,3 +2109,57 @@ la ventana poniendo cada dibujo en su placa con su tabla) y `prueba_cruzada`
 43 → **44**, contra el `mcu-sim` de verdad: `placas/nucleo_y_shield.xml` trae
 un `T_ILUSTRACION` con el dibujo de la Nucleo para la placa N, y ninguno para
 el shield. En `mcu-sim`, `make gui-sistema` C10.
+
+## 25. Ilustraciones, fase 5: el dibujo generado, y la bandeja
+
+§7 del análisis: **ninguna placa se queda sin ilustración, y ninguna pieza sin
+sitio**.
+
+**El dibujo generado** (`generado.{h,cpp}`). Una placa sin dibujo —o cuyo
+dibujo no se puede leer— recibe uno que la ventana escribe con lo que sabe de
+ella, **sin conocer un tipo**: un rectángulo verde con el nombre, sus chips
+como cuadrados oscuros con su tipo, cada pieza con un glifo según su
+declaración (`glifo_de`) —un botón si su primer mando es `boton`, un
+interruptor, un mando giratorio si es `continuo` o `discreto`; sin mandos, un
+piloto si tiene un 0/1 que no es alarma, un recuadro de medida si tiene otro
+observable, y una pieza gris si no tiene nada— con su nombre debajo, y cada
+**conector** de un sistema con su forma de verdad —filas, columnas y
+numeración de `T_PLACA`— como una tira de pines a 2,54 mm. **Es un SVG de
+verdad**, en milímetros, con el id de cada pieza y de cada pin (`J1`,
+`J1.1`…): pasa por `DibujoPlaca` como cualquier otro, y brilla, se hunde y se
+pulsa igual. En una placa suelta `T_PLACA` no describe sus conectores, y van
+como una pieza más.
+
+**La bandeja.** Si el dibujo de una placa no trae todas sus piezas, las que
+faltan **y dejan ver o tocar algo** (`para_bandeja`) van a un dibujo generado
+pequeño, «sin dibujar», a la derecha del dibujo. Una resistencia de pull-up
+que no se dibuja no es una pieza perdida: se queda fuera.
+
+**Para eso `VistaPlaca` aprende a tener CAPAS**: el dibujo de una placa y su
+bandeja, cada una colgando de un item raíz que la coloca y la escala, con todo
+lo suyo —fondo, vivos, halos, contornos, etiquetas— en las coordenadas de su
+dibujo. Ponerla, cambiarla o quitarla (`pon_capa`, `quita_capa`) rehace los
+índices de piezas y observables. La escena va en las unidades de la primera
+placa, así que con una sola capa sigue siendo su dibujo, como en la fase 1.
+**La escala (§10)**: un dibujo que dice su `width` o su `height` en una medida
+de verdad (mm, cm, in, pt, pc) se pone a esa escala (`mm_por_unidad`); uno que
+no la dice mide lo que la placa más alta que sí la diga, o 80 mm. Es lo que
+deja la bandeja —en mm— al tamaño de su placa, y lo que la fase 6 necesita
+para poner varias juntas.
+
+**En la ventana** cada recuadro nace con el generado, y un dibujo de verdad
+—del modelo o abierto a mano— lo sustituye; uno que no sirve se dice y deja el
+que había. **Solo un dibujo de verdad hace que se vea primero la
+ilustración**: con generados, el panel sigue delante, que es la vista de
+siempre. Y como un generado también brilla, **la suscripción crece**: la
+corriente de un LED dibujado así se pide desde `T_LISTO` (`prueba_ventana` lo
+dice ahora).
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 118 → **134** (I10): el glifo
+de cada pieza por lo que declara; el generado se lee, encuentra todas sus
+piezas y se usa —un clic cambia su interruptor, su piloto brilla, su botón se
+hunde—; la CPU de la pila con su chip y su J1 de 64 pines en zigzag, a 2,54
+mm, y la J9 de una fila de L2; la bandeja con X3 —que deja ver algo— y sin
+R35 —que no—, a la derecha y a la escala del dibujo, con X3 brillando en ella;
+y la escala de un dibujo que no dice su tamaño. Las de antes, adaptadas: el
+hueco de un recuadro sin dibujo es ahora su generado.
