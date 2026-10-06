@@ -64,6 +64,9 @@
 //   * «Vista ▸ Abrir dibujo de la placa…» (o el botón de su recuadro) abre un
 //     SVG a mano, mientras `mcu-sim` no los mande. Lo que se ha encontrado en
 //     él -y lo que no- va a la lista de avisos;
+//   * (fase 2) los observables se ven en el dibujo -el brillo de un LED, la
+//     tapa hundida, la alarma, las etiquetas-, y la suscripción es la UNIÓN
+//     de lo que pintan el panel y la ilustración;
 //   * la ventana RECUERDA cada dibujo abierto por el nombre de la placa: al
 //     volver a lanzar, o en las dos placas iguales de una pila, sale solo.
 //
@@ -142,6 +145,7 @@ private:
                  quint32 resultado);
     void apaga_mandos() { if (panel_) panel_->activa_mandos(false); }
     void pon_controles();
+    void suscribe();
     void construye();
     void escucha();
     void consola(const QString& texto, const QString& color = QString());

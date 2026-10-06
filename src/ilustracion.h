@@ -16,6 +16,31 @@
 //     (`setElementId`), colocado con la transformación de sus grupos: así cae
 //     donde estaba, aunque lo muevan, lo escalen o lo giren.
 //
+// LOS OBSERVABLES SOBRE EL DIBUJO (fase 2, §8 del análisis). Como en el
+// panel, sin conocer un tipo: el efecto sale de la DECLARACIÓN de los
+// observables y los mandos de la pieza.
+//
+//   * un 0/1 sin unidad que no es alarma -`encendido`- da BRILLO: un halo del
+//     color del elemento, encima de él. Su intensidad la da el primer
+//     observable CON unidad de la pieza -la `corriente` de un LED-, con una
+//     curva que se parezca a lo que ve el ojo: 0,3 + 0,7·√(I/Imax). Sin uno
+//     así, encendido es encendido del todo;
+//   * si la pieza tiene además un mando `boton`, ese 0/1 -`pulsado`- es la
+//     tapa HUNDIDA: el elemento, un poco más pequeño y más apagado;
+//   * un observable `alarma` a 1 -la sobrecorriente de una Fuente- es un
+//     CONTORNO ROJO que parpadea dos veces por segundo alrededor del elemento;
+//   * los demás numéricos que la pieza sugiere (`interesante`) son una
+//     ETIQUETA debajo, con su valor y su unidad;
+//   * y la ayuda emergente del elemento dice TODOS sus valores.
+//
+// La tabla de enlaces puede cambiar el efecto de una pieza: `brillo`,
+// `hundido` o `ninguno`. El color del halo es el del elemento: se pinta en
+// una imagen pequeña y se promedian sus píxeles, una vez, al cargar.
+//
+// Para todo eso la ilustración necesita observables que el panel no pinta -la
+// corriente de un LED-: la ventana se suscribe a la UNIÓN de lo que pintan
+// las dos vistas (`observados()`).
+//
 // La pestaña tiene un recuadro por placa -uno, si no es un sistema-, con su
 // dibujo o, si no tiene, un hueco con «Abrir dibujo…». Mientras `mcu-sim` no
 // mande los dibujos (fase 4), se abren a mano.
@@ -35,6 +60,7 @@
 #include <QGraphicsView>
 #include <QHash>
 #include <QImage>
+#include <QTimer>
 #include <QWidget>
 
 #include <memory>
@@ -42,6 +68,9 @@
 #include "dibujo.h"
 #include "placa.h"
 
+class QGraphicsEllipseItem;
+class QGraphicsRectItem;
+class QGraphicsSimpleTextItem;
 class QGraphicsSvgItem;
 class QLabel;
 class QSvgRenderer;
@@ -70,6 +99,21 @@ public:
     // Dónde cae en la imagen de ese ancho un punto del dibujo
     QPointF en_imagen(const QPointF& p, int ancho) const;
 
+    // Fase 2. Una muestra: un id_obs que no es de una pieza dibujada se ignora
+    void pon_valor(quint16 id_obs, float valor);
+    // Los observables de las piezas dibujadas: lo que hay que suscribir
+    QVector<quint16> observados() const;
+    // El efecto de una pieza dibujada: "brillo", "hundido" o "ninguno"
+    QString efecto(int pieza) const;
+    // Lo que se pinta encima de cada pieza, o nullptr si no lleva
+    QGraphicsEllipseItem*    halo(int pieza) const;
+    QGraphicsRectItem*       contorno(int pieza) const;
+    QGraphicsSimpleTextItem* etiqueta(quint16 id_obs) const { return etiquetas_.value(id_obs, nullptr); }
+    // El color que se ha sacado del elemento para su halo
+    QColor color(int pieza) const;
+
+    static constexpr int PARPADEO_MS = 500;
+
 protected:
     void resizeEvent(QResizeEvent* e) override;
     void showEvent(QShowEvent* e) override;
@@ -77,12 +121,40 @@ protected:
 private:
     VistaPlaca(QWidget* padre);
     void encaja();
+    // Una pieza dibujada: su elemento, lo que se le pone encima y lo que sabe
+    struct Viva {
+        int     pieza = -1;
+        QGraphicsSvgItem* item = nullptr;
+        QRectF  caja;
+        QString efecto;                      // "brillo", "hundido", "ninguno"
+        QColor  color;
+        int     o01 = -1;                    // el id_obs del 0/1 del efecto
+        int     intensidad = -1;             // el que da la intensidad del brillo
+        double  i_max = 1;
+        QGraphicsEllipseItem* halo = nullptr;
+        QGraphicsRectItem*    contorno = nullptr;
+        QVector<quint16>      obs;           // los id_obs de la pieza, en orden
+        QHash<quint16, float> valores;       // lo último de cada observable
+        QString ayuda;                       // «LD4 · Led», sin los valores
+        bool    alarma = false;              // alguna disparada
+        bool    hundido = false;
+    };
+    void prepara(const PlacaGui& placa);
+    void repinta(Viva& v);
+    void parpadea();
 
     std::unique_ptr<DibujoPlaca>  dibujo_;
     std::unique_ptr<QSvgRenderer> rend_fondo_;
     InformeDibujo                 informe_;
     QGraphicsSvgItem*             fondo_ = nullptr;
     QHash<int, QGraphicsSvgItem*> vivos_;
+    QVector<Viva>                 vivas_;
+    QHash<int, int>               viva_de_;     // pieza -> índice en vivas_
+    QHash<quint16, int>           obs_de_;      // id_obs -> índice en vivas_
+    QHash<quint16, ObservableGui> decl_;        // id_obs -> su declaración
+    QHash<quint16, QGraphicsSimpleTextItem*> etiquetas_;
+    QTimer                        parpadeo_;
+    bool                          fase_ = true; // del parpadeo: contorno visible
 };
 
 // La pestaña: un recuadro por placa, con su dibujo o un hueco para abrirlo
@@ -102,6 +174,9 @@ public:
     bool pon_dibujo(const QString& placa_id, const QByteArray& svg,
                     const QVector<EnlaceTabla>& tabla, QString& error);
     bool hay_dibujo() const { return !vistas_.isEmpty(); }
+    // Fase 2: una muestra, a todos los dibujos; y lo que necesitan entre todos
+    void pon_valor(quint16 id_obs, float valor);
+    QVector<quint16> observados() const;
     VistaPlaca* vista(const QString& placa_id) const { return vistas_.value(placa_id, nullptr); }
 
 signals:

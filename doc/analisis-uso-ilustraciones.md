@@ -8,7 +8,7 @@
 > su espacio de nombres será `mcusim`); la ilustración **no sustituye** al
 > panel —si hay dibujo se enseña ella, y el panel sigue en su pestaña—; y los
 > dibujos **viajan con la placa**, sin biblioteca propia en la ventana.
-> **Hecha la fase 1** (§13): plan §21.
+> **Hechas las fases 1 y 2** (§13): plan §21 y §22.
 
 ## 1. La pregunta
 

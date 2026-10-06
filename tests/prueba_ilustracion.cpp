@@ -16,9 +16,20 @@
 //   I4  (fase 1) la ventana: la pestaña «Ilustración» junto a «Panel», abrir
 //       un dibujo a mano, el informe en los avisos, el panel intacto; en un
 //       sistema, un recuadro por placa; y el dibujo, recordado al volver.
+//   I5  (fase 2) los efectos, por declaración: brillo, hundido o nada, y lo
+//       que dice la tabla; el color del halo; los píxeles del LED apagado,
+//       encendido y encendido con poca corriente; la tapa hundida; el
+//       contorno de una alarma que parpadea; las etiquetas; la ayuda.
+//   I6  (fase 2) en la ventana: un dibujo abierto con el modelo esperando
+//       vuelve a suscribir, con lo que el panel no pinta, y las muestras
+//       llegan al dibujo.
 // =============================================================================
 #include <QApplication>
+#include <QGraphicsEllipseItem>
+#include <QGraphicsRectItem>
+#include <QGraphicsSimpleTextItem>
 #include <QGraphicsSvgItem>
+#include <cstring>
 #include <QGroupBox>
 #include <QLabel>
 #include <QListWidget>
@@ -116,6 +127,30 @@ bool hay_aviso(QListWidget* l, const QString& trozo)
 }
 
 const QRgb VERDE_PCB = qRgb(0x1e, 0x5a, 0x3a);
+
+int luz(QRgb c) { return qRed(c) + qGreen(c) + qBlue(c); }
+
+// Una placa sin MCU con una Fuente, como la de prueba_ventana G6, y su dibujo
+const char* PLACA_FUENTE =
+    "<placa nombre=\"fuente-y-masa\">\n"
+    "  <componente tipo=\"Fuente\" id=\"F1\" limite_ma=\"20\">\n"
+    "    <pin nombre=\"pin\" nodo=\"vcc\"/>\n"
+    "  </componente>\n"
+    "</placa>\n";
+const char* CATALOGO_FUENTE =
+    "<catalogo>\n"
+    "  <pieza idx=\"0\" id=\"F1\" tipo=\"Fuente\">\n"
+    "    <observable idx=\"0\" id_obs=\"0\" nombre=\"corriente\" unidad=\"mA\" "
+    "min=\"-20\" max=\"20\" interesante=\"si\"/>\n"
+    "    <observable idx=\"1\" id_obs=\"1\" nombre=\"sobrecorriente\" unidad=\"\" "
+    "min=\"0\" max=\"1\" interesante=\"si\" alarma=\"si\"/>\n"
+    "  </pieza>\n"
+    "</catalogo>\n";
+const char* DIBUJO_FUENTE =
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n"
+    "  <rect x=\"0\" y=\"0\" width=\"100\" height=\"100\" fill=\"#ffffff\"/>\n"
+    "  <rect id=\"F1\" x=\"40\" y=\"30\" width=\"20\" height=\"20\" fill=\"#808080\"/>\n"
+    "</svg>\n";
 
 } // namespace
 
@@ -371,6 +406,138 @@ int main(int argc, char** argv)
                   }) && vistas->currentWidget() == v.findChild<VistaIlustracion*>("ilustracion"),
                   "otro modelo con la misma Nucleo: su dibujo sale solo, que la ventana lo "
                   "recuerda por el nombre de la placa, y se ve la ilustracion");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I5 Los observables sobre el dibujo\n");
+    {
+        const PlacaGui p = placa_de(PLACA_XML, CATALOGO_XML);
+        QString e;
+        std::unique_ptr<VistaPlaca> v(
+            VistaPlaca::crea(p, QString(), DIBUJO, {{"X3", "cristal", "ninguno"}}, e));
+        comprueba(v && v->efecto(1) == "brillo" && v->efecto(2) == "hundido" &&
+                      v->efecto(0) == "ninguno" && v->efecto(3).isEmpty(),
+                  "por declaracion: el LED -un 0/1- brilla, el pulsador -un 0/1 y un mando "
+                  "boton- se hunde; y el cristal, nada, porque la tabla lo dice");
+        if (!v) return resultado();
+        comprueba(v->halo(1) && !v->halo(2) && !v->halo(0) && !v->contorno(1),
+                  "solo lo que brilla lleva halo, y sin alarmas no hay contorno");
+        comprueba(parecido(v->color(1).rgb(), qRgb(255, 0, 0), 8),
+                  "el halo es del color del elemento: " + v->color(1).name().toStdString());
+        comprueba(v->observados() == QVector<quint16>({0, 1, 2, 3}),
+                  "se necesitan todos los observables de las piezas dibujadas: tambien la "
+                  "corriente del LED, que el panel no pinta");
+
+        const QImage apagado = v->imagen(400);
+        comprueba(v->halo(1)->opacity() == 0 && parecido(en(apagado, *v, 40, 30), qRgb(255, 0, 0)) &&
+                      parecido(en(apagado, *v, 51, 30), VERDE_PCB),
+                  "sin muestras, apagado: el LED rojo y, al lado, la placa");
+        v->pon_valor(1, 1.f);
+        comprueba(v->halo(1)->opacity() == 1.0,
+                  "encendido sin saber la corriente: brillo entero");
+        v->pon_valor(2, 25.f);
+        const QImage lleno = v->imagen(400);
+        v->pon_valor(2, 1.f);
+        const double op_poca = v->halo(1)->opacity();
+        const QImage poco = v->imagen(400);
+        comprueba(std::abs(op_poca - (0.3 + 0.7 * std::sqrt(1.0 / 25.0))) < 1e-6,
+                  "con 1 mA de 25, 0,3 + 0,7·raiz(1/25) = 0,44");
+        const QRgb c_ap = en(apagado, *v, 40, 30), c_ll = en(lleno, *v, 40, 30);
+        const QRgb f_ap = en(apagado, *v, 51, 30), f_ll = en(lleno, *v, 51, 30),
+                   f_po = en(poco, *v, 51, 30);
+        comprueba(luz(c_ll) > luz(c_ap) + 100,
+                  "encendido, el centro del LED se aclara: " + hex(c_ap).toStdString() + " -> " +
+                      hex(c_ll).toStdString());
+        comprueba(qRed(f_ll) > qRed(f_po) && qRed(f_po) > qRed(f_ap) + 10 &&
+                      qRed(f_ll) > qGreen(f_ll),
+                  "y alrededor, el halo, mas rojo con mas corriente: " + hex(f_ap).toStdString() +
+                      " / " + hex(f_po).toStdString() + " / " + hex(f_ll).toStdString());
+        v->pon_valor(1, 0.f);
+        comprueba(v->halo(1)->opacity() == 0, "y apagado otra vez, sin halo");
+        comprueba(v->vivo(1)->toolTip() ==
+                      QString::fromUtf8("LD4 · Led\nencendido: ○\ncorriente: 1 mA"),
+                  "la ayuda del LED dice todos sus valores: \"" +
+                      v->vivo(1)->toolTip().toStdString() + "\"");
+
+        comprueba(parecido(en(apagado, *v, 101, 50), qRgb(0, 0, 255)),
+                  "B1 suelto llega hasta su borde");
+        v->pon_valor(3, 1.f);
+        const QImage hundido = v->imagen(400);
+        comprueba(v->vivo(2)->scale() < 1 && !parecido(en(hundido, *v, 101, 50), qRgb(0, 0, 255)) &&
+                      qBlue(en(hundido, *v, 110, 50)) < 235 &&
+                      qBlue(en(hundido, *v, 110, 50)) > 150,
+                  "pulsado, la tapa se hunde: mas pequena -el borde ya no es azul- y mas "
+                  "apagada -el centro, menos azul-: " + hex(en(hundido, *v, 110, 50)).toStdString());
+        v->pon_valor(3, 0.f);
+        comprueba(v->vivo(2)->scale() == 1 && v->vivo(2)->opacity() == 1, "y vuelve");
+        v->pon_valor(999, 1.f);
+        comprueba(true, "un id_obs que no es de nadie, se ignora");
+
+        std::unique_ptr<VistaPlaca> r(
+            VistaPlaca::crea(p, QString(), DIBUJO, {{"X3", "cristal", "raro"}}, e));
+        comprueba(r && r->efecto(0) == "brillo" &&
+                      r->informe().avisos.last().contains("«raro» no existe"),
+                  "un efecto que no existe se dice, y se usa el de la declaracion");
+    }
+    {
+        const PlacaGui p = placa_de(PLACA_FUENTE, CATALOGO_FUENTE);
+        QString e;
+        std::unique_ptr<VistaPlaca> v(VistaPlaca::crea(p, QString(), DIBUJO_FUENTE, {}, e));
+        comprueba(v && v->efecto(0) == "ninguno" && v->contorno(0) &&
+                      !v->contorno(0)->isVisible() && v->etiqueta(0) && !v->etiqueta(1),
+                  "una Fuente: sin brillo, con contorno de alarma -escondido- y una etiqueta "
+                  "para la corriente, que es lo que sugiere; la alarma no lleva etiqueta");
+        if (!v) return resultado();
+        v->pon_valor(0, -12.5f);
+        comprueba(v->etiqueta(0)->text() == "-12.5 mA" &&
+                      v->etiqueta(0)->sceneBoundingRect().top() >= 50 &&
+                      std::abs(v->etiqueta(0)->sceneBoundingRect().center().x() - 50) < 1,
+                  "la etiqueta dice el valor con su unidad, centrada debajo del elemento");
+        v->pon_valor(1, 1.f);
+        const QImage alarma = v->imagen(400);
+        const QRectF borde = v->contorno(0)->rect();
+        comprueba(v->contorno(0)->isVisible() &&
+                      parecido(en(alarma, *v, borde.left(), 40), qRgb(0xc6, 0x28, 0x28)),
+                  "la sobrecorriente: un contorno rojo, al momento");
+        comprueba(espera([&] { return !v->contorno(0)->isVisible(); }, 1000) &&
+                      espera([&] { return v->contorno(0)->isVisible(); }, 1000),
+                  "que parpadea");
+        v->pon_valor(1, 0.f);
+        comprueba(!v->contorno(0)->isVisible() &&
+                      !espera([&] { return v->contorno(0)->isVisible(); }, 700),
+                  "y se apaga, y deja de parpadear, al volver");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I6 La ventana: la suscripcion y las muestras llegan al dibujo\n");
+    {
+        VentanaPrincipal v(0);
+        v.show();
+        ModeloFalso m;
+        m.conecta(v.sesion().puerto());
+        saluda_hasta_listo(m);
+        comprueba(m.espera_leidos(2) && m.leido[1].tipo == T_SUSCRIBE,
+                  "con T_LISTO, la suscripcion del panel");
+        v.abre_dibujo(QString(), DIBUJO);
+        CabSuscribe cs{};
+        comprueba(m.espera_leidos(3) && m.leido[2].tipo == T_SUSCRIBE &&
+                      (std::memcpy(&cs, m.leido[2].cuerpo.constData(), sizeof cs), true) &&
+                      cs.n == 4 &&
+                      m.leido[2].cuerpo.mid(int(sizeof cs)) ==
+                          QByteArray::fromStdString(bytes(uint16_t(0)) + bytes(uint16_t(1)) +
+                                                    bytes(uint16_t(3)) + bytes(uint16_t(2))),
+                  "con el dibujo abierto, otra: lo del panel y, detras, la corriente del "
+                  "LED, que solo necesita el dibujo");
+        auto* ilus = v.findChild<VistaIlustracion*>("ilustracion");
+        VistaPlaca* vp = ilus ? ilus->vista(QString()) : nullptr;
+        std::string inst = bytes(CabInstantanea{5000000ull, 3, 0});
+        inst += bytes(Muestra{1, 0, 1.f}) + bytes(Muestra{2, 0, 20.f}) + bytes(Muestra{3, 0, 1.f});
+        m.manda(T_INSTANTANEA, inst);
+        comprueba(vp && espera([&] { return vp->halo(1)->opacity() > 0.9; }) &&
+                      vp->vivo(2)->scale() < 1,
+                  "y una instantanea enciende el LED del dibujo y hunde su boton");
+        auto* enc = v.findChild<QLabel*>("obs:1");
+        comprueba(enc && enc->text() == QString::fromUtf8("●"), "a la vez que el panel");
     }
 
     return resultado();

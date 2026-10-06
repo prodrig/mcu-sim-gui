@@ -1985,3 +1985,46 @@ pieza viva —apartada, donde estaba se ve la placa—; y la ventana: las dos
 pestañas, abrir a mano, el informe en los avisos, el panel intacto, un
 recuadro por placa en un sistema y el dibujo recordado al volver a conectar.
 Las demás pruebas, igual.
+
+## 22. Ilustraciones, fase 2: los observables sobre el dibujo
+
+Lo que la pieza deja ver, **en el dibujo**: §8 de
+`doc/analisis-uso-ilustraciones.md`. Como en el panel, **sin conocer un
+tipo**: el efecto lo decide la declaración de los observables y los mandos de
+la pieza.
+
+| Lo que declara la pieza | En el dibujo |
+| :--- | :--- |
+| Un 0/1 sin unidad que no es alarma (`encendido`) | **Brillo**: un halo del color del elemento, encima, más claro en el centro |
+| … y un observable con unidad (`corriente`, mA) | La **intensidad** del brillo: 0,3 + 0,7·√(I/Imax). El LED azul de la Discovery, que apenas conduce, se ve más tenue que el verde sin que la ventana sepa por qué |
+| Un 0/1 y un mando `boton` (`pulsado`) | La tapa **hundida**: el elemento al 88 % y un poco apagado |
+| Un observable `alarma` a 1 (`sobrecorriente`) | Un **contorno rojo** alrededor, al momento, que parpadea cada 500 ms |
+| Otro numérico que la pieza sugiere | Una **etiqueta** debajo, con su valor y su unidad |
+| Todo | La **ayuda emergente** del elemento, con todos sus valores |
+
+La tabla de enlaces cambia el efecto de una pieza (`brillo`, `hundido`,
+`ninguno`); uno que no existe se dice en el informe y se usa el de la
+declaración. **El color del halo** se saca pintando el elemento en una imagen
+de 24 × 24 y promediando sus píxeles, una vez al cargar: Qt SVG no dice de qué
+color pinta algo, y en un dibujo con hoja de estilo va por clase. Una regla
+por declaración tiene sus rarezas, y se aceptan: el `presente` de un cristal
+es un 0/1, así que un cristal dibujado brilla mientras oscila.
+
+**Cada muestra cambia una opacidad, una escala o un texto**, y solo si ha
+cambiado: el fondo no se vuelve a pintar.
+
+**La suscripción es la unión** de lo que pintan el panel y la ilustración:
+el brillo necesita la `corriente`, que el panel no pinta. Se pide con
+T_LISTO, como siempre, y **otra vez si se abre un dibujo con el modelo ya
+esperando o corriendo** —vale la última—; `mcu-sim` la acepta también en
+marcha. Las muestras van a los dos.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 50 → **75**. Los efectos por
+declaración y por la tabla; el color del halo; **píxeles** del LED apagado,
+encendido —el centro se aclara— y con poca y mucha corriente —el halo, más o
+menos rojo alrededor—; la tapa hundida —su borde ya no es azul—; el contorno
+de una Fuente con sobrecorriente, rojo, que parpadea y se apaga al volver; su
+etiqueta en mA, centrada debajo; la ayuda con todos los valores; y en la
+ventana, la suscripción nueva al abrir el dibujo —la del panel y, detrás, la
+corriente del LED— y una instantánea que enciende el LED del dibujo y hunde
+su botón a la vez que el panel.

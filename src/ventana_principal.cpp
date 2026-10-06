@@ -225,8 +225,7 @@ void VentanaPrincipal::construye()
     connect(&ses_, &Sesion::placa_lista, this, &VentanaPrincipal::pon_placa);
     connect(&ses_, &Sesion::listo, this, [this] {
         // Antes de arrancar: asi la secuencia se repite al picosegundo
-        if (panel_ && !panel_->pintados().isEmpty())
-            ses_.suscribe(quint64(cfg_.periodo_ms * 1e6 + 0.5), panel_->pintados());
+        suscribe();
         pon_controles();
         // Lo que se toque desde ya se aplica en t = 0 (doc/protocolo.md §5)
         if (panel_) panel_->activa_mandos(true);
@@ -236,6 +235,7 @@ void VentanaPrincipal::construye()
     connect(&ses_, &Sesion::orden_hecha, this, &VentanaPrincipal::pon_eco);
     connect(&ses_, &Sesion::muestra, this, [this](quint16 id, float v) {
         if (panel_) panel_->pon_valor(id, v);
+        if (ilus_) ilus_->pon_valor(id, v);
     });
     connect(&ses_, &Sesion::aviso, this, &VentanaPrincipal::pon_aviso);
     connect(&ses_, &Sesion::estado_modelo, this, [this](quint32, quint64 t, double p, quint64 d) {
@@ -484,7 +484,24 @@ bool VentanaPrincipal::abre_dibujo(const QString& placa_id, const QByteArray& sv
     }
     if (!nombre.isEmpty()) dibujos_.insert(nombre, svg);
     vistas_->setCurrentWidget(ilus_);
+    // Un dibujo que llega con el modelo ya esperando o corriendo necesita sus
+    // observables: se vuelve a suscribir, y vale la última suscripción
+    suscribe();
     return true;
+}
+
+// Lo que pinta el panel y, detrás, lo que necesita la ilustración que el
+// panel no pinta -la corriente de un LED, para su brillo-. Antes de T_LISTO
+// no se manda nada: `Sesion::suscribe` lo rechaza, y T_LISTO lo vuelve a
+// pedir.
+void VentanaPrincipal::suscribe()
+{
+    QVector<quint16> ids;
+    if (panel_) ids = panel_->pintados();
+    if (ilus_)
+        for (quint16 id : ilus_->observados())
+            if (!ids.contains(id)) ids.push_back(id);
+    if (!ids.isEmpty()) ses_.suscribe(quint64(cfg_.periodo_ms * 1e6 + 0.5), ids);
 }
 
 void VentanaPrincipal::elige_dibujo(const QString& placa_id)
