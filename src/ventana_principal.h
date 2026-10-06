@@ -55,6 +55,18 @@
 //     no termina en un par de segundos, lo mata. Nunca queda un hijo huérfano
 //     simulando para nadie.
 //
+// Desde la fase 1 de las ilustraciones (`doc/analisis-uso-ilustraciones.md`),
+// el dibujo de cada placa:
+//
+//   * en el centro, dos pestañas: «Ilustración», con un recuadro por placa y
+//     su dibujo SVG si lo tiene, y «Panel», el de siempre. Si hay dibujo, se
+//     enseña la ilustración; el panel sigue ahí, con todo;
+//   * «Vista ▸ Abrir dibujo de la placa…» (o el botón de su recuadro) abre un
+//     SVG a mano, mientras `mcu-sim` no los mande. Lo que se ha encontrado en
+//     él -y lo que no- va a la lista de avisos;
+//   * la ventana RECUERDA cada dibujo abierto por el nombre de la placa: al
+//     volver a lanzar, o en las dos placas iguales de una pila, sale solo.
+//
 // Lanzarlo desde una consola con `--gui` sigue valiendo: la ventana no
 // distingue quién lanzó al modelo que se le conecta.
 // =============================================================================
@@ -66,6 +78,7 @@
 #include "argumentos.h"
 #include "configuracion.h"
 #include "lanzador.h"
+#include "ilustracion.h"
 #include "panel.h"
 #include "sesion.h"
 
@@ -109,6 +122,15 @@ public:
     // (`vista.periodo_ms`).
     static constexpr quint64 PERIODO_NS = 16666667;
 
+    // Pone el dibujo de una placa -su id en el sistema, o vacío si no lo es-
+    // y en las demás placas que se llamen igual, y lo recuerda por ese nombre.
+    // false, con `error`, si no hay placa o el SVG no sirve.
+    bool abre_dibujo(const QString& placa_id, const QByteArray& svg,
+                     QString* error = nullptr);
+    // Elige el fichero con un diálogo y lo abre. Con `placa_id` nulo, pregunta
+    // antes de qué placa es, si hay varias.
+    void elige_dibujo(const QString& placa_id = QString());
+
 private:
     void espera_modelo();
     void pon_placa();
@@ -147,6 +169,11 @@ private:
     QPushButton*  paso_      = nullptr;
     QSpinBox*     paso_ms_   = nullptr;
     Panel*        panel_     = nullptr;
+    QTabWidget*   vistas_    = nullptr;   // «Ilustración» y «Panel»
+    VistaIlustracion* ilus_  = nullptr;
+    QAction*      act_dibujo_ = nullptr;
+    // Los dibujos abiertos a mano, por el NOMBRE de la placa (`nucleo-f446re`)
+    QHash<QString, QByteArray> dibujos_;
     QLabel*       relojes_   = nullptr;
     QListWidget*  avisos_    = nullptr;
 };

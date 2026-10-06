@@ -165,8 +165,11 @@ una con qué deja hecho, cómo se comprueba y qué NO entra.
 
 ## Compilar
 
-Hace falta **Qt 6.3 o posterior** (`Widgets` y `Network`) y un compilador con
-C++17. Nada más: ni SystemC, ni una sola cabecera de `mcu-sim`.
+Hace falta **Qt 6.3 o posterior** (`Widgets`, `Network` y, desde las
+ilustraciones, `Svg` y `SvgWidgets`) y un compilador con C++17. Nada más: ni
+SystemC, ni una sola cabecera de `mcu-sim`. En Ubuntu son `qt6-base-dev` y
+`qt6-svg-dev`; en MSYS2, `qt6-base` y `qt6-svg`; el `qt` de Homebrew trae los
+dos.
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -195,7 +198,8 @@ recomienda Ninja como generador. Desde el shell **MINGW64**:
 
 ```bash
 pacman -S --needed mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja \
-                   mingw-w64-x86_64-gcc  mingw-w64-x86_64-qt6-base
+                   mingw-w64-x86_64-gcc  mingw-w64-x86_64-qt6-base \
+                   mingw-w64-x86_64-qt6-svg
 which cmake     # tiene que decir /mingw64/bin/cmake
 ```
 

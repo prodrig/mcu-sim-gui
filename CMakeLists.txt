@@ -58,7 +58,9 @@ foreach(_carpeta_nube "Dropbox" "OneDrive" "Google Drive" "GoogleDrive" "iCloud"
     endif()
 endforeach()
 
-find_package(Qt6 6.3 REQUIRED COMPONENTS Core Widgets Network)
+# Svg y SvgWidgets, desde las ilustraciones: QSvgRenderer para leer el
+# dibujo de una placa y QGraphicsSvgItem para pintar cada pieza encima
+find_package(Qt6 6.3 REQUIRED COMPONENTS Core Widgets Network Svg SvgWidgets)
 
 # La version que dice `mcu-sim-gui --version`. La de `project()` con
 # «-desarrollo» detras, salvo que alguien diga otra: la integracion continua,
@@ -111,8 +113,12 @@ qt_add_library(pantalla STATIC
     src/ventana_principal.cpp
     src/dialogo_lanzamiento.h
     src/dialogo_lanzamiento.cpp
+    src/dibujo.h
+    src/dibujo.cpp
+    src/ilustracion.h
+    src/ilustracion.cpp
 )
-target_link_libraries(pantalla PUBLIC sesion Qt6::Widgets)
+target_link_libraries(pantalla PUBLIC sesion Qt6::Widgets Qt6::Svg Qt6::SvgWidgets)
 
 qt_add_executable(mcu-sim-gui
     src/main.cpp
@@ -163,6 +169,7 @@ if(BUILD_TESTING)
     prueba(prueba_cruzada  tests/prueba_cruzada.cpp  sesion)
     prueba(prueba_argumentos  tests/prueba_argumentos.cpp  pantalla)
     prueba(prueba_lanzamiento tests/prueba_lanzamiento.cpp pantalla)
+    prueba(prueba_ilustracion tests/prueba_ilustracion.cpp pantalla)
     # La plantilla de configuracion se lee de las fuentes
     target_compile_definitions(prueba_argumentos PRIVATE FUENTES="${CMAKE_SOURCE_DIR}")
 
@@ -178,4 +185,6 @@ if(BUILD_TESTING)
     add_test(NAME lanzamiento COMMAND prueba_lanzamiento)
     set_tests_properties(lanzamiento PROPERTIES SKIP_RETURN_CODE 77
                          ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_test(NAME ilustracion COMMAND prueba_ilustracion)
+    set_tests_properties(ilustracion PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()

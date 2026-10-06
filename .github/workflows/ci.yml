@@ -71,8 +71,8 @@ jobs:
       - name: Qt 6, CMake y Ninja
         run: |
           sudo apt-get update
-          sudo apt-get install -y qt6-base-dev cmake ninja-build
-          dpkg -l qt6-base-dev | tail -1
+          sudo apt-get install -y qt6-base-dev qt6-svg-dev cmake ninja-build
+          dpkg -l qt6-base-dev qt6-svg-dev | tail -2
 
       - name: Compilar
         run: |
@@ -127,7 +127,7 @@ jobs:
         with:
           msystem: MINGW64
           update: true
-          pacboy: toolchain:p cmake:p ninja:p qt6-base:p
+          pacboy: toolchain:p cmake:p ninja:p qt6-base:p qt6-svg:p
           install: zip unzip
 
       - name: Compilar

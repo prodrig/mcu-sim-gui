@@ -3,6 +3,13 @@
 *Análisis del 2026-10-06. Lo que cambia en `mcu-sim` está en su
 `doc/analisis-uso-ilustraciones.md`; aquí está todo lo demás.*
 
+> **Estado.** Decidido el 2026-10-06 (§14): se localiza **por id y por la tabla
+> de enlaces** del XML, sin atributos propios en el SVG por ahora (si llegan,
+> su espacio de nombres será `mcusim`); la ilustración **no sustituye** al
+> panel —si hay dibujo se enseña ella, y el panel sigue en su pestaña—; y los
+> dibujos **viajan con la placa**, sin biblioteca propia en la ventana.
+> **Hecha la fase 1** (§13): plan §21.
+
 ## 1. La pregunta
 
 Hoy la ventana pinta cada placa como una rejilla de recuadros, uno por pieza

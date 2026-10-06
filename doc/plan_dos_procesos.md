@@ -1915,3 +1915,73 @@ ayuda nueva) y `prueba_cruzada` 36 → **43** contra el `mcu-sim` de verdad con
 `placas/pila_pc104.xml`: tres placas descritas, un acople de tres, el grafo
 CPU - L1 - L2, y el blinky encendiendo a la vez el LED de dos módulos de la
 pila.
+
+## 21. Ilustraciones, fase 1: el dibujo de cada placa
+
+Primera de las fases de `doc/analisis-uso-ilustraciones.md` §13: **pintar el
+SVG de una placa**, con las piezas que se encuentran en él como elementos
+vivos encima, y **decir qué se ha encontrado**. Solo lectura: los efectos y
+los mandos son las fases 2 y 3. Con lo decidido el 2026-10-06 —por id y por
+tabla de enlaces, sin atributos `mcusim:` de momento; la ilustración no
+sustituye al panel; los dibujos viajan con la placa—.
+
+**Leer el dibujo** (`dibujo.{h,cpp}`, sin widgets). `DibujoPlaca::carga`
+recorre el SVG una vez con `QXmlStreamReader` y a la vez lo **limpia**: quita
+las `<image>` que no llevan el dibujo dentro (`data:`) y los `<use>` que
+apuntan a otro fichero —un dibujo puede venir de otra máquina, y así no lee
+uno de esta—, y los `<script>` y `<foreignObject>`, y lo dice. De paso apunta
+los ids y los **repetidos**. Nada de más de 8 MiB, el techo del protocolo.
+Qt SVG no deja tocar su árbol, así que el fondo sin los elementos vivos
+(`sin()`) se hace igual: reescribiendo el texto sin esos subárboles. Ojo con
+`QXmlStreamWriter::writeCurrentToken`: se inventa un prefijo para el espacio
+de nombres por omisión (`n1:svg`) y, a la segunda pasada, lo declara dos
+veces; los elementos se escriben a mano, con el nombre tal como venía. El
+dibujo limpio de la Nucleo de ejemplo sale **idéntico píxel a píxel** al
+original.
+
+**Encontrar las piezas** (`DibujoPlaca::enlaza`): primero la **tabla de
+enlaces** (`pieza` → `elemento`, y un `efecto` para la fase 2) y después el
+**id**, comparado con el nombre de la pieza **dentro de su placa**
+(`id_local`): en un sistema, el dibujo de `N` encuentra `N/LD2` por `LD2`, y
+nunca una pieza de otra placa. Una entrada de la tabla rota —una pieza que no
+hay, un elemento que no hay, una pieza dos veces— se dice, y la pieza se busca
+por su id como si la entrada no estuviera. El **informe** (`InformeDibujo`)
+dice en una línea cuántas piezas hay en el dibujo y cuáles faltan, y en el
+detalle todo lo demás. Hoy la tabla la pasa quien llama, y la ventana la pasa
+vacía: llegará del XML de la placa con `T_ILUSTRACION` (fase 4).
+
+**Pintarlo** (`ilustracion.{h,cpp}`). `VistaPlaca` es un `QGraphicsView`
+sobre una escena en las unidades del viewBox: el **fondo**, el SVG sin los
+elementos vivos —sin quitarlos, un botón hundido saldría dos veces— y en
+caché; y un `QGraphicsSvgItem` por **pieza encontrada** sobre el renderer del
+SVG entero (`setElementId`), con la transformación de sus grupos, que
+`boundsOnElement` no aplica: así cae donde estaba aunque su grupo lo mueva, lo
+escale o lo gire. `VistaIlustracion` es la pestaña: un recuadro por placa
+(`QFrame`, no `QGroupBox`, que son los del panel) con su dibujo o un hueco, un
+botón «Abrir dibujo…» y el informe.
+
+**En la ventana**, el centro pasa a tener **dos pestañas, «Ilustración» y
+«Panel»**. Si hay dibujo se enseña la ilustración; el panel sigue en la suya,
+entero. Mientras `mcu-sim` no mande los dibujos, se abren a mano: «Vista ▸
+Abrir dibujo de la placa…» (Ctrl+D), o el botón del recuadro; en un sistema,
+preguntando antes de qué placa. Lo encontrado va a la lista de avisos, línea a
+línea. Y la ventana **recuerda cada dibujo por el nombre de la placa**: al
+lanzar otra vez, o en las dos placas iguales de una pila, sale solo.
+
+**Dependencias**: `Qt6::Svg` y `Qt6::SvgWidgets`. En el CI, `qt6-svg-dev` en
+Ubuntu y `qt6-svg` en MSYS2; el `qt` de Homebrew ya lo trae. No hace falta
+ningún complemento nuevo: se usa la biblioteca, y los guiones de empaquetado
+copian lo que el ejecutable enlaza.
+
+**Cómo se ha comprobado**: `prueba_ilustracion`, nueva, **50** comprobaciones
+sobre un SVG de prueba hecho para pillar cada cosa —un elemento dentro de un
+grupo trasladado, otro trasladado y escalado, otro girado, un id repetido, una
+`<image>` a `file:///etc/passwd` y otra incrustada—: lo que no es XML, lo que
+no es SVG y lo que pesa demasiado; los ids, la limpieza y las cajas; la tabla
+antes que el id y sus entradas rotas; en un sistema, cada placa con lo suyo;
+**píxeles**: cada pieza en su sitio, el escalado hasta donde llega, el girado
+girado —la esquina del cuadrado sin girar es fondo—, y el fondo **sin** la
+pieza viva —apartada, donde estaba se ve la placa—; y la ventana: las dos
+pestañas, abrir a mano, el informe en los avisos, el panel intacto, un
+recuadro por placa en un sistema y el dibujo recordado al volver a conectar.
+Las demás pruebas, igual.

@@ -9,11 +9,14 @@ dice qué son y con qué licencia se redistribuyen.
 ## Qt 6
 
 - **Qué**: Qt Core, Gui, Widgets y Network, y sus complementos (la plataforma
-  gráfica, los estilos, los formatos de imagen).
+  gráfica, los estilos, los formatos de imagen); y, desde las ilustraciones de
+  las placas, **Qt SVG** (`Qt6Svg` y `Qt6SvgWidgets`), que se usa como
+  biblioteca y no como complemento.
 - **Licencia**: **GNU LGPL versión 3** (`licencias/LGPL-3.0-only.txt`, que se
   apoya en `licencias/GPL-3.0-only.txt`).
 - **De dónde sale cada paquete**: Windows, del Qt de MSYS2
-  (`mingw-w64-x86_64-qt6-base`); Linux, del de Ubuntu 24.04 (`qt6-base-dev`);
+  (`mingw-w64-x86_64-qt6-base` y `-qt6-svg`); Linux, del de Ubuntu 24.04
+  (`qt6-base-dev` y `qt6-svg-dev`);
   macOS, del de Homebrew (`qt`). Los tres son compilaciones sin modificar de
   Qt, y su código fuente está en <https://download.qt.io/official_releases/qt/>
   y en los repositorios de esas tres distribuciones.

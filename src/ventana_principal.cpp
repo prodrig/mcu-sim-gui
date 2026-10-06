@@ -5,6 +5,10 @@
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QInputDialog>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
@@ -99,9 +103,13 @@ void VentanaPrincipal::construye()
     fila->addWidget(parar_);
     caja->addLayout(fila);
 
-    centro_ = new QScrollArea(cuerpo);
+    // En el centro, la placa: su ilustración, cuando la hay, y el panel
+    vistas_ = new QTabWidget(cuerpo);
+    vistas_->setObjectName(QStringLiteral("vistas"));
+    centro_ = new QScrollArea(vistas_);
     centro_->setWidgetResizable(true);
-    caja->addWidget(centro_, 1);
+    vistas_->addTab(centro_, tr("Panel"));
+    caja->addWidget(vistas_, 1);
 
     // Abajo, dos pestañas: los avisos que llegan por el protocolo, y lo que
     // mcu-sim dice por su salida estándar y de error (fase 7)
@@ -145,6 +153,12 @@ void VentanaPrincipal::construye()
     act_encima_->setCheckable(true);
     act_encima_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_T));
     act_encima_->setChecked(cfg_.siempre_encima);
+    vista->addSeparator();
+    act_dibujo_ = vista->addAction(tr("Abrir &dibujo de la placa..."), this,
+                                   [this] { elige_dibujo(); });
+    act_dibujo_->setObjectName(QStringLiteral("abrir_dibujo"));
+    act_dibujo_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+    act_dibujo_->setEnabled(false);
     if (cfg_.siempre_encima) setWindowFlag(Qt::WindowStaysOnTopHint, true);
     connect(act_encima_, &QAction::toggled, this, [this](bool si) {
         // Cambiar las banderas de una ventana la esconde: hay que volver a
@@ -421,6 +435,96 @@ void VentanaPrincipal::pon_placa()
                                         "ni corriendo"));
     });
     centro_->setWidget(panel_);
+
+    // La ilustración: un recuadro por placa, con el dibujo que se recuerde de
+    // una placa que se llame igual
+    if (ilus_) {
+        vistas_->removeTab(vistas_->indexOf(ilus_));
+        delete ilus_;
+    }
+    ilus_ = new VistaIlustracion(p, vistas_);
+    connect(ilus_, &VistaIlustracion::pide_dibujo, this,
+            [this](const QString& id) { elige_dibujo(id); });
+    vistas_->insertTab(0, ilus_, tr("Ilustracion"));
+    act_dibujo_->setEnabled(true);
+    for (const QString& id : ilus_->placas()) {
+        const auto d = dibujos_.constFind(ilus_->nombre_de(id));
+        if (d != dibujos_.constEnd() && !ilus_->vista(id)) abre_dibujo(id, *d);
+    }
+    vistas_->setCurrentWidget(ilus_->hay_dibujo() ? static_cast<QWidget*>(ilus_) : centro_);
+}
+
+bool VentanaPrincipal::abre_dibujo(const QString& placa_id, const QByteArray& svg,
+                                   QString* error)
+{
+    QString e;
+    if (!ilus_) e = tr("todavia no hay placa");
+    else if (!ilus_->placas().contains(placa_id)) e = tr("no hay ninguna placa \"%1\"").arg(placa_id);
+    if (!e.isEmpty()) {
+        if (error) *error = e;
+        return false;
+    }
+    // La placa pedida, y las que se llamen como ella: el mismo módulo dos
+    // veces en una pila es el mismo dibujo
+    const QString nombre = ilus_->nombre_de(placa_id);
+    QStringList cuales{placa_id};
+    for (const QString& id : ilus_->placas())
+        if (id != placa_id && !nombre.isEmpty() && ilus_->nombre_de(id) == nombre) cuales << id;
+    for (const QString& id : cuales) {
+        const QString quien = id.isEmpty() ? tr("dibujo") : tr("dibujo de %1").arg(id);
+        if (!ilus_->pon_dibujo(id, svg, {}, e)) {
+            pon_aviso(proto::N_AVISO, 0, quien, tr("no sirve: %1").arg(e));
+            if (error) *error = e;
+            return false;
+        }
+        const InformeDibujo& inf = ilus_->vista(id)->informe();
+        const QStringList det = inf.detalle();
+        pon_aviso(det.isEmpty() ? proto::N_INFO : proto::N_AVISO, 0, quien, inf.resumen());
+        for (const QString& l : det) pon_aviso(proto::N_INFO, 0, quien, l);
+    }
+    if (!nombre.isEmpty()) dibujos_.insert(nombre, svg);
+    vistas_->setCurrentWidget(ilus_);
+    return true;
+}
+
+void VentanaPrincipal::elige_dibujo(const QString& placa_id)
+{
+    if (!ilus_) {
+        statusBar()->showMessage(tr("todavia no hay placa: el dibujo es de una placa"));
+        return;
+    }
+    QString id = placa_id;
+    const QStringList ids = ilus_->placas();
+    if (id.isNull() && ids.size() == 1) {
+        id = ids.first();
+    } else if (id.isNull()) {
+        QStringList nombres;
+        for (const QString& x : ids) nombres << QStringLiteral("%1 · %2").arg(x, ilus_->nombre_de(x));
+        bool ok = false;
+        const QString elegida = QInputDialog::getItem(this, tr("Abrir dibujo"),
+                                                      tr("De que placa es el dibujo:"),
+                                                      nombres, 0, false, &ok);
+        if (!ok) return;
+        id = ids.value(int(nombres.indexOf(elegida)));
+    }
+    const QString f = QFileDialog::getOpenFileName(
+        this, tr("Dibujo de %1").arg(ilus_->nombre_de(id)), QString(),
+        tr("Dibujos SVG (*.svg);;Todos los ficheros (*)"));
+    if (f.isEmpty()) return;
+    QFile fichero(f);
+    if (QFileInfo(f).size() > DibujoPlaca::TAMANO_MAX) {
+        statusBar()->showMessage(tr("%1 es demasiado grande para ser un dibujo").arg(f));
+        return;
+    }
+    if (!fichero.open(QIODevice::ReadOnly)) {
+        statusBar()->showMessage(tr("no se puede leer %1: %2").arg(f, fichero.errorString()));
+        return;
+    }
+    QString e;
+    if (abre_dibujo(id, fichero.readAll(), &e))
+        statusBar()->showMessage(tr("dibujo %1").arg(QFileInfo(f).fileName()));
+    else
+        statusBar()->showMessage(tr("%1 no sirve como dibujo: %2").arg(QFileInfo(f).fileName(), e));
 }
 
 void VentanaPrincipal::pon_aviso(quint32 nivel, quint64 t_sim_ns, const QString& origen,
