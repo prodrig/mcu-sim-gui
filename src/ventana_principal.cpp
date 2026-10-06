@@ -14,6 +14,7 @@
 #include <QListWidget>
 #include <QMenuBar>
 #include <QPlainTextEdit>
+#include <QScreen>
 #include <QTabWidget>
 #include <QPushButton>
 #include <QScrollArea>
@@ -103,13 +104,12 @@ void VentanaPrincipal::construye()
     fila->addWidget(parar_);
     caja->addLayout(fila);
 
-    // En el centro, la placa: su ilustración, cuando la hay, y el panel
-    vistas_ = new QTabWidget(cuerpo);
-    vistas_->setObjectName(QStringLiteral("vistas"));
-    centro_ = new QScrollArea(vistas_);
+    // En el centro, el panel de la placa. La ilustración va aparte, en su
+    // propia ventana (`ver_ilustracion`)
+    centro_ = new QScrollArea(cuerpo);
+    centro_->setObjectName(QStringLiteral("centro"));
     centro_->setWidgetResizable(true);
-    vistas_->addTab(centro_, tr("Panel"));
-    caja->addWidget(vistas_, 1);
+    caja->addWidget(centro_, 1);
 
     // Abajo, dos pestañas: los avisos que llegan por el protocolo, y lo que
     // mcu-sim dice por su salida estándar y de error (fase 7)
@@ -154,6 +154,13 @@ void VentanaPrincipal::construye()
     act_encima_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_T));
     act_encima_->setChecked(cfg_.siempre_encima);
     vista->addSeparator();
+    // La ilustración, en su ventana: marcada, a la vista
+    act_ver_ilus_ = vista->addAction(tr("&Ilustracion"));
+    act_ver_ilus_->setObjectName(QStringLiteral("ver_ilustracion"));
+    act_ver_ilus_->setCheckable(true);
+    act_ver_ilus_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
+    act_ver_ilus_->setEnabled(false);
+    connect(act_ver_ilus_, &QAction::toggled, this, [this](bool si) { ver_ilustracion(si); });
     act_dibujo_ = vista->addAction(tr("Abrir &dibujo de la placa..."), this,
                                    [this] { elige_dibujo(); });
     act_dibujo_->setObjectName(QStringLiteral("abrir_dibujo"));
@@ -161,11 +168,10 @@ void VentanaPrincipal::construye()
     act_dibujo_->setEnabled(false);
     if (cfg_.siempre_encima) setWindowFlag(Qt::WindowStaysOnTopHint, true);
     connect(act_encima_, &QAction::toggled, this, [this](bool si) {
-        // Cambiar las banderas de una ventana la esconde: hay que volver a
-        // enseñarla, y solo si ya se estaba viendo
-        const bool visible = isVisible();
-        setWindowFlag(Qt::WindowStaysOnTopHint, si);
-        if (visible) show();
+        // Las dos ventanas: la de la ilustración es la que se quiere ver
+        // mientras se depura en el IDE
+        pon_encima(this, si);
+        if (ventana_ilus_) pon_encima(ventana_ilus_, si);
         if (si != cfg_.siempre_encima && !cfg_.ruta.isEmpty()) {
             cfg_.siempre_encima = si;
             QString e;
@@ -380,6 +386,55 @@ void VentanaPrincipal::closeEvent(QCloseEvent* e)
     e->accept();
 }
 
+// -----------------------------------------------------------------------------
+// La ventana de la ilustración
+void VentanaPrincipal::ver_ilustracion(bool si)
+{
+    if (!ventana_ilus_) return;
+    if (!si) {
+        ventana_ilus_->hide();
+        return;
+    }
+    if (!ilus_colocada_) {
+        // La primera vez: tan grande como pide el dibujo -sin pasarse de la
+        // pantalla-, y al lado de esta ventana si cabe, que no la tape
+        ilus_colocada_ = true;
+        QScreen* pantalla = screen();
+        const QRect libre = pantalla ? pantalla->availableGeometry() : QRect(0, 0, 1280, 800);
+        QSize t = ilus_ ? ilus_->sizeHint() : QSize();
+        if (!t.isValid() || t.width() < 400 || t.height() < 300) t = QSize(800, 600);
+        t = t.boundedTo(QSize(libre.width() * 3 / 4, libre.height() * 9 / 10));
+        ventana_ilus_->resize(t);
+        const QRect yo = frameGeometry();
+        if (yo.right() + 8 + t.width() <= libre.right())
+            ventana_ilus_->move(yo.right() + 8, yo.top());
+        else if (yo.left() - 8 - t.width() >= libre.left())
+            ventana_ilus_->move(yo.left() - 8 - t.width(), yo.top());
+    }
+    ventana_ilus_->show();
+    ventana_ilus_->raise();
+}
+
+void VentanaPrincipal::pon_encima(QWidget* w, bool si)
+{
+    // Cambiar las banderas de una ventana la esconde: hay que volver a
+    // enseñarla, y solo si ya se estaba viendo
+    const bool visible = w->isVisible();
+    w->setWindowFlag(Qt::WindowStaysOnTopHint, si);
+    if (visible) w->show();
+}
+
+bool VentanaPrincipal::eventFilter(QObject* o, QEvent* e)
+{
+    // Cerrar la ventana de la ilustración solo la esconde, y lo dice el menú
+    if (o == ventana_ilus_ && e->type() == QEvent::Close) {
+        e->ignore();
+        act_ver_ilus_->setChecked(false);
+        return true;
+    }
+    return QMainWindow::eventFilter(o, e);
+}
+
 void VentanaPrincipal::espera_modelo()
 {
     pon_controles();
@@ -436,23 +491,44 @@ void VentanaPrincipal::pon_placa()
 
     // La ilustración: un recuadro por placa, con el dibujo que se recuerde de
     // una placa que se llame igual
-    if (ilus_) {
-        vistas_->removeTab(vistas_->indexOf(ilus_));
-        delete ilus_;
+    if (!ventana_ilus_) {
+        // Una ventana de verdad, hija de esta: se va con ella, no cuenta como
+        // «la última ventana» para salir, y no tiene botón en la barra de
+        // tareas propio en todos los sistemas, pero se mueve y se agranda
+        // sola. Cerrarla solo la esconde (`eventFilter`)
+        ventana_ilus_ = new QWidget(this, Qt::Window);
+        ventana_ilus_->setObjectName(QStringLiteral("ventana_ilustracion"));
+        auto* c = new QVBoxLayout(ventana_ilus_);
+        c->setContentsMargins(0, 0, 0, 0);
+        ventana_ilus_->installEventFilter(this);
+        if (cfg_.siempre_encima) ventana_ilus_->setWindowFlag(Qt::WindowStaysOnTopHint, true);
     }
-    ilus_ = new VistaIlustracion(p, vistas_);
+    delete ilus_;
+    ilus_ = new VistaIlustracion(p, ventana_ilus_);
+    ventana_ilus_->layout()->addWidget(ilus_);
+    {
+        QStringList nombres;
+        for (const QString& id : ilus_->placas()) nombres << ilus_->nombre_de(id);
+        nombres.removeAll(QString());
+        nombres.removeDuplicates();
+        ventana_ilus_->setWindowTitle(
+            nombres.isEmpty() ? tr("Ilustracion")
+                              : tr("Ilustracion — %1").arg(nombres.join(QStringLiteral(" + "))));
+    }
     connect(ilus_, &VistaIlustracion::pide_dibujo, this,
             [this](const QString& id) { elige_dibujo(id); });
     // Las órdenes del dibujo salen por el mismo sitio que las del panel
     connect(ilus_, &VistaIlustracion::orden, this, &VentanaPrincipal::ordena);
-    vistas_->insertTab(0, ilus_, tr("Ilustracion"));
     act_dibujo_->setEnabled(true);
+    act_ver_ilus_->setEnabled(true);
     for (const QString& id : ilus_->placas()) {
         const auto d = dibujos_.constFind(ilus_->nombre_de(id));
         if (d != dibujos_.constEnd() && ilus_->origen(id) != QLatin1String("svg"))
             abre_dibujo(id, *d);
     }
-    vistas_->setCurrentWidget(ilus_->hay_dibujo() ? static_cast<QWidget*>(ilus_) : centro_);
+    // Con un dibujo de verdad, la ventana se abre sola (`pon_dibujos`); sin
+    // él, se queda como estuviera: abierta, con el generado, si se abrió
+    if (ilus_->hay_dibujo()) act_ver_ilus_->setChecked(true);
 }
 
 bool VentanaPrincipal::abre_dibujo(const QString& placa_id, const QByteArray& svg,
@@ -495,7 +571,8 @@ bool VentanaPrincipal::pon_dibujos(const QStringList& cuales, const QByteArray& 
         pon_aviso(det.isEmpty() ? proto::N_INFO : proto::N_AVISO, 0, quien, inf.resumen());
         for (const QString& l : det) pon_aviso(proto::N_INFO, 0, quien, l);
     }
-    vistas_->setCurrentWidget(ilus_);
+    act_ver_ilus_->setChecked(true);
+    if (ventana_ilus_->isVisible()) ventana_ilus_->raise();
     // Un dibujo que llega con el modelo ya esperando o corriendo necesita sus
     // observables: se vuelve a suscribir, y vale la última suscripción
     suscribe();

@@ -6,13 +6,15 @@
 > **Estado.** Decidido el 2026-10-06 (§14): se localiza **por id y por la tabla
 > de enlaces** del XML, sin atributos propios en el SVG por ahora (si llegan,
 > su espacio de nombres será `mcusim`); la ilustración **no sustituye** al
-> panel —si hay dibujo se enseña ella, y el panel sigue en su pestaña—; y los
+> panel —si hay dibujo se enseña ella, y el panel sigue a la vista—; y los
 > dibujos **viajan con la placa**, sin biblioteca propia en la ventana.
 > **Hechas las fases 1 a 6** (§13): plan §21 a §26. De la 6, lo que se pidió:
 > las placas **una al lado de otra**, con líneas entre los conectores; las
 > placas apiladas quedan para otro día. La 4, sin biblioteca
 > propia y sin atributos `mcusim:`, como se decidió: el dibujo lo manda
 > `mcu-sim` (`T_ILUSTRACION`) y la tabla de enlaces llega en `T_PLACA`.
+> Después (plan §27), la ilustración dejó de ser una pestaña junto al panel:
+> va en **su propia ventana**, para aprovechar mejor la pantalla.
 
 ## 1. La pregunta
 

@@ -58,11 +58,15 @@
 // Desde la fase 1 de las ilustraciones (`doc/analisis-uso-ilustraciones.md`),
 // el dibujo de cada placa:
 //
-//   * en el centro, dos pestañas: «Ilustración», con el dibujo SVG de cada
-//     placa -el suyo o uno generado (fase 5)-, todas juntas y unidas por
-//     líneas en un sistema (fase 6), y «Panel», el de siempre. Si alguna
-//     placa trae dibujo, se enseña la ilustración; el panel sigue ahí, con
-//     todo;
+//   * la «Ilustración», con el dibujo SVG de cada placa -el suyo o uno
+//     generado (fase 5)-, todas juntas y unidas por líneas en un sistema
+//     (fase 6), va en SU PROPIA VENTANA, aparte de esta, para ponerla donde
+//     se quiera y tan grande como se quiera -en otra pantalla, junto al
+//     IDE-; esta se queda con el panel de siempre, con todo. Se abre sola en
+//     cuanto alguna placa trae dibujo, y «Vista ▸ Ilustración» (Ctrl+I) la
+//     abre y la cierra cuando se quiera, también con el dibujo generado.
+//     Cerrarla no la destruye: sigue al día, y al volver a abrirla sale
+//     donde estaba. «Siempre encima» vale para las dos;
 //   * (fase 4) el dibujo de cada placa lo manda `mcu-sim` (T_ILUSTRACION), y
 //     se le aplica la tabla de enlaces que la placa trae en T_PLACA;
 //   * «Vista ▸ Abrir dibujo de la placa…» (o el botón de su recuadro) abre
@@ -166,6 +170,11 @@ private:
     void consola(const QString& texto, const QString& color = QString());
     void hijo_termino(int codigo, bool estrellado);
     void closeEvent(QCloseEvent* e) override;
+    // La ventana de la ilustración: se crea la primera vez que hace falta, y
+    // se enseña -la primera vez, al lado de esta, si cabe- o se esconde
+    void ver_ilustracion(bool si);
+    void pon_encima(QWidget* w, bool si);
+    bool eventFilter(QObject* o, QEvent* e) override;
 
     Configuracion cfg_;
     ArgumentosCli args_;
@@ -188,8 +197,10 @@ private:
     QPushButton*  paso_      = nullptr;
     QSpinBox*     paso_ms_   = nullptr;
     Panel*        panel_     = nullptr;
-    QTabWidget*   vistas_    = nullptr;   // «Ilustración» y «Panel»
+    QWidget*      ventana_ilus_ = nullptr;   // la ventana aparte, con `ilus_`
+    bool          ilus_colocada_ = false;     // ya se ha enseñado una vez
     VistaIlustracion* ilus_  = nullptr;
+    QAction*      act_ver_ilus_ = nullptr;    // Vista ▸ Ilustración
     QAction*      act_dibujo_ = nullptr;
     // Los dibujos abiertos a mano, por el NOMBRE de la placa (`nucleo-f446re`)
     QHash<QString, QByteArray> dibujos_;

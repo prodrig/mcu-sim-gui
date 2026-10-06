@@ -2214,3 +2214,36 @@ del borde de la CPU porque el pin del chip no está dibujado—. A mano, con el
 y el shield generado, sus cuatro conectores unidos y el blinky encendiendo a
 la vez el LD2 de una y el LED de la otra; y `placas/pila_pc104.xml`, tres
 generados en fila.
+
+## 27. La ilustración, en su propia ventana
+
+Para aprovechar mejor la pantalla, la ilustración **sale de la ventana
+principal**: ya no es una pestaña junto al panel, sino **una ventana aparte**
+(`ventana_ilustracion`), que se pone donde se quiera y tan grande como se
+quiera —en otra pantalla, junto al IDE— mientras la principal se queda con el
+panel, los mandos de la simulación y los avisos. El centro de la principal
+vuelve a ser solo el panel, sin pestañas.
+
+* **Se abre sola** en cuanto alguna placa trae dibujo de verdad —el que manda
+  `mcu-sim` o uno abierto a mano—, que es cuando antes se pasaba a la pestaña
+  *Ilustración*. Con solo dibujos generados no se abre, pero está.
+* **«Vista ▸ Ilustración» (Ctrl+I)**, marcable, la abre y la cierra cuando se
+  quiera; se enciende en cuanto hay placa. **Cerrarla solo la esconde**, y el
+  menú se entera: sigue al día con la simulación y, al volver a abrirla, sale
+  donde estaba y del tamaño que tenía.
+* **La primera vez** toma el tamaño que pide el dibujo, sin pasar de tres
+  cuartos de la pantalla, y se coloca **al lado** de la principal —a la
+  derecha, o a la izquierda si no cabe— para no taparla.
+* Es **hija** de la principal (`Qt::Window`): se cierra con ella, no cuenta
+  como «la última ventana» para salir, y un modelo nuevo cambia lo que tiene
+  dentro, no la ventana. Su título dice qué placas enseña
+  («Ilustracion — nucleo-f446re + shield-…»).
+* **«Siempre encima»** vale para las dos ventanas: es la ilustración la que se
+  quiere ver mientras se depura en el IDE.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 148 → **153** (I4): sin placa
+no hay ventana de ilustración ni pestañas, y Ctrl+I está apagado; con la placa
+existe, hija de la principal y escondida mientras solo hay generado; Ctrl+I la
+abre con el nombre de la placa en el título; cerrarla la esconde y desmarca el
+menú; un dibujo la abre sola; el panel sigue entero en la principal; «Siempre
+encima» marca y desmarca las dos; y un segundo modelo reusa la misma ventana.

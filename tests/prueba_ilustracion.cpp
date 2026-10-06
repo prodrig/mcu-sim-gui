@@ -405,16 +405,20 @@ int main(int argc, char** argv)
     }
 
     // -------------------------------------------------------------------------
-    std::printf("I4 La ventana: la pestana Ilustracion, junto al panel\n");
+    std::printf("I4 La ventana: la ilustracion, en una ventana aparte del panel\n");
     {
         VentanaPrincipal v(0);
         v.show();
-        auto* vistas = v.findChild<QTabWidget*>("vistas");
         auto* avisos = v.findChild<QListWidget*>("avisos");
         auto* accion = v.findChild<QAction*>("abrir_dibujo");
-        comprueba(vistas && vistas->count() == 1 && vistas->tabText(0) == "Panel" &&
-                      accion && !accion->isEnabled(),
-                  "sin placa, solo el panel, y nada que dibujar");
+        auto* ver = v.findChild<QAction*>("ver_ilustracion");
+        comprueba(!v.findChild<QWidget*>("ventana_ilustracion") &&
+                      !v.findChild<QTabWidget*>("vistas") &&
+                      v.findChild<QScrollArea*>("centro") && accion && !accion->isEnabled() &&
+                      ver && ver->isCheckable() && !ver->isEnabled() &&
+                      ver->shortcut() == QKeySequence(Qt::CTRL | Qt::Key_I),
+                  "sin placa, solo el panel, sin pestanas ni ventana de ilustracion, y "
+                  "Vista > Ilustracion (Ctrl+I) apagado");
         QString e;
         comprueba(!v.abre_dibujo(QString(), DIBUJO, &e) && e.contains("no hay placa"),
                   "ni un dibujo se puede abrir sin placa");
@@ -422,11 +426,26 @@ int main(int argc, char** argv)
         ModeloFalso m;
         m.conecta(v.sesion().puerto());
         saluda_hasta_listo(m);
-        comprueba(espera([&] { return vistas->count() == 2; }) &&
-                      vistas->tabText(0) == "Ilustracion" && vistas->tabText(1) == "Panel" &&
-                      vistas->currentIndex() == 1 && accion->isEnabled(),
-                  "con la placa, las dos pestanas; sin dibujo se ve el panel");
+        comprueba(espera([&] { return v.findChild<QWidget*>("ventana_ilustracion"); }) &&
+                      accion->isEnabled() && ver->isEnabled(),
+                  "con la placa, su ventana de ilustracion");
+        auto* ventana = v.findChild<QWidget*>("ventana_ilustracion");
         auto* ilus = v.findChild<VistaIlustracion*>("ilustracion");
+        comprueba(ventana->isWindow() && ventana->parentWidget() == &v &&
+                      ilus && ilus->window() == ventana && !ventana->isVisible() &&
+                      !ver->isChecked(),
+                  "una ventana de verdad, hija de la principal, con la ilustracion dentro; "
+                  "sin dibujo de la placa no se abre sola");
+        ver->trigger();
+        comprueba(ventana->isVisible() && v.isVisible() &&
+                      ventana->windowTitle() == QStringLiteral("Ilustracion — discovery"),
+                  "Ctrl+I la abre, con el generado y la placa en el titulo, y la principal "
+                  "sigue ahi: \"" +
+                      ventana->windowTitle().toStdString() + "\"");
+        ventana->close();
+        comprueba(!ventana->isVisible() && !ver->isChecked() &&
+                      v.findChild<QWidget*>("ventana_ilustracion") == ventana,
+                  "cerrarla solo la esconde, y el menu lo sabe");
         comprueba(ilus && ilus->findChild<QWidget*>("dibujo:") &&
                       ilus->findChild<VistaPlaca*>("vista:") &&
                       ilus->origen(QString()) == "generado" &&
@@ -437,18 +456,26 @@ int main(int argc, char** argv)
         comprueba(v.abre_dibujo(QString(), DIBUJO, &e), "se abre el dibujo a mano");
         auto* vp = ilus->findChild<VistaPlaca*>("vista:");
         auto* inf = ilus->findChild<QLabel*>("informe:");
-        comprueba(vp && ilus->origen(QString()) == "svg" && vistas->currentWidget() == ilus,
-                  "y se ve: el dibujo sustituye al generado, y la pestana pasa a la ilustracion");
+        comprueba(vp && ilus->origen(QString()) == "svg" && ventana->isVisible() &&
+                      ver->isChecked(),
+                  "y se ve: el dibujo sustituye al generado, y su ventana se abre sola");
         comprueba(inf && inf->isVisible() && inf->text().startsWith("2 de 4 piezas") &&
                       inf->toolTip().contains("serigrafia"),
                   "el recuadro dice lo que ha encontrado, y el detalle en la ayuda");
         comprueba(hay_aviso(avisos, "2 de 4 piezas") && hay_aviso(avisos, "/etc/passwd") &&
                       hay_aviso(avisos, "sin elemento"),
                   "y la lista de avisos tambien, linea a linea");
-        comprueba(v.findChildren<QGroupBox*>().size() == 4 &&
-                      v.findChild<QWidget*>("panel") && vistas->indexOf(
-                          v.findChild<QScrollArea*>()) >= 0,
-                  "el panel sigue entero en su pestana: la ilustracion no lo sustituye");
+        comprueba(v.findChildren<QGroupBox*>().size() == 4 && v.findChild<QWidget*>("panel") &&
+                      v.findChild<QWidget*>("panel")->window() == &v,
+                  "el panel sigue entero en la principal: la ilustracion no lo sustituye");
+        auto* encima = v.findChild<QAction*>("siempre_encima");
+        encima->trigger();
+        comprueba((ventana->windowFlags() & Qt::WindowStaysOnTopHint) && ventana->isVisible() &&
+                      (v.windowFlags() & Qt::WindowStaysOnTopHint),
+                  "Siempre encima vale para las dos ventanas");
+        encima->trigger();
+        comprueba(!(ventana->windowFlags() & Qt::WindowStaysOnTopHint) && ventana->isVisible(),
+                  "y desmarcado, en las dos");
 
         comprueba(!v.abre_dibujo(QString(), "<svg", &e) && ilus->findChild<VistaPlaca*>("vista:") == vp,
                   "un dibujo roto no quita el que habia");
@@ -460,7 +487,6 @@ int main(int argc, char** argv)
     {
         VentanaPrincipal v(0);
         v.show();
-        auto* vistas = v.findChild<QTabWidget*>("vistas");
         auto saluda = [&](ModeloFalso& m) {
             m.conecta(v.sesion().puerto());
             m.manda(T_HOLA, "protocolo_max=2\nplaca=placas/nucleo_y_shield.xml\n");
@@ -496,9 +522,12 @@ int main(int argc, char** argv)
         comprueba(espera([&] {
                       auto* i = v.findChild<VistaIlustracion*>("ilustracion");
                       return i && !i->property("vieja").isValid() && i->origen("N") == "svg";
-                  }) && vistas->currentWidget() == v.findChild<VistaIlustracion*>("ilustracion"),
+                  }) && v.findChild<QWidget*>("ventana_ilustracion")->isVisible() &&
+                      v.findChildren<QWidget*>("ventana_ilustracion").size() == 1 &&
+                      v.findChild<VistaIlustracion*>("ilustracion")->window() ==
+                          v.findChild<QWidget*>("ventana_ilustracion"),
                   "otro modelo con la misma Nucleo: su dibujo sale solo, que la ventana lo "
-                  "recuerda por el nombre de la placa, y se ve la ilustracion");
+                  "recuerda por el nombre de la placa, y se ve, en la MISMA ventana aparte");
     }
 
     // -------------------------------------------------------------------------
@@ -852,7 +881,6 @@ int main(int argc, char** argv)
 
         VentanaPrincipal v(0);
         v.show();
-        auto* vistas = v.findChild<QTabWidget*>("vistas");
         auto* avisos = v.findChild<QListWidget*>("avisos");
         ModeloFalso m;
         m.conecta(v.sesion().puerto());
@@ -867,7 +895,7 @@ int main(int argc, char** argv)
         comprueba(espera([&] { return arr->isEnabled(); }), "saludo con un T_ILUSTRACION");
         auto* ilus = v.findChild<VistaIlustracion*>("ilustracion");
         VistaPlaca* vp = ilus ? ilus->vista(QString()) : nullptr;
-        comprueba(vp && vistas->currentWidget() == ilus &&
+        comprueba(vp && v.findChild<QWidget*>("ventana_ilustracion")->isVisible() &&
                       ilus->informe(QString()).resumen().startsWith("3 de 4 piezas") &&
                       vp->efecto(0) == "ninguno",
                   "la ventana lo pone sin que nadie abra nada, y se ve la ilustracion; con "

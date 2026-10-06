@@ -163,11 +163,12 @@ una con qué deja hecho, cómo se comprueba y qué NO entra.
 
 Y, aparte del plan, **las ilustraciones**
 ([`doc/analisis-uso-ilustraciones.md`](doc/analisis-uso-ilustraciones.md), plan
-§21 a §26): cada placa con su **dibujo SVG** —el que manda `mcu-sim` con la
+§21 a §27): cada placa con su **dibujo SVG** —el que manda `mcu-sim` con la
 placa, o uno que la ventana genera si no trae ninguno—, los LEDs que brillan y
 los botones que se pulsan sobre él, y en un sistema todas las placas una al
-lado de otra con una línea por cada conector enchufado. El panel de siempre
-sigue en su pestaña.
+lado de otra con una línea por cada conector enchufado. La ilustración va en
+**su propia ventana** (Vista ▸ Ilustración, Ctrl+I; plan §27), para ponerla
+donde se quiera; el panel de siempre se queda en la principal.
 
 ---
 
