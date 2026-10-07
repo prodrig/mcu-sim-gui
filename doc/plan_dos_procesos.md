@@ -2262,3 +2262,31 @@ sale.
 **Cómo se ha comprobado**: `prueba_ilustracion` 153 → **154** (I11): la
 línea del acople lleva sus dos puntos, la del hilo de pin a pin ninguno, y la
 que sale de un conector porque el pin no está dibujado, solo el de ese lado.
+
+## 29. El mando de un encoder: el efecto `giro`, y la rueda que atraviesa
+
+Pedido por el uso: `mcu-sim` trae un `Encoder` —el del módulo KY-040, con su
+pulsador en el eje— y su dibujo, `placas/ky040.svg`, tiene en el centro un
+mando que hace las dos cosas. Son dos piezas, una encima de otra: el anillo
+moleteado, `ENC`, y la tapa del centro, `SW1`. Hacían falta dos cosas:
+
+1. **El efecto `giro`**, que solo pone la tabla de enlaces: el elemento gira
+   sobre el centro de su caja con el primer numérico que la pieza sugiere,
+   tomado como posiciones enteras de `min` a `max` —una vuelta son
+   `max - min + 1`; la posición `min` es el dibujo tal cual—. El anillo del
+   encoder sigue a `posicion`, de 0 a 29: 12° por clic, a la derecha. Ese
+   numérico **no lleva etiqueta**: ya lo dice el giro, y la ayuda emergente
+   sigue diciendo el valor. Una pieza sin numérico sugerido no puede girar:
+   se dice en los avisos del dibujo y se queda sin efecto.
+2. **La rueda atraviesa.** Si lo que hay bajo el ratón no tiene un mando
+   continuo ni discreto —la tapa es un `boton`—, la rueda es para la primera
+   pieza de debajo que sí lo tenga. Así, sobre la tapa, el clic aprieta el
+   pulsador y la rueda gira el encoder; sobre el anillo, la rueda lo gira y el
+   clic abre su caja numérica, como cualquier mando discreto.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 154 → **163** (I12): un
+encoder con su tapa encima y otro sin numérico; el giro elegido y el aviso del
+que no puede; el centro de giro; la marca arriba en la posición 0 y abajo en
+la 15, por los píxeles; 90° en la 7,5 y 348° en la 29; sin etiqueta y con la
+posición en la ayuda; el clic en la tapa para el pulsador y la rueda, sobre la
+tapa y sobre el anillo, para el encoder.

@@ -34,8 +34,17 @@
 //   * y la ayuda emergente del elemento dice TODOS sus valores.
 //
 // La tabla de enlaces puede cambiar el efecto de una pieza: `brillo`,
-// `hundido` o `ninguno`. El color del halo es el del elemento: se pinta en
-// una imagen pequeña y se promedian sus píxeles, una vez, al cargar.
+// `hundido`, `giro` o `ninguno`. El color del halo es el del elemento: se
+// pinta en una imagen pequeña y se promedian sus píxeles, una vez, al cargar.
+//
+// `giro` solo lo pone la tabla -por declaración no sale nunca-: el elemento
+// GIRA sobre el centro de su caja con el primer numérico que la pieza sugiere,
+// como la marca de un mando. Ese numérico son posiciones enteras de `min` a
+// `max`, y una vuelta son max - min + 1: la posición `min` es el dibujo tal
+// cual, y cada una más, 360 / (max - min + 1) grados a la derecha. Es el anillo
+// de un encoder (`posicion`, de 0 a 29: 12 grados por clic), y ese numérico no
+// lleva etiqueta: ya lo dice el giro. Una pieza sin él se queda sin efecto, y
+// se dice.
 //
 // Para todo eso la ilustración necesita observables que el panel no pinta -la
 // corriente de un LED-: la ventana se suscribe a la UNIÓN de lo que pintan
@@ -54,6 +63,12 @@
 //                  valor; la rueda del ratón lo mueve a pasos de un veinteavo
 //                  del rango;
 //   * discreto:    lo mismo, con una caja numérica, y la rueda de uno en uno.
+//
+// LA RUEDA ATRAVIESA: si lo que está debajo del ratón no tiene un mando
+// continuo ni discreto, la rueda es para la primera pieza de debajo que sí lo
+// tenga. Un mando de encoder con su pulsador en el centro son dos piezas, una
+// encima de otra; el clic en la tapa aprieta el pulsador, y la rueda gira el
+// encoder esté donde esté el ratón sobre el mando.
 //
 // Con el BOTÓN DERECHO, un menú con TODOS los mandos de la pieza: los que no
 // son el primero -el rebote de un pulsador- están ahí y, como siempre, en el
@@ -176,7 +191,7 @@ public:
     void pon_valor(quint16 id_obs, float valor);
     // Los observables de las piezas dibujadas: lo que hay que suscribir
     QVector<quint16> observados() const;
-    // El efecto de una pieza dibujada: "brillo", "hundido" o "ninguno"
+    // El efecto de una pieza dibujada: "brillo", "hundido", "giro" o "ninguno"
     QString efecto(int pieza) const;
     // Lo que se pinta encima de cada pieza, o nullptr si no lleva
     QGraphicsEllipseItem*    halo(int pieza) const;
@@ -246,7 +261,7 @@ private:
         int     pieza = -1;
         QGraphicsSvgItem* item = nullptr;
         QRectF  caja;
-        QString efecto;                      // "brillo", "hundido", "ninguno"
+        QString efecto;                      // "brillo", "hundido", "giro", "ninguno"
         QColor  color;
         int     o01 = -1;                    // el id_obs del 0/1 del efecto
         int     intensidad = -1;             // el que da la intensidad del brillo
@@ -259,6 +274,8 @@ private:
         bool    alarma = false;              // alguna disparada
         bool    hundido = false;             // como se ve ahora
         bool    hundido_obs = false;         // lo que dice la muestra
+        int     giro = -1;                   // el id_obs que lo hace girar
+        double  g_min = 0, g_max = 0;        // sus posiciones: una vuelta son max-min+1
         // Fase 3: sus mandos, lo último que se ha ordenado de cada uno y, de
         // los de tipo boton, el dedo y el «switch»
         QVector<MandoGui> mandos;
@@ -270,6 +287,7 @@ private:
     void repinta(Viva& v);
     void parpadea();
     int  viva_en(const QPoint& p) const;
+    QVector<int> vivas_en(const QPoint& p) const;  // todas, la de encima primero
     void manda(Viva& w, int m, float v);
     void ordena_boton(Viva& w, int m);
     void mueve(Viva& w, int m, float v);         // continuo y discreto

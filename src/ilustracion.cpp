@@ -499,8 +499,27 @@ void VistaPlaca::prepara(Capa& cp)
         }
         // El efecto: el de la tabla, si lo dice; si no, el de la declaración
         w.efecto = e.efecto;
+        if (w.efecto == QLatin1String("giro")) {
+            // El primer numérico que sugiere: posiciones enteras de min a max
+            for (const ObservableGui& o : pz.observables)
+                if (o.interesante && !o.alarma && !es_01(o) && o.max > o.min) {
+                    w.giro = o.id_obs;
+                    w.g_min = o.min;
+                    w.g_max = o.max;
+                    break;
+                }
+            if (w.giro < 0) {
+                cp.informe.avisos << QObject::tr("%1: el efecto «giro» necesita un numérico "
+                                               "que la pieza sugiera; se queda sin efecto")
+                                         .arg(pz.id_local);
+                w.efecto = QStringLiteral("ninguno");
+            }
+            // Lo que lo hace girar ya se ve -es el giro-: sin etiqueta
+            rotulos.removeIf([&](const ObservableGui* o) { return o->id_obs == w.giro; });
+        }
         if (w.efecto.isEmpty() || (w.efecto != QLatin1String("brillo") &&
                                    w.efecto != QLatin1String("hundido") &&
+                                   w.efecto != QLatin1String("giro") &&
                                    w.efecto != QLatin1String("ninguno"))) {
             if (!e.efecto.isEmpty())
                 cp.informe.avisos << QObject::tr("%1: el efecto «%2» no existe; se usa el que "
@@ -526,7 +545,7 @@ void VistaPlaca::prepara(Capa& cp)
             w.halo->setOpacity(0);
             w.halo->setZValue(2);
             w.halo->setAcceptedMouseButtons(Qt::NoButton);
-        } else if (w.efecto == QLatin1String("hundido")) {
+        } else if (w.efecto == QLatin1String("hundido") || w.efecto == QLatin1String("giro")) {
             w.item->setTransformOriginPoint(w.item->boundingRect().center());
         }
         if (alarmas) {
@@ -621,6 +640,12 @@ void VistaPlaca::repinta(Viva& w)
             w.item->setScale(h ? 0.88 : 1.0);
             w.item->setOpacity(h ? 0.8 : 1.0);
         }
+    }
+    // El giro: la posición, en vueltas de max - min + 1
+    if (w.giro >= 0 && w.valores.contains(quint16(w.giro))) {
+        const double v = std::clamp(double(w.valores.value(quint16(w.giro))), w.g_min, w.g_max);
+        const double ang = 360.0 * (v - w.g_min) / (w.g_max - w.g_min + 1.0);
+        if (w.item->rotation() != ang) w.item->setRotation(ang);
     }
     // La alarma
     bool alarma = false;
@@ -740,6 +765,18 @@ int VistaPlaca::viva_en(const QPoint& p) const
         if (d.isValid()) return viva_de_.value(d.toInt(), -1);
     }
     return -1;
+}
+
+QVector<int> VistaPlaca::vivas_en(const QPoint& p) const
+{
+    QVector<int> l;
+    for (QGraphicsItem* it : items(p)) {
+        const QVariant d = it->data(0);
+        if (!d.isValid()) continue;
+        const int i = viva_de_.value(d.toInt(), -1);
+        if (i >= 0 && !l.contains(i)) l.push_back(i);
+    }
+    return l;
 }
 
 QPoint VistaPlaca::donde(int pieza) const
@@ -887,10 +924,14 @@ void VistaPlaca::mouseMoveEvent(QMouseEvent* e)
     QGraphicsView::mouseMoveEvent(e);
 }
 
+// La rueda atraviesa: es para la primera pieza de debajo del ratón cuyo
+// primer mando es continuo o discreto, aunque haya otra encima -la tapa de un
+// pulsador sobre el anillo de un encoder-
 void VistaPlaca::wheelEvent(QWheelEvent* e)
 {
-    const int i = activos_ ? viva_en(e->position().toPoint()) : -1;
-    if (i >= 0 && !vivas_[i].mandos.isEmpty()) {
+    const QVector<int> l = activos_ ? vivas_en(e->position().toPoint()) : QVector<int>();
+    for (const int i : l) {
+        if (vivas_[i].mandos.isEmpty()) continue;
         Viva& w = vivas_[i];
         const MandoGui& m = w.mandos[0];
         const bool discreto = m.tipo == QLatin1String("discreto");

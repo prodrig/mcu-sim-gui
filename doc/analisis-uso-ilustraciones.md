@@ -259,6 +259,12 @@ Los efectos también salen de la declaración, no del tipo:
 `mcusim:efecto` o la tabla de enlaces cambian el efecto de un elemento:
 `brillo`, `opacidad`, `color`, `visible`, `texto`; y más adelante `rotacion`
 para el servo o el motor que `doc/analisis_gui.md` de `mcu-sim` ya preveía.
+Hoy la tabla admite `brillo`, `hundido`, `giro` y `ninguno`. **`giro`** es el
+primero de esa familia de rotaciones (plan §29): el elemento gira sobre el
+centro de su caja con el primer numérico que la pieza sugiere, tomado como
+posiciones enteras de `min` a `max` —una vuelta son `max - min + 1`—, y ese
+numérico no lleva etiqueta, porque ya lo dice el giro. Es el anillo del
+encoder del KY-040, `posicion` de 0 a 29: 12° por clic.
 
 **El color del halo** es el del elemento. Qt SVG no dice de qué color pinta
 algo —y la hoja de estilo del dibujo lo pone por clase—, así que se saca
@@ -281,7 +287,9 @@ observable físico y no de un 0/1.
 | `discreto` | Un clic abre la lista de valores; también la rueda |
 
 **Qué mando es el del clic**: el primero que declara la pieza (en un pulsador,
-`pulsar`). Los demás —`rebote_ms`, `rebotes`— están en el **menú contextual**
+`pulsar`). **La rueda atraviesa** (plan §29): si la pieza de encima no tiene un
+mando continuo ni discreto, es para la primera de debajo que lo tenga —el
+encoder bajo la tapa de su pulsador—. Los demás —`rebote_ms`, `rebotes`— están en el **menú contextual**
 del elemento y, como siempre, en el panel. Los mandos se apagan y se encienden
 con los del panel (`activa_mandos`), y las órdenes salen por la misma señal,
 así que el modelo no distingue de dónde viene una orden.

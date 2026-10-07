@@ -42,6 +42,11 @@
 //       enchufados -en una pila, cada uno con el siguiente- y una de trazos
 //       por cada hilo, de conector a conector o, si no está dibujado, desde
 //       el borde de la placa.
+//   I12 (plan §29) el mando de un encoder: el efecto `giro` -el anillo gira
+//       con la posición, sobre su centro, una vuelta cada max - min + 1-; sin
+//       numérico que lo mueva se dice y se queda sin efecto; y con el
+//       pulsador encima, el clic es para el pulsador y la RUEDA lo atraviesa
+//       y gira el encoder.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -1165,6 +1170,105 @@ int main(int argc, char** argv)
                       std::abs(h.pb.x() - vp->caja_de("L2/J9.1").left()) < 0.01,
                   "un pin de chip no esta dibujado: el hilo sale del borde de la CPU, y llega "
                   "al pin 1 de J9 de L2");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I12 El mando de un encoder: el giro, y la rueda que atraviesa\n");
+    {
+        const char* PLACA_ENC =
+            "<placa nombre=\"ky\">\n"
+            "  <componente tipo=\"Encoder\" id=\"ENC\"><pin nombre=\"a\" nodo=\"PA0\"/></componente>\n"
+            "  <componente tipo=\"Button\" id=\"SW1\"><pin nombre=\"pin\" nodo=\"PA1\"/></componente>\n"
+            "  <componente tipo=\"Encoder\" id=\"MUDO\"><pin nombre=\"a\" nodo=\"PA2\"/></componente>\n"
+            "  <ilustracion>\n"
+            "    <enlace pieza=\"ENC\" elemento=\"ENC\" efecto=\"giro\"/>\n"
+            "    <enlace pieza=\"MUDO\" elemento=\"MUDO\" efecto=\"giro\"/>\n"
+            "  </ilustracion>\n"
+            "</placa>\n";
+        const char* CAT_ENC =
+            "<catalogo>\n"
+            "  <pieza idx=\"0\" id=\"ENC\" tipo=\"Encoder\">\n"
+            "    <observable idx=\"0\" id_obs=\"0\" nombre=\"posicion\" unidad=\"\" min=\"0\" max=\"29\" interesante=\"si\"/>\n"
+            "    <observable idx=\"1\" id_obs=\"1\" nombre=\"contacto_a\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"no\"/>\n"
+            "    <mando idx=\"0\" nombre=\"girar\" tipo=\"discreto\" min=\"-30000\" max=\"30000\" valor=\"0\"/>\n"
+            "  </pieza>\n"
+            "  <pieza idx=\"1\" id=\"SW1\" tipo=\"Button\">\n"
+            "    <observable idx=\"0\" id_obs=\"2\" nombre=\"pulsado\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\"/>\n"
+            "    <mando idx=\"0\" nombre=\"pulsar\" tipo=\"boton\" min=\"0\" max=\"1\" valor=\"0\"/>\n"
+            "  </pieza>\n"
+            "  <pieza idx=\"2\" id=\"MUDO\" tipo=\"Encoder\">\n"
+            "    <observable idx=\"0\" id_obs=\"3\" nombre=\"contacto_a\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "</catalogo>\n";
+        // El anillo, un circulo con su marca arriba, y la tapa encima, en el
+        // centro; MUDO, a un lado
+        const char* DIBUJO_ENC =
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 140 100\">\n"
+            "  <rect x=\"0\" y=\"0\" width=\"140\" height=\"100\" fill=\"#0d2350\"/>\n"
+            "  <g id=\"ENC\">\n"
+            "    <circle cx=\"50\" cy=\"50\" r=\"40\" fill=\"#2b2b2b\"/>\n"
+            "    <rect x=\"47\" y=\"12\" width=\"6\" height=\"16\" fill=\"#ffffff\"/>\n"
+            "  </g>\n"
+            "  <circle id=\"SW1\" cx=\"50\" cy=\"50\" r=\"18\" fill=\"#b4bbc2\"/>\n"
+            "  <rect id=\"MUDO\" x=\"110\" y=\"40\" width=\"20\" height=\"20\" fill=\"#808080\"/>\n"
+            "</svg>\n";
+        const PlacaGui p = placa_de(PLACA_ENC, CAT_ENC);
+        QString e;
+        std::unique_ptr<VistaPlaca> v(VistaPlaca::crea(p, QString(), DIBUJO_ENC, p.tabla_de(QString()), e));
+        comprueba(v != nullptr, "la vista se construye " + e.toStdString());
+        if (!v) return resultado();
+        v->resize(700, 500);
+        v->show();
+        espera([] { return false; }, 50);
+        comprueba(v->efecto(0) == "giro" && v->efecto(1) == "hundido" &&
+                      v->efecto(2) == "ninguno" &&
+                      v->informe().avisos.join(" ").contains("MUDO: el efecto «giro» necesita"),
+                  "ENC gira y SW1 se hunde; MUDO, sin numerico que lo mueva, sin efecto, y "
+                  "se dice: " + v->informe().avisos.join(" | ").toStdString());
+        const QPointF centro = v->vivo(0)->transformOriginPoint() -
+                               v->vivo(0)->boundingRect().center();
+        comprueba(std::abs(centro.x()) < 1e-9 && std::abs(centro.y()) < 1e-9 &&
+                      v->vivo(0)->rotation() == 0,
+                  "el anillo gira sobre el centro de su caja, que es el eje, y nace sin girar");
+        auto marca = [&](const QImage& img, double x, double y) {
+            return luz(en(img, *v, x, y)) > 600;
+        };
+        v->pon_valor(0, 0.f);
+        const QImage cero = v->imagen(560);
+        v->pon_valor(0, 15.f);
+        const QImage quince = v->imagen(560);
+        v->pon_valor(0, 7.5f);
+        const double r75 = v->vivo(0)->rotation();
+        v->pon_valor(0, 29.f);
+        const double r29 = v->vivo(0)->rotation();
+        comprueba(marca(cero, 50, 20) && !marca(cero, 50, 80) && !marca(quince, 50, 20) &&
+                      marca(quince, 50, 80),
+                  "la marca, arriba en la posicion 0 y abajo en la 15: media vuelta de 30");
+        comprueba(std::abs(r75 - 90) < 1e-9 && std::abs(r29 - 348) < 1e-9,
+                  "12 grados por posicion, a la derecha: 7.5 son 90 y 29 son 348 (" +
+                      std::to_string(r75) + ", " + std::to_string(r29) + ")");
+        comprueba(!v->etiqueta(0) && v->vivo(0)->toolTip().contains("posicion: 29"),
+                  "la posicion no lleva etiqueta -ya la dice el giro-, y la ayuda la dice");
+
+        std::vector<OrdenVista> o;
+        QObject::connect(v.get(), &VistaPlaca::orden,
+                         [&](quint16 pz, quint16 m, float x) { o.push_back({pz, m, x}); });
+        v->activa_mandos(true);
+        const QPoint tapa = v->donde(1);
+        const QPoint anillo = v->mapFromScene(v->vivo(0)->mapToScene(QPointF(50, 15)));
+        clic(v.get(), tapa);
+        comprueba(o.size() == 2 && o[0].pieza == 1 && o[0].valor == 1.f && o[1].valor == 0.f,
+                  "un clic en la tapa es para el pulsador: pulsar y soltar");
+        o.clear();
+        rueda(v.get(), tapa, 1);
+        rueda(v.get(), tapa, 1);
+        comprueba(o.size() == 2 && o[0].pieza == 0 && o[0].mando == 0 && o[0].valor == 1.f &&
+                      o[1].valor == 2.f,
+                  "la rueda sobre la tapa ATRAVIESA el pulsador -no tiene mando que mover- "
+                  "y gira el encoder, de clic en clic");
+        rueda(v.get(), anillo, -3);
+        comprueba(o.size() == 3 && o[2].pieza == 0 && o[2].valor == -1.f,
+                  "y sobre el anillo, igual: tres atras, a -1");
     }
 
     return resultado();
