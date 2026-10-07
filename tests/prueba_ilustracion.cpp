@@ -42,6 +42,12 @@
 //       enchufados -en una pila, cada uno con el siguiente- y una de trazos
 //       por cada hilo, de conector a conector o, si no está dibujado, desde
 //       el borde de la placa.
+//   I13 (plan §30) una PANTALLA: la imagen del catálogo, que se pide en la
+//       suscripción y llega en T_IMAGEN; el efecto `pantalla`, el de omisión
+//       de una pieza con imagen, que la pinta encima de su elemento -girada a
+//       la izquierda si el elemento es apaisado- y con su luz; en el panel, a
+//       su tamaño; un T_IMAGEN que no mide lo que dice; y en un dibujo
+//       generado, su vidrio.
 //   I12 (plan §29) el mando de un encoder: el efecto `giro` -el anillo gira
 //       con la posición, sobre su centro, una vuelta cada max - min + 1-; sin
 //       numérico que lo mueva se dice y se queda sin efecto; y con el
@@ -67,6 +73,7 @@
 #include <QAction>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QStatusBar>
 #include <QTabWidget>
 
 #include "comun.h"
@@ -1269,6 +1276,125 @@ int main(int argc, char** argv)
         rueda(v.get(), anillo, -3);
         comprueba(o.size() == 3 && o[2].pieza == 0 && o[2].valor == -1.f,
                   "y sobre el anillo, igual: tres atras, a -1");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I13 Una pantalla: la imagen por T_IMAGEN, encima de su elemento y en el panel\n");
+    {
+        const char* PLACA_TFT =
+            "<placa nombre=\"tft\">\n"
+            "  <componente tipo=\"Tft128x160\" id=\"TFT\"><pin nombre=\"sda\" nodo=\"PA7\"/></componente>\n"
+            "  <componente tipo=\"Led\" id=\"LD\"><pin nombre=\"anodo\" nodo=\"PA5\"/></componente>\n"
+            "</placa>\n";
+        const char* CAT_TFT =
+            "<catalogo>\n"
+            "  <pieza idx=\"0\" id=\"TFT\" tipo=\"Tft128x160\">\n"
+            "    <observable idx=\"0\" id_obs=\"0\" nombre=\"encendida\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\"/>\n"
+            "    <observable idx=\"1\" id_obs=\"1\" nombre=\"luz\" unidad=\"mA\" min=\"0\" max=\"40\" interesante=\"no\"/>\n"
+            "    <imagen idx=\"0\" id_obs=\"3\" nombre=\"pantalla\" ancho=\"128\" alto=\"160\" formato=\"rgb888\"/>\n"
+            "  </pieza>\n"
+            "  <pieza idx=\"1\" id=\"LD\" tipo=\"Led\">\n"
+            "    <observable idx=\"0\" id_obs=\"2\" nombre=\"encendido\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "</catalogo>\n";
+        // El vidrio, APAISADO: 160 de ancho y 128 de alto
+        const char* DIBUJO_TFT =
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 160\">\n"
+            "  <rect x=\"0\" y=\"0\" width=\"200\" height=\"160\" fill=\"#c8161d\"/>\n"
+            "  <rect id=\"TFT\" x=\"20\" y=\"16\" width=\"160\" height=\"128\" fill=\"#2a3036\"/>\n"
+            "  <circle id=\"LD\" cx=\"190\" cy=\"10\" r=\"4\" fill=\"#00ff00\"/>\n"
+            "</svg>\n";
+        // La imagen: la fila de arriba roja, la columna izquierda verde, y el
+        // resto azul
+        QByteArray rgb(128 * 160 * 3, '\0');
+        for (int y = 0; y < 160; ++y)
+            for (int x = 0; x < 128; ++x) {
+                char* p = rgb.data() + (y * 128 + x) * 3;
+                if (y < 8)      { p[0] = char(255); }
+                else if (x < 8) { p[1] = char(255); }
+                else            { p[2] = char(255); }
+            }
+        const PlacaGui p = placa_de(PLACA_TFT, CAT_TFT);
+        comprueba(p.piezas.size() == 2 && p.piezas[0].imagenes.size() == 1 &&
+                      p.piezas[0].imagenes[0].id_obs == 3 && p.piezas[0].imagenes[0].ancho == 128 &&
+                      p.piezas[0].imagenes[0].alto == 160 && p.piezas[1].imagenes.isEmpty(),
+                  "el catalogo trae la imagen de la pantalla, con su id_obs y su tamano");
+        comprueba(glifo_de(p.piezas[0]) == "pantalla" &&
+                      para_bandeja(p, QString(), {"TFT"}) == QVector<int>{0} &&
+                      dibujo_generado(p, QString()).contains("fill=\"#1b1e22\""),
+                  "en un dibujo generado, su vidrio oscuro; y va a la bandeja si al dibujo le falta");
+        QString e;
+        std::unique_ptr<VistaPlaca> v(VistaPlaca::crea(p, QString(), DIBUJO_TFT, {}, e));
+        comprueba(v != nullptr, "la vista se construye " + e.toStdString());
+        if (!v) return resultado();
+        v->resize(600, 500);
+        v->show();
+        espera([] { return false; }, 50);
+        comprueba(v->efecto(0) == "pantalla" && v->pantalla(0) && !v->pantalla(0)->isVisible() &&
+                      v->observados().contains(3) && v->efecto(1) == "brillo" && !v->pantalla(1),
+                  "una pieza con imagen lleva el efecto `pantalla` sin que lo diga la tabla; se "
+                  "suscribe a su imagen, y hasta la primera se ve el elemento");
+        v->pon_imagen(3, 128, 160, rgb, 1.f);
+        const QImage con_luz = v->imagen(600);
+        comprueba(v->pantalla(0)->isVisible() &&
+                      parecido(en(con_luz, *v, 22, 80), qRgb(255, 0, 0), 10) &&
+                      parecido(en(con_luz, *v, 100, 141), qRgb(0, 255, 0), 10) &&
+                      parecido(en(con_luz, *v, 100, 60), qRgb(0, 0, 255), 10),
+                  "la imagen, sobre el vidrio apaisado, girada a la izquierda: su fila de "
+                  "arriba -roja- a la izquierda, su columna izquierda -verde- abajo, el resto "
+                  "azul: " + hex(en(con_luz, *v, 22, 80)).toStdString() + " " +
+                      hex(en(con_luz, *v, 100, 141)).toStdString());
+        comprueba(parecido(en(con_luz, *v, 10, 80), qRgb(0xc8, 0x16, 0x1d), 10),
+                  "y fuera del vidrio, la placa, sin tocar");
+        v->pon_imagen(3, 128, 160, rgb, 0.f);
+        const QImage sin_luz = v->imagen(600);
+        v->pon_imagen(3, 128, 160, rgb, 0.5f);
+        const QImage media = v->imagen(600);
+        comprueba(parecido(en(sin_luz, *v, 100, 60), qRgb(0, 0, 0), 4) &&
+                      parecido(en(media, *v, 100, 60), qRgb(0, 0, 128), 6),
+                  "sin luz, negra; con la mitad, a la mitad");
+        v->pon_imagen(3, 128, 160, rgb.left(1000), 1.f);
+        comprueba(parecido(en(v->imagen(600), *v, 100, 60), qRgb(0, 0, 128), 6),
+                  "una imagen con menos pixeles de los que dice no se pinta: se queda la de antes");
+
+        // En la ventana: la suscripción, el panel y el dibujo
+        VentanaPrincipal w(0);
+        w.show();
+        ModeloFalso m;
+        m.conecta(w.sesion().puerto());
+        m.manda(T_HOLA, "protocolo_max=1\nplaca=tft.xml\nmcu=\nfirmware=\n");
+        comprueba(m.espera_leidos(1) && m.leido[0].tipo == T_VERSION, "el saludo");
+        m.version(1);
+        m.manda(T_PLACA, PLACA_TFT);
+        m.manda(T_CATALOGO, CAT_TFT);
+        m.manda(T_LISTO);
+        CabSuscribe cs{};
+        comprueba(m.espera_leidos(2) && m.leido[1].tipo == T_SUSCRIBE &&
+                      (std::memcpy(&cs, m.leido[1].cuerpo.constData(), sizeof cs), true) &&
+                      m.leido[1].cuerpo.mid(int(sizeof cs)).contains(
+                          QByteArray::fromStdString(bytes(uint16_t(3)))),
+                  "la suscripcion pide la imagen, con su id_obs, como un observable");
+        auto* lab = w.findChild<QLabel*>("img:3");
+        comprueba(lab && lab->size() == QSize(128, 160) && lab->pixmap().isNull(),
+                  "el panel tiene sitio para la pantalla, a su tamano, negra hasta la primera");
+        w.abre_dibujo(QString(), DIBUJO_TFT);
+        auto* ilus = w.findChild<VistaIlustracion*>("ilustracion");
+        VistaPlaca* vp = ilus ? ilus->vista(QString()) : nullptr;
+        std::string im = bytes(CabImagen{7000000ull, 3, FMT_RGB888, 128, 160, 1.f, 0});
+        im += rgb.toStdString();
+        m.manda(T_IMAGEN, im);
+        comprueba(lab && espera([&] { return !lab->pixmap().isNull(); }) &&
+                      lab->pixmap().toImage().pixel(64, 2) == qRgb(255, 0, 0) &&
+                      lab->pixmap().toImage().pixel(2, 80) == qRgb(0, 255, 0),
+                  "un T_IMAGEN llega al panel, tal cual: la fila de arriba roja");
+        comprueba(vp && vp->pantalla(0) && vp->pantalla(0)->isVisible(),
+                  "y al dibujo, encima del vidrio");
+        std::string mala = bytes(CabImagen{8000000ull, 3, FMT_RGB888, 128, 160, 0.f, 0}) + "corto";
+        m.manda(T_IMAGEN, mala);
+        espera([] { return false; }, 200);
+        comprueba(lab && lab->pixmap().toImage().pixel(64, 2) == qRgb(255, 0, 0) &&
+                      w.statusBar()->currentMessage().contains("no mide lo que dice"),
+                  "un T_IMAGEN que no mide lo que dice se ignora, y se dice");
     }
 
     return resultado();

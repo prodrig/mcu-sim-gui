@@ -14,6 +14,9 @@
 #include <QSpinBox>
 #include <QWidget>
 
+#include <QPixmap>
+
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <utility>
@@ -183,7 +186,7 @@ constexpr int MAX_PATILLAS_A_LA_VISTA = 8;
 
 QGroupBox* recuadro_de(Panel* panel, const PiezaGui& p, const PlacaGui& placa,
                        QWidget* padre, QHash<quint16, QLabel*>& etiquetas,
-                       QVector<QWidget*>& controles)
+                       QVector<QWidget*>& controles, QHash<quint16, QLabel*>& imagenes)
 {
     // En un sistema, el recuadro de la placa ya dice cuál es: aquí basta el
     // nombre de la pieza dentro de ella (`LD2`, no `N/LD2`).
@@ -235,6 +238,17 @@ QGroupBox* recuadro_de(Panel* panel, const PiezaGui& p, const PlacaGui& placa,
         if (!o.unidad.isEmpty()) nombre += QStringLiteral(" (%1)").arg(o.unidad);
         f->addRow(QStringLiteral("<b>%1</b>").arg(nombre), l);
     }
+    // Las imágenes, a su tamaño: una pantalla de 128x160 se ve como es. Nace
+    // negra, que es lo que se ve sin luz.
+    for (const ImagenGui& im : p.imagenes) {
+        auto* l = new QLabel(g);
+        l->setObjectName(QStringLiteral("img:%1").arg(im.id_obs));
+        l->setFixedSize(im.ancho, im.alto);
+        l->setStyleSheet(QStringLiteral("background: #000000;"));
+        l->setToolTip(QObject::tr("%1: %2x%3 pixeles").arg(im.nombre).arg(im.ancho).arg(im.alto));
+        imagenes.insert(quint16(im.id_obs), l);
+        f->addRow(QStringLiteral("<b>%1</b>").arg(im.nombre), l);
+    }
     for (const MandoGui& m : p.mandos)
         f->addRow(control_de(panel, p, m, g, controles));
     if (ocultos > 0) {
@@ -258,7 +272,7 @@ Panel::Panel(const PlacaGui& placa, QWidget* padre) : QWidget(padre)
         auto* rejilla = new QGridLayout(dentro);
         for (int k = 0; k < cuales.size(); ++k)
             rejilla->addWidget(recuadro_de(this, placa.piezas[cuales[k]], placa, dentro,
-                                           etiquetas, controles_),
+                                           etiquetas, controles_, img_),
                                k / columnas, k % columnas, Qt::AlignTop);
         rejilla->setRowStretch(int((cuales.size() + columnas - 1) / columnas), 1);
     };
@@ -304,6 +318,35 @@ Panel::Panel(const PlacaGui& placa, QWidget* padre) : QWidget(padre)
                 ind_.insert(quint16(o.id_obs), {l, o, l->parentWidget(), false});
                 pintados_.push_back(quint16(o.id_obs));
             }
+    for (const PiezaGui& p : placa.piezas)
+        for (const ImagenGui& im : p.imagenes)
+            if (img_.contains(quint16(im.id_obs))) pintados_.push_back(quint16(im.id_obs));
+}
+
+QImage Panel::imagen_de(int ancho, int alto, const QByteArray& rgb, float brillo)
+{
+    if (ancho <= 0 || alto <= 0 || rgb.size() < qint64(ancho) * alto * 3) return QImage();
+    QImage im(reinterpret_cast<const uchar*>(rgb.constData()), ancho, alto, ancho * 3,
+              QImage::Format_RGB888);
+    QImage c = im.copy();                    // `im` no es dueño de sus datos
+    const float b = std::clamp(brillo, 0.f, 1.f);
+    if (b < 0.999f) {
+        // La luz multiplica cada color: sin luz, negro
+        const int k = int(b * 256.f + 0.5f);
+        for (int y = 0; y < alto; ++y) {
+            uchar* f = c.scanLine(y);
+            for (int x = 0; x < ancho * 3; ++x) f[x] = uchar((f[x] * k) >> 8);
+        }
+    }
+    return c;
+}
+
+void Panel::pon_imagen(quint16 id_obs, int ancho, int alto, const QByteArray& rgb, float brillo)
+{
+    QLabel* l = img_.value(id_obs, nullptr);
+    if (!l) return;
+    const QImage im = imagen_de(ancho, alto, rgb, brillo);
+    if (!im.isNull()) l->setPixmap(QPixmap::fromImage(im));
 }
 
 bool Panel::en_alarma(const ObservableGui& o, float valor)

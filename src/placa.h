@@ -52,6 +52,16 @@ struct MandoGui {
     double  valor = 0;
 };
 
+// Una IMAGEN que la pieza enseña entera -la pantalla de un TFT-. Se pide en
+// la suscripción con su `id_obs`, como un observable, y llega en T_IMAGEN
+// cuando cambia (doc/protocolo.md §4.1). Un mcu-sim anterior no las declara.
+struct ImagenGui {
+    int     idx = 0;          // dentro de su pieza
+    int     id_obs = 0;       // global, detrás de todos los observables
+    QString nombre;           // "pantalla"
+    int     ancho = 0, alto = 0;
+};
+
 struct PatillaGui {
     QString nombre;           // "anodo", "osc_in"
     QString nodo;             // "PD12", "vdd"
@@ -65,6 +75,7 @@ struct PiezaGui {
     QString placa, id_local;
     QVector<ObservableGui> observables;
     QVector<MandoGui>      mandos;
+    QVector<ImagenGui>     imagenes;
     // De T_PLACA. Una pieza que el modelo construye y la placa no declara -no
     // debería haberla- se queda sin patillas y con `en_placa` a false.
     QVector<PatillaGui>    patillas;
@@ -78,7 +89,7 @@ struct PiezaGui {
 struct EnlaceTabla {
     QString pieza;            // el nombre en la placa: "LD2", no "N/LD2"
     QString elemento;         // el id en el SVG
-    QString efecto;           // "", "brillo", "hundido", "ninguno"
+    QString efecto;           // "", "brillo", "hundido", "giro", "pantalla", "ninguno"
 };
 
 // UNA PLACA DE UN <sistema>, descrita entera: es lo que hace falta para

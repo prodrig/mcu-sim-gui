@@ -2290,3 +2290,42 @@ que no puede; el centro de giro; la marca arriba en la posición 0 y abajo en
 la 15, por los píxeles; 90° en la 7,5 y 348° en la 29; sin etiqueta y con la
 posición en la ayuda; el clic en la tapa para el pulsador y la rueda, sobre la
 tapa y sobre el anillo, para el encoder.
+
+## 30. Una pantalla: las imágenes, por T_IMAGEN
+
+Pedido por el uso: `mcu-sim` trae una pantalla TFT de 1,8" y 128x160 con su
+ST7735S (`placas/tft_128x160.xml`), y durante la simulación tiene que verse lo
+que enseñaría la de verdad. Un observable es un número; una pantalla son
+60 kB. Hacía falta un camino nuevo, sin romper el que había:
+
+1. **El catálogo declara la imagen**, `<imagen>`, con un `id_obs` del mismo
+   espacio que los observables y detrás de todos ellos —los de siempre no se
+   mueven—, su nombre, su tamaño y su formato, RGB888 (`doc/protocolo.md`
+   §3). `lee_catalogo` la guarda en `PiezaGui::imagenes`.
+2. **Se pide en la misma suscripción**, con su `id_obs`: el panel y la
+   ilustración la ponen en lo que pintan, y la suscripción de siempre la
+   lleva.
+3. **Llega en `T_IMAGEN`** (`0x0015`), solo cuando cambia, con la luz aparte
+   (§4.1 del protocolo). `Sesion` la entrega con la señal `imagen()`; uno que
+   no mide lo que dice se ignora y se dice. Hubo que añadirlo a
+   `es_conocido()` de `proto_io.h`, la copia compartida: sin eso, la conexión
+   lo saltaba como desconocido y no llegaba nada.
+4. **En el panel**, la imagen tal cual, a su tamaño en píxeles, en el recuadro
+   de su pieza (`img:<id_obs>`), con su luz.
+5. **En la ilustración, el efecto `pantalla`**, el de omisión de una pieza con
+   imagen: un `QGraphicsPixmapItem` hijo del elemento —va con él y con las
+   transformaciones de sus grupos— que pinta la imagen llenando su caja. Si
+   el elemento es apaisado y la imagen no, girada un cuarto de vuelta a la
+   izquierda: es como va el vidrio del módulo, con el cable plano hacia el
+   conector. Hasta la primera imagen se ve el elemento tal cual.
+6. **En un dibujo generado**, un vidrio oscuro con la forma de la imagen, y la
+   pieza va a la bandeja si al dibujo le falta.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 163 → **177** (I13): el
+catálogo con su imagen; el glifo y la bandeja; el efecto por omisión y la
+suscripción; los píxeles de la imagen girada sobre un vidrio apaisado —la fila
+de arriba a la izquierda, la columna izquierda abajo—, sin luz y a media luz;
+una imagen corta, que no se pinta; y en la ventana, con un modelo falso, la
+suscripción que la pide, el panel y el dibujo que la reciben, y un
+`T_IMAGEN` malformado. Contra el `mcu-sim` de verdad, su `make gui-marcha`
+M6 y M7.

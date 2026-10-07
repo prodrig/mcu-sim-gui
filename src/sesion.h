@@ -24,6 +24,7 @@
 //   T_AVISO       -> `aviso()`. Los de la placa llegan durante el saludo, entre
 //                    T_CATALOGO y T_LISTO; los del modelo, en marcha;
 //   T_ESTADO      -> `estado_modelo()`, con los dos relojes;
+//   T_IMAGEN      -> `imagen()`, con los píxeles RGB888 y la luz (plan §30);
 //   `suscribe()`  -> T_SUSCRIBE.
 //
 // Y desde la fase 5, las órdenes (`doc/protocolo.md` §5):
@@ -140,6 +141,10 @@ signals:
     void muestra(quint16 id_obs, float valor);
     void aviso(quint32 nivel, quint64 t_sim_ns, const QString& origen, const QString& texto);
     void estado_modelo(quint32 fase, quint64 t_sim_ns, double t_pared_s, quint64 deltas);
+    // Una imagen entera (T_IMAGEN): `rgb` son ancho x alto píxeles RGB888,
+    // por filas de arriba abajo, sin la luz; `brillo`, de 0 a 1, la luz.
+    void imagen(quint16 id_obs, quint64 t_sim_ns, int ancho, int alto, const QByteArray& rgb,
+                float brillo);
     // Fase 5
     void orden_hecha(quint64 t_sim_ns, quint16 pieza, quint16 mando, float valor,
                      quint32 resultado);

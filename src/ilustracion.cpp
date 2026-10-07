@@ -2,6 +2,7 @@
 
 #include <QFrame>
 #include <QGraphicsEllipseItem>
+#include <QGraphicsPixmapItem>
 #include <QGraphicsPathItem>
 #include <QGraphicsRectItem>
 #include <QGraphicsScene>
@@ -517,9 +518,18 @@ void VistaPlaca::prepara(Capa& cp)
             // Lo que lo hace girar ya se ve -es el giro-: sin etiqueta
             rotulos.removeIf([&](const ObservableGui* o) { return o->id_obs == w.giro; });
         }
+        // Una pieza que enseña una imagen la enseña, si la tabla no dice otra cosa
+        if (w.efecto.isEmpty() && !pz.imagenes.isEmpty()) w.efecto = QStringLiteral("pantalla");
+        if (w.efecto == QLatin1String("pantalla") && pz.imagenes.isEmpty()) {
+            cp.informe.avisos << QObject::tr("%1: el efecto «pantalla» necesita una imagen, y "
+                                           "la pieza no enseña ninguna; se queda sin efecto")
+                                     .arg(pz.id_local);
+            w.efecto = QStringLiteral("ninguno");
+        }
         if (w.efecto.isEmpty() || (w.efecto != QLatin1String("brillo") &&
                                    w.efecto != QLatin1String("hundido") &&
                                    w.efecto != QLatin1String("giro") &&
+                                   w.efecto != QLatin1String("pantalla") &&
                                    w.efecto != QLatin1String("ninguno"))) {
             if (!e.efecto.isEmpty())
                 cp.informe.avisos << QObject::tr("%1: el efecto «%2» no existe; se usa el que "
@@ -547,6 +557,17 @@ void VistaPlaca::prepara(Capa& cp)
             w.halo->setAcceptedMouseButtons(Qt::NoButton);
         } else if (w.efecto == QLatin1String("hundido") || w.efecto == QLatin1String("giro")) {
             w.item->setTransformOriginPoint(w.item->boundingRect().center());
+        } else if (w.efecto == QLatin1String("pantalla")) {
+            // Hija del elemento: va con él, con las transformaciones de sus
+            // grupos, y se pinta encima. Escondida hasta la primera imagen.
+            const ImagenGui& im = pz.imagenes[0];
+            w.imagen = im.id_obs;
+            w.pixmap = new QGraphicsPixmapItem(w.item);
+            w.pixmap->setTransformationMode(Qt::FastTransformation);
+            w.pixmap->setVisible(false);
+            w.pixmap->setAcceptedMouseButtons(Qt::NoButton);
+            w.ayuda += QObject::tr("\n%1: %2x%3 pixeles").arg(im.nombre).arg(im.ancho).arg(im.alto);
+            w.item->setToolTip(w.ayuda);
         }
         if (alarmas) {
             const double m = grosor * 2;
@@ -588,8 +609,10 @@ void VistaPlaca::reindexa()
 {
     viva_de_.clear();
     obs_de_.clear();
+    img_de_.clear();
     for (int i = 0; i < vivas_.size(); ++i) {
         viva_de_.insert(vivas_[i].pieza, i);
+        if (vivas_[i].imagen >= 0) img_de_.insert(quint16(vivas_[i].imagen), i);
         for (quint16 id : vivas_[i].obs) obs_de_.insert(id, i);
     }
 }
@@ -690,8 +713,37 @@ void VistaPlaca::parpadea()
 QVector<quint16> VistaPlaca::observados() const
 {
     QVector<quint16> l;
-    for (const Viva& w : vivas_) l += w.obs;
+    for (const Viva& w : vivas_) {
+        l += w.obs;
+        if (w.imagen >= 0) l.push_back(quint16(w.imagen));
+    }
     return l;
+}
+
+// La imagen, encima del elemento y llenando su caja. Girada un cuarto de vuelta
+// a la izquierda si el elemento y la imagen no van en la misma postura.
+void VistaPlaca::pon_imagen(quint16 id_obs, int ancho, int alto, const QByteArray& rgb,
+                            float brillo)
+{
+    const auto it = img_de_.constFind(id_obs);
+    if (it == img_de_.constEnd()) return;
+    Viva& w = vivas_[*it];
+    if (!w.pixmap) return;
+    QImage im = Panel::imagen_de(ancho, alto, rgb, brillo);
+    if (im.isNull()) return;
+    const QRectF r = w.item->boundingRect();
+    if ((r.width() > r.height()) != (im.width() > im.height()) && r.width() != r.height())
+        im = im.transformed(QTransform().rotate(-90));
+    w.pixmap->setPixmap(QPixmap::fromImage(im));
+    w.pixmap->setTransform(QTransform::fromScale(r.width() / im.width(), r.height() / im.height()) *
+                           QTransform::fromTranslate(r.x(), r.y()));
+    w.pixmap->setVisible(true);
+}
+
+QGraphicsPixmapItem* VistaPlaca::pantalla(int pieza) const
+{
+    const int i = viva_de_.value(pieza, -1);
+    return i < 0 ? nullptr : vivas_[i].pixmap;
 }
 
 QString VistaPlaca::efecto(int pieza) const
@@ -1143,6 +1195,12 @@ bool VistaIlustracion::pon_dibujo(const QString& placa_id, const QByteArray& svg
 void VistaIlustracion::pon_valor(quint16 id_obs, float valor)
 {
     vista_->pon_valor(id_obs, valor);
+}
+
+void VistaIlustracion::pon_imagen(quint16 id_obs, int ancho, int alto, const QByteArray& rgb,
+                                  float brillo)
+{
+    vista_->pon_imagen(id_obs, ancho, alto, rgb, brillo);
 }
 
 QVector<quint16> VistaIlustracion::observados() const

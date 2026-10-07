@@ -40,7 +40,15 @@ QString glifo(const PiezaGui& p, double x, double y, bool claro)
     const QString g = glifo_de(p);
     const QString id = esc(p.id_local);
     QString s = QStringLiteral("  <g id=\"%1\">\n").arg(id);
-    if (g == QLatin1String("boton")) {
+    if (g == QLatin1String("pantalla")) {
+        // Un vidrio oscuro con la forma de la imagen: encima va lo que enseñe
+        const ImagenGui& im = p.imagenes[0];
+        const double alto = 9.0, ancho = alto * im.ancho / std::max(1, im.alto);
+        const double a = std::min(ancho, 11.0), h = alto * a / ancho;
+        s += QStringLiteral("    <rect x=\"%1\" y=\"%2\" width=\"%3\" height=\"%4\" "
+                            "fill=\"#1b1e22\" stroke=\"#000000\" stroke-width=\"0.3\"/>\n")
+                 .arg(n(x - a / 2), n(y - h / 2), n(a), n(h));
+    } else if (g == QLatin1String("boton")) {
         s += QStringLiteral("    <rect x=\"%1\" y=\"%2\" width=\"7\" height=\"7\" rx=\"0.8\" "
                             "fill=\"#c9ccd1\" stroke=\"#7d8288\" stroke-width=\"0.3\"/>\n")
                  .arg(n(x - 3.5), n(y - 3.5));
@@ -85,6 +93,7 @@ QString glifo(const PiezaGui& p, double x, double y, bool claro)
 
 QString glifo_de(const PiezaGui& p)
 {
+    if (!p.imagenes.isEmpty()) return QStringLiteral("pantalla");
     if (!p.mandos.isEmpty()) {
         const QString& t = p.mandos[0].tipo;
         if (t == QLatin1String("interruptor")) return QStringLiteral("interruptor");
@@ -105,7 +114,7 @@ QVector<int> para_bandeja(const PlacaGui& placa, const QString& placa_id,
     for (const PiezaGui& p : placa.piezas) {
         if (!placa_id.isEmpty() && p.placa != placa_id) continue;
         if (!sin_elemento.contains(p.id_local)) continue;
-        if (p.observables.isEmpty() && p.mandos.isEmpty()) continue;
+        if (p.observables.isEmpty() && p.mandos.isEmpty() && p.imagenes.isEmpty()) continue;
         l.push_back(p.idx);
     }
     return l;

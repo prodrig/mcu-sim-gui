@@ -34,7 +34,7 @@
 //   * y la ayuda emergente del elemento dice TODOS sus valores.
 //
 // La tabla de enlaces puede cambiar el efecto de una pieza: `brillo`,
-// `hundido`, `giro` o `ninguno`. El color del halo es el del elemento: se
+// `hundido`, `giro`, `pantalla` o `ninguno`. El color del halo es el del elemento: se
 // pinta en una imagen pequeña y se promedian sus píxeles, una vez, al cargar.
 //
 // `giro` solo lo pone la tabla -por declaración no sale nunca-: el elemento
@@ -45,6 +45,13 @@
 // de un encoder (`posicion`, de 0 a 29: 12 grados por clic), y ese numérico no
 // lleva etiqueta: ya lo dice el giro. Una pieza sin él se queda sin efecto, y
 // se dice.
+//
+// `pantalla` es el de una pieza que enseña una IMAGEN -un TFT-, y es el que
+// le toca por omisión (plan §30): la imagen se pinta encima del elemento,
+// llenando su caja, con su luz. Si el elemento es apaisado y la imagen no -o
+// al revés-, se pone girada un cuarto de vuelta a la IZQUIERDA: la fila de
+// arriba de la imagen, a la izquierda; su columna izquierda, abajo. Hasta la
+// primera imagen se ve el elemento tal cual.
 //
 // Para todo eso la ilustración necesita observables que el panel no pinta -la
 // corriente de un LED-: la ventana se suscribe a la UNIÓN de lo que pintan
@@ -108,6 +115,7 @@
 #ifndef MCU_SIM_GUI_ILUSTRACION_H
 #define MCU_SIM_GUI_ILUSTRACION_H
 
+#include <QGraphicsPixmapItem>
 #include <QGraphicsView>
 #include <QHash>
 #include <QImage>
@@ -189,9 +197,14 @@ public:
 
     // Fase 2. Una muestra: un id_obs que no es de una pieza dibujada se ignora
     void pon_valor(quint16 id_obs, float valor);
+    // Una imagen (T_IMAGEN), para la pieza que la enseña
+    void pon_imagen(quint16 id_obs, int ancho, int alto, const QByteArray& rgb, float brillo);
+    // Lo que se pinta encima de una pieza con pantalla, o nullptr
+    QGraphicsPixmapItem* pantalla(int pieza) const;
     // Los observables de las piezas dibujadas: lo que hay que suscribir
     QVector<quint16> observados() const;
-    // El efecto de una pieza dibujada: "brillo", "hundido", "giro" o "ninguno"
+    // El efecto de una pieza dibujada: "brillo", "hundido", "giro", "pantalla" o
+    // "ninguno"
     QString efecto(int pieza) const;
     // Lo que se pinta encima de cada pieza, o nullptr si no lleva
     QGraphicsEllipseItem*    halo(int pieza) const;
@@ -275,6 +288,8 @@ private:
         bool    hundido = false;             // como se ve ahora
         bool    hundido_obs = false;         // lo que dice la muestra
         int     giro = -1;                   // el id_obs que lo hace girar
+        int     imagen = -1;                 // el id_obs de su imagen, con `pantalla`
+        QGraphicsPixmapItem* pixmap = nullptr;
         double  g_min = 0, g_max = 0;        // sus posiciones: una vuelta son max-min+1
         // Fase 3: sus mandos, lo último que se ha ordenado de cada uno y, de
         // los de tipo boton, el dedo y el «switch»
@@ -300,6 +315,7 @@ private:
     QVector<Viva>                 vivas_;
     QHash<int, int>               viva_de_;     // pieza -> índice en vivas_
     QHash<quint16, int>           obs_de_;      // id_obs -> índice en vivas_
+    QHash<quint16, int>           img_de_;      // id_obs de una imagen -> índice en vivas_
     QHash<quint16, ObservableGui> decl_;        // id_obs -> su declaración
     QHash<quint16, QGraphicsSimpleTextItem*> etiquetas_;
     QTimer                        parpadeo_;
@@ -333,6 +349,7 @@ public:
     QString origen(const QString& placa_id) const;
     // Fase 2: una muestra, a todos los dibujos; y lo que necesitan entre todos
     void pon_valor(quint16 id_obs, float valor);
+    void pon_imagen(quint16 id_obs, int ancho, int alto, const QByteArray& rgb, float brillo);
     QVector<quint16> observados() const;
     // La vista donde está esa placa: desde la fase 6, una para todas
     VistaPlaca* vista(const QString& placa_id) const

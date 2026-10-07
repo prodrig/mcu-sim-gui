@@ -259,7 +259,11 @@ Los efectos también salen de la declaración, no del tipo:
 `mcusim:efecto` o la tabla de enlaces cambian el efecto de un elemento:
 `brillo`, `opacidad`, `color`, `visible`, `texto`; y más adelante `rotacion`
 para el servo o el motor que `doc/analisis_gui.md` de `mcu-sim` ya preveía.
-Hoy la tabla admite `brillo`, `hundido`, `giro` y `ninguno`. **`giro`** es el
+Hoy la tabla admite `brillo`, `hundido`, `giro`, `pantalla` y `ninguno`.
+**`pantalla`** (plan §30) es el de omisión de una pieza que enseña una
+IMAGEN —el TFT de 128x160—: la imagen se pinta encima del elemento, llenando
+su caja, con su luz; si el elemento es apaisado y la imagen no, girada un
+cuarto de vuelta a la izquierda. **`giro`** es el
 primero de esa familia de rotaciones (plan §29): el elemento gira sobre el
 centro de su caja con el primer numérico que la pieza sugiere, tomado como
 posiciones enteras de `min` a `max` —una vuelta son `max - min + 1`—, y ese

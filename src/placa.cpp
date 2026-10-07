@@ -112,6 +112,17 @@ bool lee_catalogo(const QByteArray& xml, QVector<PiezaGui>& piezas, QString& err
             m.max    = real(a, "max");
             m.valor  = a.hasAttribute(QLatin1String("valor")) ? real(a, "valor") : m.min;
             piezas.back().mandos.push_back(m);
+        } else if (r.name() == QLatin1String("imagen") && !piezas.isEmpty()) {
+            ImagenGui im;
+            im.idx    = entero(a, "idx", ok);
+            im.id_obs = entero(a, "id_obs", ok);
+            im.nombre = texto(a, "nombre");
+            im.ancho  = entero(a, "ancho", ok);
+            im.alto   = entero(a, "alto", ok);
+            // Solo RGB888, que es lo que hay; otro formato no se sabría pintar
+            if (a.value(QLatin1String("formato")) == QLatin1String("rgb888") &&
+                im.ancho > 0 && im.alto > 0)
+                piezas.back().imagenes.push_back(im);
         }
     }
     if (r.hasError()) {

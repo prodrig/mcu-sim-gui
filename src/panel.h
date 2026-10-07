@@ -13,6 +13,9 @@
 //   * un control por MANDO, según su tipo: un botón, una casilla o un
 //     deslizador.
 //
+//   * y cada IMAGEN que la pieza enseña -la pantalla de un TFT- tal cual, a
+//     su tamaño en píxeles (`img:<id_obs>`), con su luz (plan §30).
+//
 // Los indicadores dicen «—» hasta que llega la primera muestra (fase 4). Los
 // controles nacen DESACTIVADOS, y `activa_mandos()` los enciende cuando el
 // modelo está esperando o corriendo (fase 5). Cada widget lleva un
@@ -53,6 +56,7 @@
 #define MCU_SIM_GUI_PANEL_H
 
 #include <QHash>
+#include <QImage>
 #include <QWidget>
 
 #include "placa.h"
@@ -70,7 +74,13 @@ public:
     // puede pedir más de lo que se ve.
     void pon_valor(quint16 id_obs, float valor);
 
-    // Los observables que la ventana pinta, que son los que se suscriben.
+    // Una imagen (T_IMAGEN). Una que no está pintada se ignora.
+    void pon_imagen(quint16 id_obs, int ancho, int alto, const QByteArray& rgb, float brillo);
+    // Los píxeles RGB888 de T_IMAGEN como imagen, ya con su luz: con 0, negra
+    static QImage imagen_de(int ancho, int alto, const QByteArray& rgb, float brillo);
+
+    // Los observables que la ventana pinta, que son los que se suscriben: con
+    // las imágenes, que se piden igual.
     QVector<quint16> pintados() const { return pintados_; }
 
     static QString texto_de(const ObservableGui& o, float valor);
@@ -93,6 +103,7 @@ private:
         bool          disparada = false; // la alarma, en la última muestra
     };
     QHash<quint16, Indicador> ind_;
+    QHash<quint16, QLabel*>   img_;
     QVector<quint16>          pintados_;
     QVector<QWidget*>         controles_;
     bool                      activos_ = false;

@@ -145,6 +145,19 @@ void Sesion::llega(quint16 tipo, const QByteArray& cuerpo)
         }
         break;
     }
+    case T_IMAGEN: {
+        CabImagen c{};
+        if (cuerpo.size() < int(sizeof c)) break;
+        std::memcpy(&c, cuerpo.constData(), sizeof c);
+        const qint64 n = qint64(c.ancho) * c.alto * 3;
+        if (c.formato != FMT_RGB888 || cuerpo.size() != qint64(sizeof c) + n) {
+            emit problema(tr("una imagen de %1 bytes no mide lo que dice, o no es RGB888")
+                              .arg(cuerpo.size()));
+            break;
+        }
+        emit imagen(c.id, c.t_sim_ns, c.ancho, c.alto, cuerpo.mid(int(sizeof c)), c.brillo);
+        break;
+    }
     case T_AVISO: {
         CabAviso c{};
         if (cuerpo.size() < int(sizeof c)) break;

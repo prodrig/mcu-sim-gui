@@ -245,6 +245,11 @@ void VentanaPrincipal::construye()
         if (panel_) panel_->pon_valor(id, v);
         if (ilus_) ilus_->pon_valor(id, v);
     });
+    connect(&ses_, &Sesion::imagen, this,
+            [this](quint16 id, quint64, int an, int al, const QByteArray& rgb, float b) {
+                if (panel_) panel_->pon_imagen(id, an, al, rgb, b);
+                if (ilus_) ilus_->pon_imagen(id, an, al, rgb, b);
+            });
     connect(&ses_, &Sesion::aviso, this, &VentanaPrincipal::pon_aviso);
     connect(&ses_, &Sesion::estado_modelo, this, [this](quint32, quint64 t, double p, quint64 d) {
         pon_relojes(t, p, d);

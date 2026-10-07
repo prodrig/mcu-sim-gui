@@ -277,6 +277,23 @@ Seis cosas que merecen nombre propio:
   atributo más: una ventana que no lo conoce lo ignora, y una que sí, ante un
   `mcu-sim` que no lo manda, toma el mínimo.
 
+**`<imagen>`** (añadido el 2026-10-07 sin subir la versión: una ventana que
+no lo conoce lo ignora) — lo que una pieza ENSEÑA entero, que no cabe en un
+número: la pantalla de un TFT.
+
+```xml
+  <pieza idx="11" id="T/TFT" tipo="Tft128x160">
+    <observable idx="0" id_obs="4" nombre="encendida" unidad="" min="0" max="1" interesante="si"/>
+    <observable idx="1" id_obs="5" nombre="luz" unidad="mA" min="0" max="40" interesante="no"/>
+    <imagen idx="0" id_obs="6" nombre="pantalla" ancho="128" alto="160" formato="rgb888"/>
+  </pieza>
+```
+
+Su `id_obs` es del mismo espacio que el de los observables, pero va **detrás
+de todos ellos**: así los de siempre no cambian por que una placa lleve una
+pantalla. Se pide en `T_SUSCRIBE` como cualquier observable, y llega en
+`T_IMAGEN` (§4.1). `formato` es `rgb888`, el único que hay.
+
 **`T_ILUSTRACION`** (`0x0005`, añadido el 2026-10-06 sin subir la versión:
 una ventana que no lo conoce lo salta por su longitud) — el **dibujo SVG** de
 una o varias placas, **uno por fichero**, entre `T_CATALOGO` y los avisos de la
@@ -378,6 +395,24 @@ pulsó un botón tarda deltas en enterarse—; esa la verá la siguiente. Hace f
 decirlo porque SystemC no fija el orden en que despierta dos procesos en el
 mismo instante: sin una regla, la respuesta dependería de la versión de la
 biblioteca. El modelo la cumple con un delta de espera antes de muestrear.
+
+**`T_IMAGEN`** (`0x0015`, añadido el 2026-10-07 sin subir la versión: una
+ventana que no lo conoce lo salta, y además no lo recibe nunca, porque no pide
+imágenes que no sabe pedir) — `CabImagen` + `ancho` x `alto` píxeles RGB888,
+por filas, de arriba abajo. Lo saca el mismo muestreador que las
+instantáneas, en los mismos instantes: de cada imagen suscrita, **solo si ha
+cambiado** desde la última que salió —su contenido o su luz— y siempre la
+primera vez tras suscribirse. Va detrás de la instantánea de su instante.
+
+`brillo` es la luz con que se ve, de 0 (negra) a 1, y va **aparte** de los
+píxeles: es la retroiluminación, **media** desde la muestra anterior —una
+retroiluminación con PWM se ve con la luz media, que es lo que ve el ojo—.
+La ventana multiplica cada color por ella.
+
+Una imagen de 128x160 son 60 kB: más que todo lo demás junto. Por eso no se
+manda si no cambia, y si la ventana no lee y hay **dos** esperando, la
+siguiente no se toma —la muestra de después mandará la que haya—: no hay
+`perdidas` que contar, porque la imagen que llega es siempre la de ahora.
 
 **`T_AVISO`** — `CabAviso` + el `id` de `SC_REPORT` + el texto. Es la tubería por
 la que sale todo lo que hoy va a la consola: los avisos de «esto no está

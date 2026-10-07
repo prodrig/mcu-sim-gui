@@ -10,7 +10,8 @@
 //
 //   * un rectángulo con el nombre de la placa;
 //   * sus CHIPS, como cuadrados oscuros con su tipo: decorado;
-//   * cada PIEZA con un glifo según su DECLARACIÓN (`glifo_de`): un botón si
+//   * cada PIEZA con un glifo según su DECLARACIÓN (`glifo_de`): un vidrio
+//     oscuro con la forma de su imagen si enseña una (plan §30), un botón si
 //     su primer mando es `boton`, un interruptor, un mando giratorio si es
 //     `continuo` o `discreto`; si no tiene mandos, un piloto redondo si tiene
 //     un 0/1 que no es alarma, un recuadro de medida si tiene otro
@@ -53,8 +54,8 @@ struct OpcionesGenerado {
 QByteArray dibujo_generado(const PlacaGui& placa, const QString& placa_id,
                            const OpcionesGenerado& o = OpcionesGenerado());
 
-// El glifo de una pieza, por lo que declara: "boton", "interruptor", "mando",
-// "piloto", "medida" o "pieza"
+// El glifo de una pieza, por lo que declara: "pantalla" si enseña una imagen,
+// "boton", "interruptor", "mando", "piloto", "medida" o "pieza"
 QString glifo_de(const PiezaGui& p);
 
 // Las piezas que van a la bandeja de un dibujo: de las que faltan en él, las
