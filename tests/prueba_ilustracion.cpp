@@ -1096,6 +1096,9 @@ int main(int argc, char** argv)
                       std::abs(l1.pb.x() - p8.left()) < 0.01 &&
                       l1.item->pen().style() == Qt::DashLine,
                   "el hilo, de pin a pin: del 7 de CN5 al 8 de J5");
+        comprueba(l0.item->childItems().size() == 2 && l1.item->childItems().isEmpty(),
+                  "la del acople lleva un punto en cada conector; la del hilo, ninguno: llega "
+                  "al borde de cada pin y no lo tapa, que se vea como sus vecinos");
         l1.item->setVisible(false);          // va casi por el mismo sitio
         const QImage img = v->imagen(1200);
         l1.item->setVisible(true);
@@ -1118,8 +1121,10 @@ int main(int argc, char** argv)
                   "lo pone a su tamano, recoloca el shield, y la linea sale ahora del CN5 del "
                   "dibujo");
         comprueba(v->lineas()[1].a == "N/CN5.7" &&
-                      std::abs(v->lineas()[1].pa.x() - cn5b.right()) < 0.01,
-                  "el hilo, sin un CN5.7 dibujado, sale de CN5");
+                      std::abs(v->lineas()[1].pa.x() - cn5b.right()) < 0.01 &&
+                      v->lineas()[1].item->childItems().size() == 1,
+                  "el hilo, sin un CN5.7 dibujado, sale de CN5, y ahi si lleva su punto -en "
+                  "el pin 8 de J5, que esta dibujado, no-");
         comprueba(!il.informe("N").avisos.join(" ").contains("no dice su tamano"),
                   "un dibujo que si dice sus milimetros no avisa de su tamano");
         const QByteArray sin_mm = QByteArray(DIBUJO_NUCLEO).replace(" width=\"70mm\" height=\"80mm\"", "");

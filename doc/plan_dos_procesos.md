@@ -2247,3 +2247,18 @@ existe, hija de la principal y escondida mientras solo hay generado; Ctrl+I la
 abre con el nombre de la placa en el título; cerrarla la esconde y desmarca el
 menú; un dibujo la abre sola; el panel sigue entero en la principal; «Siempre
 encima» marca y desmarca las dos; y un segundo modelo reusa la misma ventana.
+
+## 28. Un hilo que llega a un pin dibujado no lo tapa
+
+Las líneas de un sistema (§26) llevaban un punto de 2,6 mm en cada extremo.
+En un conector entero se ve bien, pero cuando un hilo llega a **un pin
+dibujado** —`F/P1.TX`, y el dibujo tiene un `P1.TX`— el punto tapaba un pin
+de 1 mm, y ese pin se veía distinto de sus vecinos: en el adaptador FT232RL,
+RX, TX y GND salían como discos grises y DTR, VCC y CTS como pines. Ahora,
+en un pin dibujado, la línea llega a su borde y no lleva punto; en un
+conector o en el borde de una placa lo sigue llevando, que ahí marca de dónde
+sale.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 153 → **154** (I11): la
+línea del acople lleva sus dos puntos, la del hilo de pin a pin ninguno, y la
+que sale de un conector porque el pin no está dibujado, solo el de ese lado.

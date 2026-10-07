@@ -389,6 +389,15 @@ void VistaPlaca::traza_lineas()
         if (r.isNull()) r = en_escena(placa_de(ref));
         return r.center();
     };
+    // ¿Es un PIN dibujado -`F/P1.TX`, y el dibujo tiene un `P1.TX`-? Ahí la
+    // línea llega al borde del pin y no lleva punto: un punto de 2,6 mm tapa
+    // un pin de 1 mm, y ese pin se vería distinto de sus vecinos
+    auto pin_dibujado = [&](const QString& ref) {
+        const int b = ref.indexOf(QLatin1Char('/'));
+        const QString el = b > 0 ? ref.mid(b + 1) : ref;
+        const Capa* c = capa(placa_de(ref), false);
+        return c && el.contains(QLatin1Char('.')) && c->dibujo->existe(el);
+    };
     static const QColor colores[] = {QColor(0xd9, 0x48, 0x1c), QColor(0x1f, 0x77, 0xb4),
                                      QColor(0x8e, 0x44, 0xad), QColor(0x16, 0xa0, 0x85),
                                      QColor(0xc0, 0x39, 0x2b), QColor(0x2c, 0x3e, 0x50)};
@@ -413,8 +422,9 @@ void VistaPlaca::traza_lineas()
         it->setZValue(10);
         it->setAcceptedMouseButtons(Qt::NoButton);
         it->setToolTip(ayuda);
-        // Y un punto en cada extremo
-        for (const QPointF& p : {pa, pb}) {
+        // Y un punto en cada extremo que no sea un pin dibujado
+        for (const auto& [p, ref] : {std::make_pair(pa, a), std::make_pair(pb, b)}) {
+            if (pin_dibujado(ref)) continue;
             const double r = 1.3 / mm;
             auto* d = new QGraphicsEllipseItem(QRectF(p.x() - r, p.y() - r, 2 * r, 2 * r), it);
             d->setBrush(col);
