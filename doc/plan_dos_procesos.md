@@ -2329,3 +2329,24 @@ una imagen corta, que no se pinta; y en la ventana, con un modelo falso, la
 suscripción que la pide, el panel y el dibujo que la reciben, y un
 `T_IMAGEN` malformado. Contra el `mcu-sim` de verdad, su `make gui-marcha`
 M6 y M7.
+
+## 31. Una placa montada de otra manera: el dibujo girado
+
+Pedido por el uso: la pantalla TFT de pie, con el conector abajo, o del revés.
+No hace falta un dibujo por postura: `mcu-sim` admite `giro="90"` (180, 270)
+en una placa o en su `<placa id>` de un sistema, y manda el MISMO SVG con el
+viewBox y el tamaño girados y todo dentro de un `<g transform>`. Para la
+ventana es un dibujo más, con un grupo más, y casi todo funcionaba ya: cada
+pieza viva lleva las transformaciones de sus grupos, y lo que se le pone
+encima como hijo -la imagen de una pantalla- gira con ella.
+
+Lo único que hubo que cambiar es el aviso de «girado» (`DibujoPlaca::girado`):
+avisaba de cualquier grupo que girase, porque entonces la caja de la pieza es
+aproximada. Con un cuarto o media vuelta la caja es exacta, y el aviso salía
+para todas las piezas de la placa sin decir nada útil. Ahora solo se avisa de
+un giro que no sea de cuarto en cuarto.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 177 → **180**: un cuarto y
+media vuelta no son «girado» y su caja es exacta; y la imagen de una pantalla
+sobre una placa girada 90 grados gira con ella. Contra el `mcu-sim` de
+verdad, su `make gui-sistema` C15.

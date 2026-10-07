@@ -298,6 +298,28 @@ int main(int argc, char** argv)
         comprueba(d.caja("cristal") == QRectF(150, 10, 20, 10),
                   "y la del cristal, trasladada Y escalada");
         comprueba(!d.girado("B1") && d.girado("girado"), "se sabe cual esta girado");
+        {
+            // Lo que manda mcu-sim con `giro="90"` y `giro="180"`: un grupo
+            // que gira un cuarto -o media- vuelta. Eso no es «girado»: la caja
+            // es exacta
+            DibujoPlaca q;
+            QString eq;
+            const bool cargado = q.carga(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 200\">\n"
+                "<g transform=\"translate(100 0) rotate(90)\">\n"
+                "  <rect id=\"P\" x=\"10\" y=\"20\" width=\"40\" height=\"10\"/>\n"
+                "</g>\n"
+                "<g transform=\"translate(100 200) rotate(180)\">\n"
+                "  <rect id=\"Q\" x=\"10\" y=\"20\" width=\"40\" height=\"10\"/>\n"
+                "</g>\n</svg>\n", eq);
+            const QRectF cp = q.caja("P"), cq = q.caja("Q");
+            comprueba(cargado && !q.girado("P") && !q.girado("Q") &&
+                          std::abs(cp.x() - 70) < 1e-6 && std::abs(cp.y() - 10) < 1e-6 &&
+                          std::abs(cp.width() - 10) < 1e-6 && std::abs(cp.height() - 40) < 1e-6 &&
+                          std::abs(cq.x() - 50) < 1e-6 && std::abs(cq.y() - 170) < 1e-6,
+                      "un cuarto o media vuelta -una placa montada con giro=- no es girar: la "
+                      "caja es exacta, y no se avisa");
+        }
         comprueba(d.caja("nada").isNull() && !d.existe("nada"), "lo que no existe, no esta");
         const QByteArray fondo = d.sin({"B1", "LD4"});
         comprueba(!fondo.contains("id=\"B1\"") && !fondo.contains("id=\"LD4\"") &&
@@ -1356,6 +1378,32 @@ int main(int argc, char** argv)
         v->pon_imagen(3, 128, 160, rgb.left(1000), 1.f);
         comprueba(parecido(en(v->imagen(600), *v, 100, 60), qRgb(0, 0, 128), 6),
                   "una imagen con menos pixeles de los que dice no se pinta: se queda la de antes");
+
+        // La placa montada con giro="90": mcu-sim manda el dibujo dentro de un
+        // grupo que lo gira. La imagen va con el vidrio: su fila de arriba,
+        // que estaba a la izquierda, queda ARRIBA
+        {
+            QString dib = QString::fromUtf8(DIBUJO_TFT);
+            dib.replace("viewBox=\"0 0 200 160\">", "viewBox=\"0 0 160 200\">\n"
+                        "<g transform=\"translate(160 0) rotate(90)\">");
+            dib.replace("</svg>", "</g>\n</svg>");
+            std::unique_ptr<VistaPlaca> g(
+                VistaPlaca::crea(p, QString(), dib.toUtf8(), {}, e));
+            comprueba(g != nullptr, "con el dibujo girado, la vista se construye");
+            if (!g) return resultado();
+            g->resize(500, 600);
+            g->show();
+            espera([] { return false; }, 50);
+            g->pon_imagen(3, 128, 160, rgb, 1.f);
+            const QImage gi = g->imagen(500);
+            comprueba(parecido(en(gi, *g, 80, 22), qRgb(255, 0, 0), 10) &&
+                          parecido(en(gi, *g, 19, 100), qRgb(0, 255, 0), 10) &&
+                          parecido(en(gi, *g, 80, 100), qRgb(0, 0, 255), 10),
+                      "con la placa girada 90 grados la imagen gira con ella: la fila de "
+                      "arriba, arriba; la columna izquierda, a la izquierda: " +
+                          hex(en(gi, *g, 80, 22)).toStdString() + " " +
+                          hex(en(gi, *g, 19, 100)).toStdString());
+        }
 
         // En la ventana: la suscripción, el panel y el dibujo
         VentanaPrincipal w(0);

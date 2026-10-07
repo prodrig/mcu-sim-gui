@@ -211,8 +211,12 @@ QRectF DibujoPlaca::caja(const QString& id) const
 bool DibujoPlaca::girado(const QString& id) const
 {
     if (!existe(id)) return false;
+    // Un cuarto de vuelta, o media, no cuenta: la caja sigue siendo exacta. Es
+    // lo que hace `mcu-sim` con una placa montada con `giro=` (plan §31)
     const QTransform t = rend_->transformForElement(id);
-    return !qFuzzyIsNull(t.m12()) || !qFuzzyIsNull(t.m21());
+    const bool recto = qFuzzyIsNull(t.m12()) && qFuzzyIsNull(t.m21());
+    const bool cuarto = qFuzzyIsNull(t.m11()) && qFuzzyIsNull(t.m22());
+    return !recto && !cuarto;
 }
 
 namespace {

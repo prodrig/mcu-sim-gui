@@ -88,6 +88,7 @@ public:
     // dentro de un <g transform="translate(...)"> saldría en otro sitio.
     QRectF caja(const QString& id) const;
     // ¿Lo gira o lo inclina algún grupo? Entonces `caja` es solo aproximada.
+    // Un giro de 90, 180 o 270 grados no: con él la caja es exacta.
     bool girado(const QString& id) const;
     // El tamaño del dibujo (su viewBox)
     QRectF lienzo() const;
