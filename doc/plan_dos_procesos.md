@@ -2415,3 +2415,59 @@ vista, y sin ninguno, escondidas; un dibujo nuevo en N no las esconde; en la
 pila, el botón de CPU enseña su acople y su hilo y no el acople de L1 con L2,
 y el de L1 sus dos acoples y no el hilo; una placa sin uniones tiene el botón
 apagado, y una placa suelta no lo tiene.
+
+## 34. Colocar las placas: el botón «Edición», mover y girar
+
+Pedido por el uso, con el análisis y el plan en
+[`doc/analisis_disposicion_ilustracion.md`](analisis_disposicion_ilustracion.md):
+mover, girar y escalar las placas de la ilustración, el tamaño del lienzo, y
+que se recuerde. Esta es su fase 1: mover y girar.
+
+1. **El botón «Edición»** (`edicion`), arriba en la ventana de la
+   ilustración. Se queda pulsado hasta que se vuelve a pulsar. Pulsado, el
+   ratón coloca las placas y los mandos del dibujo no hacen nada:
+   `VistaPlaca::mandos_activos()` es falso aunque el modelo corra, y lo que
+   estuviera a medias —un botón con el dedo encima, un menú— se suelta. Al
+   volver a pulsarlo, el botón queda sin pulsar y los mandos vuelven como
+   dijera el modelo. Mientras está pulsado, una línea a su lado dice qué se
+   puede hacer.
+2. **Arrastrar una placa** la mueve, con su bandeja. Al soltarla se queda en
+   milímetros enteros. La primera vez que se toca una placa, todas se quedan
+   donde están (`VistaPlaca::Ajuste::fija`), y una que nadie ha tocado se
+   coloca sola, a la derecha de las fijas. Mientras se arrastra, la vista no
+   se reencaja: la placa no salta bajo el ratón.
+3. **Girar, de 90 en 90 grados y sobre su centro**: con un doble clic, a la
+   derecha; con Mayús+rueda, hacia un lado o hacia el otro; o con el botón
+   derecho, que tiene los dos giros, «Dejar que esta placa se coloque sola» y
+   «Colocar todas como al principio». Es un giro de la vista: el `giro=` del
+   XML lo aplica `mcu-sim` al SVG, y este va encima.
+4. **Lo que va con la placa**: está todo colgado de su raíz, así que sus
+   piezas, sus halos, sus contornos y la imagen de su pantalla van solos.
+   **Las etiquetas** no: se les quita el giro de la placa y se ponen
+   centradas bajo su pieza en la escena (`coloca_etiqueta`).
+5. **Las líneas** salen por el lado del conector que mira a la otra placa:
+   izquierda o derecha, como siempre, o arriba o abajo si la otra está más
+   encima o debajo que de lado. Es lo que pasa con un conector que ha quedado
+   de pie.
+6. Sin tocar nada, todo es como antes: la colocación automática no cambia, y
+   la escena de una placa suelta sigue siendo su dibujo, justo.
+
+`VistaPlaca` gana `pon_edicion`, `gira_placa`, `mueve_placa`, `restablece`,
+`restablece_todas`, `placa_en`, `ajuste` y la señal `disposicion_cambiada`,
+que es lo que usará la fase 3 para guardar.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 195 → **210** (I15). Primero,
+un sistema con dos placas:
+
+* el botón, sin pulsar y luego pulsado, con los mandos apagados;
+* un arrastre con el ratón, que deja la placa a milímetros enteros y la otra
+  quieta, y la línea que la sigue;
+* el doble clic que la gira sobre su centro, con el conector de pie y la
+  línea llegando a su borde;
+* Mayús+rueda, el menú y la rueda sola, que no gira;
+* colocar todas como al principio;
+* soltar el botón, y los mandos vuelven.
+
+Después, en una placa de mandos, que un clic y la rueda no ordenan nada en la
+edición y fuera de ella sí. Y en una placa suelta girada, que su etiqueta
+queda derecha, del mismo tamaño y centrada bajo la pieza.

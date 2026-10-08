@@ -61,6 +61,12 @@
 //       diga, a la derecha los positivos, sobre el centro de su caja, que un
 //       círculo sin pintar pone en el eje-; sin etiqueta; y pedido por la
 //       tabla en una pieza sin grados, se dice y se queda sin efecto.
+//   I15 (plan §34) el MODO DE EDICIÓN: el botón «Edición», que se queda
+//       pulsado y apaga los mandos; arrastrar una placa -a milímetros
+//       enteros, y las demás quietas-; girarla con doble clic, con Mayús+rueda
+//       y con el menú, sobre su centro; las líneas, por el lado bueno; las
+//       etiquetas, derechas bajo su pieza; colocar todas como al principio; y
+//       al soltar el botón, los mandos otra vez.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -1579,6 +1585,180 @@ int main(int argc, char** argv)
         comprueba(!v->etiqueta(0) && v->vivo(0)->toolTip().contains("angulo: -45"),
                   "el angulo no lleva etiqueta -ya lo dice el aspa-, y la ayuda lo dice: " +
                       v->vivo(0)->toolTip().toStdString());
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I15 El modo de edicion: mover y girar las placas con el raton\n");
+    {
+        QByteArray sx(SISTEMA_XML);
+        sx.replace("<placa id=\"N\" nombre=\"nucleo-f446re\" fichero=\"nucleo_f446re.xml\"/>",
+                   "<placa id=\"N\" nombre=\"nucleo-f446re\" fichero=\"nucleo_f446re.xml\">\n"
+                   "    <conector ref=\"N/CN5\" filas=\"1\" columnas=\"10\" numeracion=\"zigzag\" acople=\"0\"/>\n"
+                   "  </placa>");
+        sx.replace("<placa id=\"S\" nombre=\"shield-leds\" fichero=\"shield_leds.xml\"/>",
+                   "<placa id=\"S\" nombre=\"shield-leds\" fichero=\"shield_leds.xml\">\n"
+                   "    <conector ref=\"S/J5\" filas=\"1\" columnas=\"10\" numeracion=\"zigzag\" acople=\"0\"/>\n"
+                   "  </placa>");
+        const PlacaGui s = placa_de(sx.constData(), CATALOGO_SISTEMA_XML);
+        VistaIlustracion il(s);
+        il.resize(900, 500);
+        il.show();
+        espera([] { return false; }, 50);
+        VistaPlaca* v = il.vista("N");
+        auto* boton = il.findChild<QToolButton*>("edicion");
+        auto* ayuda = il.findChild<QLabel*>("ayuda_edicion");
+        comprueba(v && boton && ayuda && boton->text() == QString::fromUtf8("Edición") &&
+                      boton->isCheckable() && !boton->isChecked() && !ayuda->isVisible() &&
+                      !v->edicion(),
+                  "arriba, el boton Edicion, sin pulsar");
+        if (!v || !boton) return resultado();
+        il.activa_mandos(true);
+        const QRectF n0 = v->en_escena("N"), s0 = v->en_escena("S");
+        const double mm = v->mm_escena();
+        int cambios = 0;
+        QObject::connect(v, &VistaPlaca::disposicion_cambiada, [&] { ++cambios; });
+        boton->click();
+        comprueba(boton->isChecked() && il.edicion() && v->edicion() && ayuda->isVisible() &&
+                      !v->mandos_activos(),
+                  "pulsado, se queda pulsado: el modo de edicion, su ayuda, y los mandos "
+                  "apagados aunque el modelo corra");
+
+        // Arrastrar S
+        const QPoint ini = v->mapFromScene(s0.center());
+        const QPoint fin = ini + QPoint(37, 23);
+        const QPointF d = (v->mapToScene(fin) - v->mapToScene(ini)) * mm;
+        const QPointF esperada(std::round(s0.left() * mm + d.x()), std::round(s0.top() * mm + d.y()));
+        raton(v, QEvent::MouseButtonPress, ini);
+        raton(v, QEvent::MouseMove, ini + QPoint(10, 5));
+        raton(v, QEvent::MouseMove, fin);
+        raton(v, QEvent::MouseButtonRelease, fin);
+        const QRectF s1 = v->en_escena("S");
+        comprueba(std::abs(s1.left() * mm - esperada.x()) < 1e-6 &&
+                      std::abs(s1.top() * mm - esperada.y()) < 1e-6 &&
+                      std::abs(s1.width() - s0.width()) < 1e-9 && v->en_escena("N") == n0 &&
+                      v->ajuste("S").fija && v->ajuste("N").fija && cambios == 1,
+                  "arrastrar S la mueve, y se queda en milimetros enteros (" +
+                      std::to_string(s1.left() * mm) + ", " + std::to_string(s1.top() * mm) +
+                      "); N, quieta y fija desde ahora");
+        il.boton_conexiones("N")->click();
+        const QRectF j5 = v->caja_de("S/J5");
+        const VistaPlaca::Linea& l0 = v->lineas()[0];
+        comprueba(l0.item->isVisible() && std::abs(l0.pb.x() - j5.left()) < 1e-6 &&
+                      std::abs(l0.pb.y() - j5.center().y()) < 1e-6,
+                  "la linea del acople sigue a J5, donde ha quedado");
+
+        // Girar: doble clic, Mayus+rueda y el menu
+        const QPointF c1 = s1.center();
+        raton(v, QEvent::MouseButtonDblClick, v->mapFromScene(c1));
+        const QRectF s2 = v->en_escena("S");
+        comprueba(v->ajuste("S").giro == 90 && std::abs(s2.width() - s1.height()) < 1e-6 &&
+                      std::abs(s2.height() - s1.width()) < 1e-6 &&
+                      std::abs(s2.center().x() - c1.x()) < 1e-6 &&
+                      std::abs(s2.center().y() - c1.y()) < 1e-6 && cambios == 2,
+                  "un doble clic la gira 90 grados a la derecha, sobre su centro");
+        const QRectF j5g = v->caja_de("S/J5");
+        const VistaPlaca::Linea& l1 = v->lineas()[0];
+        const bool en_borde = std::abs(l1.pb.x() - j5g.left()) < 1e-6 ||
+                              std::abs(l1.pb.x() - j5g.right()) < 1e-6 ||
+                              std::abs(l1.pb.y() - j5g.top()) < 1e-6 ||
+                              std::abs(l1.pb.y() - j5g.bottom()) < 1e-6;
+        comprueba(j5g.height() > j5g.width() && en_borde,
+                  "J5 queda de pie, y la linea sigue llegando a su borde");
+        {
+            QWheelEvent e(QPointF(v->mapFromScene(c1)),
+                          QPointF(v->viewport()->mapToGlobal(v->mapFromScene(c1))), QPoint(),
+                          QPoint(0, 120), Qt::NoButton, Qt::ShiftModifier, Qt::NoScrollPhase,
+                          false);
+            QCoreApplication::sendEvent(v->viewport(), &e);
+        }
+        comprueba(v->ajuste("S").giro == 0 && v->en_escena("S").size() == s1.size(),
+                  "Mayus+rueda hacia arriba, a la izquierda: otra vez derecha");
+        {
+            const QPoint p = v->mapFromScene(c1);
+            QContextMenuEvent e(QContextMenuEvent::Mouse, p, v->viewport()->mapToGlobal(p));
+            QCoreApplication::sendEvent(v->viewport(), &e);
+        }
+        QMenu* menu = v->menu_abierto();
+        QAction* izq = menu ? menu->findChild<QAction*>("gira_izquierda") : nullptr;
+        comprueba(menu && menu->objectName() == "placa:S" && izq &&
+                      menu->findChild<QAction*>("gira_derecha") &&
+                      menu->findChild<QAction*>("restablece_todas"),
+                  "el boton derecho, el menu de la placa: los dos giros y colocarlas");
+        if (izq) izq->trigger();
+        comprueba(v->ajuste("S").giro == 270, "girar a la izquierda: 270");
+
+        // Una rueda sin Mayus y un clic no hacen nada mas: no hay mandos
+        rueda(v, v->mapFromScene(c1), 2);
+        comprueba(v->ajuste("S").giro == 270, "la rueda sola no gira la placa");
+
+        if (menu) menu->close();
+        v->restablece_todas();
+        comprueba(v->en_escena("N") == n0 && v->en_escena("S") == s0 &&
+                      !v->ajuste("S").fija && v->ajuste("S").giro == 0,
+                  "colocar todas como al principio: donde estaban");
+        boton->click();
+        comprueba(!boton->isChecked() && !il.edicion() && !v->edicion() && !ayuda->isVisible() &&
+                      v->mandos_activos(),
+                  "y al volver a pulsarlo, sin pulsar: fuera del modo, y los mandos otra vez");
+    }
+    {
+        // Los mandos, apagados en la edicion y de vuelta al salir
+        const PlacaGui p = placa_de(PLACA_MANDOS, CATALOGO_MANDOS);
+        QString e;
+        std::unique_ptr<VistaPlaca> v(VistaPlaca::crea(p, QString(), DIBUJO_MANDOS, {}, e));
+        v->resize(800, 200);
+        v->show();
+        espera([] { return false; }, 50);
+        std::vector<OrdenVista> o;
+        QObject::connect(v.get(), &VistaPlaca::orden,
+                         [&](quint16 pz, quint16 m, float x) { o.push_back({pz, m, x}); });
+        v->activa_mandos(true);
+        v->pon_edicion(true);
+        const QPoint sw = v->donde(1);
+        clic(v.get(), sw);
+        rueda(v.get(), v->donde(2), 1);
+        comprueba(o.empty(), "en la edicion, un clic en un interruptor o la rueda en un "
+                             "mando no ordenan nada");
+        v->pon_edicion(false);
+        clic(v.get(), sw);
+        comprueba(o.size() == 1 && o[0].pieza == 1, "fuera de ella, si");
+    }
+    {
+        // Una placa suelta girada: la etiqueta, derecha y bajo su pieza
+        const char* PLACA_ET =
+            "<placa nombre=\"et\">\n"
+            "  <componente tipo=\"Fuente\" id=\"F\"><pin nombre=\"pin\" nodo=\"PA0\"/></componente>\n"
+            "</placa>\n";
+        const char* CAT_ET =
+            "<catalogo>\n"
+            "  <pieza idx=\"0\" id=\"F\" tipo=\"Fuente\">\n"
+            "    <observable idx=\"0\" id_obs=\"0\" nombre=\"corriente\" unidad=\"mA\" min=\"0\" max=\"100\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "</catalogo>\n";
+        const char* DIBUJO_ET =
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 140 60\">\n"
+            "  <rect x=\"0\" y=\"0\" width=\"140\" height=\"60\" fill=\"#1e5631\"/>\n"
+            "  <rect id=\"F\" x=\"20\" y=\"10\" width=\"30\" height=\"20\" fill=\"#c0c0c0\"/>\n"
+            "</svg>\n";
+        const PlacaGui p = placa_de(PLACA_ET, CAT_ET);
+        QString e;
+        std::unique_ptr<VistaPlaca> v(VistaPlaca::crea(p, QString(), DIBUJO_ET, {}, e));
+        v->resize(600, 400);
+        v->show();
+        espera([] { return false; }, 50);
+        v->pon_valor(0, 12.5f);
+        QGraphicsSimpleTextItem* t = v->etiqueta(0);
+        const QRectF antes = t ? t->sceneBoundingRect() : QRectF();
+        v->gira_placa(QString(), 90);
+        const QRectF pieza = v->vivo(0)->sceneBoundingRect();
+        const QRectF et = t ? t->sceneBoundingRect() : QRectF();
+        const QTransform st = t ? t->sceneTransform() : QTransform();
+        comprueba(t && pieza.height() > pieza.width() && std::abs(st.m12()) < 1e-9 &&
+                      st.m11() > 0 && et.top() >= pieza.bottom() - 1e-6 &&
+                      std::abs(et.center().x() - pieza.center().x()) < 1e-6 &&
+                      std::abs(et.width() - antes.width()) < 1e-6,
+                  "una placa suelta tambien se gira: la pieza queda de pie, y su etiqueta, "
+                  "derecha, del mismo tamano y centrada bajo ella");
     }
 
     return resultado();

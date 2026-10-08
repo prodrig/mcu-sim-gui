@@ -303,7 +303,7 @@ double VistaPlaca::escala(const Capa& c) const
     return mm_de(c) / mm_de(*primera());
 }
 
-void VistaPlaca::coloca()
+void VistaPlaca::coloca(bool ajusta_vista)
 {
     if (capas_.empty()) return;
     // Las placas en el orden del sistema -o en el que llegaron, si no lo
@@ -318,32 +318,64 @@ void VistaPlaca::coloca()
     const double mm = mm_de(*p1);
     const double hueco = 8.0 / mm;                     // 8 mm de la placa a su bandeja
     const double entre = 30.0 / mm;                    // 30 mm de placa a placa: las líneas
-    double alto = 0;
-    for (Capa* c : orden) alto = std::max(alto, c->lienzo.height() * escala(*c));
-    double x = p1->lienzo.left();
-    const double y0 = p1->lienzo.top() - (alto - p1->lienzo.height()) / 2;
-    QRectF todo;
-    auto pon = [&](Capa& c, double y) {
-        const double k = escala(c);
-        c.raiz->setScale(k);
-        c.raiz->setPos(QPointF(x, y) - c.lienzo.topLeft() * k);
-        const QRectF r = c.raiz->mapRectToScene(c.lienzo);
-        todo = todo.isNull() ? r : todo.united(r);
-        return r;
+    // Plan §34: cada placa, girada sobre su centro y a su escala, todavía sin
+    // sitio; y después, con su esquina donde toca
+    auto transforma = [&](Capa& c, int giro) {
+        c.raiz->setPos(0, 0);
+        c.raiz->setTransformOriginPoint(c.lienzo.center());
+        c.raiz->setRotation(giro);
+        c.raiz->setScale(escala(c));
+        return c.raiz->mapRectToScene(c.lienzo);
     };
+    auto pon_en = [](Capa& c, const QRectF& caja0, const QPointF& esquina) {
+        c.raiz->setPos(esquina - caja0.topLeft());
+        return caja0.translated(esquina - caja0.topLeft());
+    };
+    QHash<const Capa*, QRectF> caja0;
+    double alto = 0;
+    bool movida = false;
     for (Capa* c : orden) {
-        const double y = y0 + (alto - c->lienzo.height() * escala(*c)) / 2;
-        QRectF r = pon(*c, y);
-        if (Capa* b = capa(c->placa_id, true)) {
-            x = r.right() + hueco;
-            r = pon(*b, r.top());
-        }
+        const Ajuste a = ajustes_.value(c->placa_id);
+        caja0[c] = transforma(*c, a.giro);
+        movida = movida || a.fija || a.giro;
+        if (!a.fija) alto = std::max(alto, caja0[c].height());
+    }
+    QRectF todo;
+    auto con_bandeja = [&](Capa& c, const QRectF& r) {
+        todo = todo.isNull() ? r : todo.united(r);
+        Capa* b = capa(c.placa_id, true);
+        if (!b) return r;
+        const QRectF rb = pon_en(*b, transforma(*b, 0), QPointF(r.right() + hueco, r.top()));
+        todo = todo.united(rb);
+        return rb;
+    };
+    // Primero las que tienen sitio; las demás, una al lado de otra a su
+    // derecha -o donde siempre, si no hay ninguna-
+    for (Capa* c : orden) {
+        const Ajuste a = ajustes_.value(c->placa_id);
+        if (a.fija) con_bandeja(*c, pon_en(*c, caja0[c], a.pos_mm / mm));
+    }
+    double x = todo.isNull() ? p1->lienzo.left() : todo.right() + entre;
+    const double y0 = todo.isNull() ? p1->lienzo.top() - (alto - caja0[p1].height()) / 2
+                                    : todo.center().y() - alto / 2;
+    for (Capa* c : orden) {
+        if (ajustes_.value(c->placa_id).fija) continue;
+        const QRectF& b = caja0[c];
+        const QRectF r = con_bandeja(*c, pon_en(*c, b, QPointF(x, y0 + (alto - b.height()) / 2)));
         x = r.right() + entre;
     }
-    // Una sola capa: la escena es su dibujo, justo
-    if (capas_.size() == 1) scene()->setSceneRect(p1->lienzo);
-    else scene()->setSceneRect(todo.adjusted(-hueco / 2, -hueco / 2, hueco / 2, hueco / 2));
+    for (QGraphicsSimpleTextItem* t : std::as_const(etiquetas_)) coloca_etiqueta(t);
+    // El marco de la placa elegida, en la edición
+    if (marco_sel_) {
+        const Capa* c = hay_sel_ ? capa(sel_, false) : nullptr;
+        marco_sel_->setVisible(edicion_ && c);
+        if (c) marco_sel_->setRect(c->raiz->mapRectToScene(c->lienzo));
+    }
     traza_lineas();
+    if (!ajusta_vista) return;
+    // Una sola capa que nadie ha tocado: la escena es su dibujo, justo
+    if (capas_.size() == 1 && !movida) scene()->setSceneRect(p1->lienzo);
+    else scene()->setSceneRect(todo.adjusted(-hueco / 2, -hueco / 2, hueco / 2, hueco / 2));
     encaja();
 }
 
@@ -376,15 +408,26 @@ void VistaPlaca::traza_lineas()
         const int b = r.indexOf(QLatin1Char('/'));
         return b > 0 ? r.left(b) : QString();
     };
-    // Dónde engancha `ref` cuando la línea va hacia `hacia`
+    // Dónde engancha `ref` cuando la línea va hacia `hacia`, y hacia dónde
+    // sale: por el lado que mira a la otra -izquierda o derecha si está más
+    // de lado que encima o debajo; arriba o abajo si no, que es lo que pasa
+    // con placas giradas o puestas una sobre otra (plan §34)-
+    struct Enganche { QPointF p, dir; };
     auto punto = [&](const QString& ref, const QPointF& hacia) {
         QRectF r = caja_de(ref);
         if (r.isNull()) r = en_escena(placa_de(ref));
-        if (r.isNull()) return QPointF();
-        const bool derecha = hacia.x() > r.center().x();
+        if (r.isNull()) return Enganche{};
+        const QPointF d = hacia - r.center();
         // Un conector de un dibujo -una tira- engancha por su lado; el borde
         // de una placa entera, por el centro de ese lado
-        return QPointF(derecha ? r.right() : r.left(), r.center().y());
+        if (std::abs(d.x()) >= std::abs(d.y())) {
+            const bool derecha = d.x() > 0;
+            return Enganche{QPointF(derecha ? r.right() : r.left(), r.center().y()),
+                            QPointF(derecha ? 1 : -1, 0)};
+        }
+        const bool abajo = d.y() > 0;
+        return Enganche{QPointF(r.center().x(), abajo ? r.bottom() : r.top()),
+                        QPointF(0, abajo ? 1 : -1)};
     };
     auto centro = [&](const QString& ref) {
         QRectF r = caja_de(ref);
@@ -407,14 +450,16 @@ void VistaPlaca::traza_lineas()
                      const QString& ayuda) {
         if (placa_de(a) == placa_de(b) || !capa(placa_de(a), false) || !capa(placa_de(b), false))
             return;
-        const QPointF pa = punto(a, centro(b)), pb = punto(b, centro(a));
-        if (pa.isNull() || pb.isNull()) return;
-        // Una curva que sale y entra en horizontal: se ve de dónde a dónde va
-        // aunque cruce por encima de una placa
+        const Enganche ea = punto(a, centro(b)), eb = punto(b, centro(a));
+        const QPointF pa = ea.p, pb = eb.p;
+        if (ea.dir.isNull() || eb.dir.isNull()) return;
+        // Una curva que sale y entra por su lado -en horizontal de una tira
+        // puesta de pie, en vertical de una tumbada-: se ve de dónde a dónde
+        // va aunque cruce por encima de una placa
         QPainterPath camino(pa);
-        const double dx = std::max(std::abs(pb.x() - pa.x()) * 0.45, 10.0 / mm);
-        const double sa = pb.x() >= pa.x() ? 1 : -1;
-        camino.cubicTo(pa + QPointF(sa * dx, 0), pb - QPointF(sa * dx, 0), pb);
+        const double lado = std::max(std::max(std::abs(pb.x() - pa.x()), std::abs(pb.y() - pa.y())) *
+                                         0.45, 10.0 / mm);
+        camino.cubicTo(pa + ea.dir * lado, pb + eb.dir * lado, pb);
         auto* it = new QGraphicsPathItem(camino);
         QPen lapiz(col, 0.8 / mm);
         if (hilo) lapiz.setStyle(Qt::DashLine);
@@ -623,7 +668,7 @@ void VistaPlaca::prepara(Capa& cp)
         }
         // Las etiquetas, una debajo de otra, bajo el elemento; de un alto que
         // se lea al tamaño de la placa entera
-        double y = w.caja.bottom() + grosor;
+        double y = grosor;
         const double alto = std::max(lienzo.height() / 40.0, w.caja.height() * 0.3);
         for (const ObservableGui* o : rotulos) {
             auto* t = new QGraphicsSimpleTextItem(QStringLiteral("—"), cp.raiz);
@@ -634,16 +679,34 @@ void VistaPlaca::prepara(Capa& cp)
             t->setBrush(QColor(0x20, 0x20, 0x20));
             const double k = alto / t->boundingRect().height();
             t->setScale(k);
-            t->setPos(w.caja.center().x() - t->boundingRect().width() * k / 2, y);
             t->setZValue(4);
-            t->setData(1, w.caja.center().x());
+            // Dónde va: centrada bajo su pieza, a `y` de ella (plan §34)
+            t->setData(1, w.caja);
+            t->setData(2, y);
             t->setAcceptedMouseButtons(Qt::NoButton);
+            coloca_etiqueta(t);
             etiquetas_.insert(quint16(o->id_obs), t);
             y += alto;
         }
         vivas_.push_back(w);
     }
     reindexa();
+}
+
+// Plan §34: una etiqueta, DERECHA y centrada bajo su pieza en la escena,
+// aunque la placa esté girada. Va colgada de la placa -se mueve y se escala
+// con ella- y se le quita el giro de la placa: gira sobre el centro de su lado
+// de arriba, que es el punto que se pone en su sitio.
+void VistaPlaca::coloca_etiqueta(QGraphicsSimpleTextItem* t) const
+{
+    QGraphicsItem* raiz = t->parentItem();
+    if (!raiz) return;
+    const QRectF caja = raiz->mapRectToScene(t->data(1).toRectF());
+    const QPointF bajo(caja.center().x(), caja.bottom() + t->data(2).toDouble() * raiz->scale());
+    const QPointF o(t->boundingRect().width() / 2, 0);
+    t->setTransformOriginPoint(o);
+    t->setRotation(-raiz->rotation());
+    t->setPos(raiz->mapFromScene(bajo) - o);
 }
 
 // Los índices de pieza y de observable a su viva, después de poner o quitar
@@ -672,8 +735,7 @@ void VistaPlaca::pon_valor(quint16 id_obs, float valor)
         const QString s = Panel::texto_de(decl_.value(id_obs), valor);
         if (t->text() != s) {
             t->setText(s);
-            const double k = t->scale();
-            t->setX(t->data(1).toDouble() - t->boundingRect().width() * k / 2);
+            coloca_etiqueta(t);
         }
     }
     repinta(w);
@@ -932,7 +994,7 @@ QWidget* VistaPlaca::control(Viva& w, int m, QWidget* padre)
         sb->setValue(int(std::lround(w.valor[m])));
         connect(sb, &QSpinBox::valueChanged, this,
                 [this, i, m](int v) { mueve(vivas_[i], m, float(v)); });
-        sb->setEnabled(activos_);
+        sb->setEnabled(mandos_activos());
         h->addWidget(sb);
     } else {
         auto* s = new QSlider(Qt::Horizontal, fila);
@@ -951,7 +1013,7 @@ QWidget* VistaPlaca::control(Viva& w, int m, QWidget* padre)
             num->setText(QString::number(double(x), 'g', 4));
             mueve(vivas_[i], m, x);
         });
-        s->setEnabled(activos_);
+        s->setEnabled(mandos_activos());
         h->addWidget(s, 1);
         h->addWidget(num);
     }
@@ -968,6 +1030,24 @@ void VistaPlaca::abre_menu(QMenu* m, const QPoint& donde)
 
 void VistaPlaca::mousePressEvent(QMouseEvent* e)
 {
+    // Plan §34: en la edición, el botón izquierdo coge una placa
+    if (edicion_) {
+        QString id;
+        if (e->button() == Qt::LeftButton && placa_en(e->pos(), id)) {
+            congela();
+            hay_sel_ = true;
+            sel_ = id;
+            arrastre_ = true;
+            arr_ini_ = mapToScene(e->pos());
+            arr_mm_ = ajustes_.value(id).pos_mm;
+            for (const auto& c : capas_)
+                c->raiz->setZValue(c->placa_id == id ? 1 : 0);
+            viewport()->setCursor(Qt::ClosedHandCursor);
+            coloca(false);
+        }
+        e->accept();
+        return;
+    }
     const int i = e->button() == Qt::LeftButton && activos_ ? viva_en(e->pos()) : -1;
     if (i < 0 || vivas_[i].mandos.isEmpty()) {
         QGraphicsView::mousePressEvent(e);
@@ -999,6 +1079,20 @@ void VistaPlaca::mousePressEvent(QMouseEvent* e)
 
 void VistaPlaca::mouseReleaseEvent(QMouseEvent* e)
 {
+    if (edicion_) {
+        if (e->button() == Qt::LeftButton && arrastre_) {
+            arrastre_ = false;
+            // A milímetros enteros: lo que se guarda se lee
+            Ajuste& a = ajustes_[sel_];
+            const QPointF antes = a.pos_mm;
+            a.pos_mm = QPointF(std::round(a.pos_mm.x()), std::round(a.pos_mm.y()));
+            viewport()->setCursor(Qt::OpenHandCursor);
+            coloca();
+            if (antes != arr_mm_ || a.pos_mm != arr_mm_) emit disposicion_cambiada();
+        }
+        e->accept();
+        return;
+    }
     if (e->button() == Qt::LeftButton && pulsada_ >= 0) {
         Viva& w = vivas_[pulsada_];
         const int m = mando_pulsado_;
@@ -1015,11 +1109,30 @@ void VistaPlaca::mouseReleaseEvent(QMouseEvent* e)
 // dos clics rápidos a un interruptor lo cambiarían una sola vez
 void VistaPlaca::mouseDoubleClickEvent(QMouseEvent* e)
 {
+    // Plan §34: en la edición, un doble clic gira la placa un cuarto de vuelta
+    if (edicion_) {
+        QString id;
+        if (e->button() == Qt::LeftButton && placa_en(e->pos(), id)) gira_placa(id, 90);
+        e->accept();
+        return;
+    }
     mousePressEvent(e);
 }
 
 void VistaPlaca::mouseMoveEvent(QMouseEvent* e)
 {
+    if (edicion_) {
+        if (arrastre_) {
+            const QPointF d = (mapToScene(e->pos()) - arr_ini_) * mm_escena();
+            ajustes_[sel_].pos_mm = arr_mm_ + d;
+            coloca(false);              // sin reencajar la vista: no da saltos
+        } else {
+            QString id;
+            viewport()->setCursor(placa_en(e->pos(), id) ? Qt::OpenHandCursor : Qt::ArrowCursor);
+        }
+        e->accept();
+        return;
+    }
     const int i = activos_ ? viva_en(e->pos()) : -1;
     const bool mano = i >= 0 && !vivas_[i].mandos.isEmpty();
     viewport()->setCursor(mano ? Qt::PointingHandCursor : Qt::ArrowCursor);
@@ -1031,6 +1144,18 @@ void VistaPlaca::mouseMoveEvent(QMouseEvent* e)
 // pulsador sobre el anillo de un encoder-
 void VistaPlaca::wheelEvent(QWheelEvent* e)
 {
+    // Plan §34: en la edición, Mayús+rueda gira la placa de debajo. Algunos
+    // sistemas mandan la rueda con Mayús como horizontal
+    if (edicion_) {
+        QString id;
+        const QPoint d = e->angleDelta();
+        const int v = d.y() != 0 ? d.y() : d.x();
+        if ((e->modifiers() & Qt::ShiftModifier) && v != 0 &&
+            placa_en(e->position().toPoint(), id))
+            gira_placa(id, v > 0 ? -90 : 90);
+        e->accept();
+        return;
+    }
     const QVector<int> l = activos_ ? vivas_en(e->position().toPoint()) : QVector<int>();
     for (const int i : l) {
         if (vivas_[i].mandos.isEmpty()) continue;
@@ -1052,6 +1177,12 @@ void VistaPlaca::wheelEvent(QWheelEvent* e)
 // no espera ni corre, pero se ven: así se sabe qué tiene.
 void VistaPlaca::contextMenuEvent(QContextMenuEvent* e)
 {
+    if (edicion_) {
+        QString id;
+        if (placa_en(e->pos(), id)) menu_placa(id, e->globalPos());
+        e->accept();
+        return;
+    }
     const int i = viva_en(e->pos());
     if (i < 0 || vivas_[i].mandos.isEmpty()) {
         QGraphicsView::contextMenuEvent(e);
@@ -1093,8 +1224,12 @@ void VistaPlaca::contextMenuEvent(QContextMenuEvent* e)
 void VistaPlaca::activa_mandos(bool si)
 {
     activos_ = si;
-    if (si) return;
-    // Apagados: lo que estaba a medias se olvida, y el menú se cierra
+    if (!si) suelta_mandos();
+}
+
+// Lo que estaba a medias con un mando se olvida, y el menú se cierra
+void VistaPlaca::suelta_mandos()
+{
     if (pulsada_ >= 0) {
         vivas_[pulsada_].dedo[mando_pulsado_] = 0;
         repinta(vivas_[pulsada_]);
@@ -1102,6 +1237,134 @@ void VistaPlaca::activa_mandos(bool si)
     pulsada_ = mando_pulsado_ = -1;
     if (menu_) menu_->close();
     viewport()->setCursor(Qt::ArrowCursor);
+}
+
+// -----------------------------------------------------------------------------
+// Plan §34: el modo de edición
+// -----------------------------------------------------------------------------
+void VistaPlaca::pon_edicion(bool si)
+{
+    if (si == edicion_) return;
+    suelta_mandos();
+    edicion_ = si;
+    arrastre_ = false;
+    if (!marco_sel_) {
+        marco_sel_ = new QGraphicsRectItem;
+        QPen lapiz(QColor(0x1f, 0x77, 0xb4), 2);
+        lapiz.setCosmetic(true);                 // dos píxeles a cualquier zoom
+        lapiz.setStyle(Qt::DashLine);
+        marco_sel_->setPen(lapiz);
+        marco_sel_->setBrush(Qt::NoBrush);
+        marco_sel_->setZValue(20);
+        marco_sel_->setAcceptedMouseButtons(Qt::NoButton);
+        marco_sel_->setVisible(false);
+        scene()->addItem(marco_sel_);
+    }
+    if (!si) hay_sel_ = false;
+    coloca();
+}
+
+double VistaPlaca::mm_escena() const
+{
+    const Capa* p1 = primera();
+    return p1 ? mm_de(*p1) : 1.0;
+}
+
+// La primera vez que se toca una placa, todas se quedan donde están: mover una
+// no puede recolocar las demás
+void VistaPlaca::congela()
+{
+    const double mm = mm_escena();
+    for (const auto& c : capas_) {
+        if (c->bandeja) continue;
+        Ajuste& a = ajustes_[c->placa_id];
+        if (a.fija) continue;
+        a.fija = true;
+        a.pos_mm = c->raiz->mapRectToScene(c->lienzo).topLeft() * mm;
+    }
+}
+
+void VistaPlaca::gira_placa(const QString& placa_id, int grados)
+{
+    const Capa* c = capa(placa_id, false);
+    if (!c || grados % 90 != 0) return;
+    congela();
+    Ajuste& a = ajustes_[placa_id];
+    // Sobre su centro: la caja nueva es la de antes con el ancho y el alto
+    // cambiados si el giro es de un cuarto
+    const QRectF r = c->raiz->mapRectToScene(c->lienzo);
+    QSizeF t = r.size();
+    if (grados % 180 != 0) t.transpose();
+    a.giro = ((a.giro + grados) % 360 + 360) % 360;
+    a.pos_mm = (r.center() - QPointF(t.width(), t.height()) / 2) * mm_escena();
+    hay_sel_ = true;
+    sel_ = placa_id;
+    coloca();
+    emit disposicion_cambiada();
+}
+
+void VistaPlaca::mueve_placa(const QString& placa_id, const QPointF& pos_mm)
+{
+    if (!capa(placa_id, false)) return;
+    congela();
+    ajustes_[placa_id].pos_mm = pos_mm;
+    coloca();
+    emit disposicion_cambiada();
+}
+
+void VistaPlaca::restablece(const QString& placa_id)
+{
+    if (!ajustes_.contains(placa_id)) return;
+    ajustes_.remove(placa_id);
+    coloca();
+    emit disposicion_cambiada();
+}
+
+void VistaPlaca::restablece_todas()
+{
+    if (ajustes_.isEmpty()) return;
+    ajustes_.clear();
+    coloca();
+    emit disposicion_cambiada();
+}
+
+bool VistaPlaca::placa_en(const QPoint& p, QString& placa_id) const
+{
+    const QPointF s = mapToScene(p);
+    const Capa* mejor = nullptr;
+    for (const auto& c : capas_) {
+        const QPolygonF caja = c->raiz->mapToScene(QPolygonF(c->lienzo));
+        if (!caja.containsPoint(s, Qt::OddEvenFill)) continue;
+        // La de encima; una bandeja es de su placa
+        if (!mejor || c->raiz->zValue() > mejor->raiz->zValue()) mejor = c.get();
+    }
+    if (!mejor) return false;
+    placa_id = mejor->placa_id;
+    return true;
+}
+
+void VistaPlaca::menu_placa(const QString& placa_id, const QPoint& donde)
+{
+    auto* menu = new QMenu(this);
+    menu->setObjectName(QStringLiteral("placa:%1").arg(placa_id));
+    const SubPlacaGui* sp = placa_.subplaca(placa_id);
+    menu->addSection(sp ? QStringLiteral("%1 · %2").arg(placa_id, sp->nombre) : placa_.nombre);
+    QAction* der = menu->addAction(tr("Girar 90 grados a la derecha"));
+    der->setObjectName(QStringLiteral("gira_derecha"));
+    connect(der, &QAction::triggered, this, [this, placa_id] { gira_placa(placa_id, 90); });
+    QAction* izq = menu->addAction(tr("Girar 90 grados a la izquierda"));
+    izq->setObjectName(QStringLiteral("gira_izquierda"));
+    connect(izq, &QAction::triggered, this, [this, placa_id] { gira_placa(placa_id, -90); });
+    menu->addSeparator();
+    QAction* una = menu->addAction(tr("Dejar que esta placa se coloque sola"));
+    una->setObjectName(QStringLiteral("restablece"));
+    una->setEnabled(ajustes_.contains(placa_id));
+    connect(una, &QAction::triggered, this, [this, placa_id] { restablece(placa_id); });
+    QAction* todas = menu->addAction(tr("Colocar todas como al principio"));
+    todas->setObjectName(QStringLiteral("restablece_todas"));
+    todas->setEnabled(!ajustes_.isEmpty());
+    connect(todas, &QAction::triggered, this, [this] { restablece_todas(); });
+    abre_menu(menu, donde);
 }
 
 // =============================================================================
@@ -1174,6 +1437,32 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
     vista_ = new VistaPlaca(placa_, this);
     vista_->setObjectName(QStringLiteral("vista:"));
     connect(vista_, &VistaPlaca::orden, this, &VistaIlustracion::orden);
+    // Plan §34: arriba, el botón «Edición», que se queda pulsado, y lo que se
+    // puede hacer con él
+    {
+        auto* barra = new QHBoxLayout;
+        barra->setContentsMargins(6, 4, 6, 0);
+        edicion_ = new QToolButton(this);
+        edicion_->setObjectName(QStringLiteral("edicion"));
+        edicion_->setText(tr("Edición"));
+        edicion_->setCheckable(true);
+        edicion_->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        edicion_->setToolTip(tr("Colocar las placas con el raton: moverlas y girarlas. Mientras "
+                                "esta pulsado, los mandos del dibujo no hacen nada."));
+        ayuda_edicion_ = new QLabel(tr("Arrastra una placa para moverla · doble clic o "
+                                       "Mayús+rueda: girarla 90 grados · boton derecho: mas"),
+                                    this);
+        ayuda_edicion_->setObjectName(QStringLiteral("ayuda_edicion"));
+        ayuda_edicion_->setEnabled(false);
+        ayuda_edicion_->setVisible(false);
+        connect(edicion_, &QToolButton::toggled, this, [this](bool si) {
+            vista_->pon_edicion(si);
+            ayuda_edicion_->setVisible(si);
+        });
+        barra->addWidget(edicion_);
+        barra->addWidget(ayuda_edicion_, 1);
+        v->insertLayout(0, barra);
+    }
     for (const Cual& c : cuales) {
         // Un QFrame, no un QGroupBox: los recuadros del panel son QGroupBox,
         // y las pruebas los cuentan
@@ -1315,6 +1604,16 @@ QVector<quint16> VistaIlustracion::observados() const
     for (quint16 id : vista_->observados())
         if (!l.contains(id)) l.push_back(id);
     return l;
+}
+
+void VistaIlustracion::pon_edicion(bool si)
+{
+    edicion_->setChecked(si);
+}
+
+bool VistaIlustracion::edicion() const
+{
+    return edicion_->isChecked();
 }
 
 void VistaIlustracion::activa_mandos(bool si)

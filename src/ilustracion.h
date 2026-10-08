@@ -121,9 +121,20 @@
 // se ven las de cualquiera de sus dos placas. Una placa que no está unida a
 // ninguna otra lo tiene apagado.
 //
+// EL MODO DE EDICIÓN (plan §34, `doc/analisis_disposicion_ilustracion.md`):
+// el botón «Edición» de la ventana, que se queda pulsado, pone el ratón a
+// COLOCAR las placas en vez de tocar sus piezas. Mientras está pulsado los
+// mandos no hacen nada; al soltarlo vuelven como estuvieran. Arrastrar una
+// placa la mueve; un doble clic o Mayús+rueda la gira de 90 en 90 grados; el
+// botón derecho tiene los dos giros y «colocar como al principio». La primera
+// vez que se toca una, las demás se quedan donde están. Lo que se mueve va con
+// la placa: sus piezas, sus halos, la imagen de su pantalla, su bandeja y las
+// líneas; las etiquetas, derechas y debajo de su pieza.
+//
 // Como el panel, cada widget lleva un `objectName` para las pruebas:
 // `dibujo:<placa>` la fila de cada placa, `abrir:<placa>` su botón,
-// `conexiones:<placa>` el de sus líneas,
+// `conexiones:<placa>` el de sus líneas, `edicion` el botón del modo de
+// edición,
 // `informe:<placa>` lo encontrado, `vista:` el dibujo -uno para todas-, y en
 // la escena `vivo:<pieza>`. En una placa suelta, <placa> es vacío: `dibujo:`.
 // =============================================================================
@@ -239,15 +250,44 @@ public:
 
     // Fase 3. Los mandos: apagados hasta que el modelo espera o corre
     void activa_mandos(bool si);
-    bool mandos_activos() const { return activos_; }
+    bool mandos_activos() const { return activos_ && !edicion_; }
     // Dónde hay que pinchar, en la vista, para tocar una pieza
     QPoint donde(int pieza) const;
     // El menú que está abierto -el deslizador de un clic o el del botón
     // derecho-, o nullptr. Para las pruebas.
     QMenu* menu_abierto() const { return menu_.data(); }
 
+    // Plan §34: EL MODO DE EDICIÓN. El ratón coloca las placas y los mandos no
+    // hacen nada; `mandos_activos()` lo dice. Al salir vuelven como estaban.
+    void pon_edicion(bool si);
+    bool edicion() const { return edicion_; }
+    // Lo que se ha cambiado de una placa: su posición -la esquina de arriba a
+    // la izquierda de su caja, ya girada, en mm de la escena- y su giro.
+    // Una placa sin posición fija se coloca sola, como siempre.
+    struct Ajuste {
+        bool    fija = false;
+        QPointF pos_mm;
+        int     giro = 0;             // 0, 90, 180 o 270, a la derecha
+    };
+    Ajuste ajuste(const QString& placa_id) const { return ajustes_.value(placa_id); }
+    // Cambian una placa y la recolocan. Girar es de 90 en 90 grados, sobre su
+    // centro; mover deja la placa con esa esquina. La primera vez que se toca
+    // una, las demás se quedan donde están
+    void gira_placa(const QString& placa_id, int grados);
+    void mueve_placa(const QString& placa_id, const QPointF& pos_mm);
+    // Como al principio: una placa -vuelve a colocarse sola- o todas
+    void restablece(const QString& placa_id);
+    void restablece_todas();
+    // La placa que hay bajo ese punto de la vista -la de encima-, y si hay
+    // alguna: en una placa suelta el id es vacío
+    bool placa_en(const QPoint& p, QString& placa_id) const;
+    // Los milímetros de una unidad de la escena
+    double mm_escena() const;
+
 signals:
     void orden(quint16 pieza, quint16 mando, float valor);
+    // Plan §34: alguien ha cambiado dónde está una placa, o cómo
+    void disposicion_cambiada();
 
 protected:
     void mousePressEvent(QMouseEvent* e) override;
@@ -263,7 +303,7 @@ protected:
     // Coloca las capas en la escena: las placas una al lado de otra, en el
     // orden del sistema y centradas en vertical, cada bandeja a la derecha de
     // su placa, todo a la misma escala (§10); y las líneas entre placas.
-    void coloca();
+    void coloca(bool ajusta_vista = true);
 
     // Una capa: el dibujo de una placa, o su bandeja
     struct Capa {
@@ -334,6 +374,19 @@ private:
     QHash<int, QGraphicsSvgItem*> vivos_;
     QVector<Linea>                lineas_;
     QSet<QString>                 con_lineas_;   // las placas que enseñan las suyas
+    // Plan §34: la edición, lo cambiado de cada placa y el arrastre
+    bool                          edicion_ = false;
+    QHash<QString, Ajuste>        ajustes_;
+    bool                          hay_sel_ = false;
+    QString                       sel_;          // la placa elegida
+    bool                          arrastre_ = false;
+    QPointF                       arr_ini_;      // dónde empezó, en la escena
+    QPointF                       arr_mm_;       // la esquina de la placa entonces
+    QGraphicsRectItem*            marco_sel_ = nullptr;
+    void congela();
+    void suelta_mandos();
+    void coloca_etiqueta(QGraphicsSimpleTextItem* t) const;
+    void menu_placa(const QString& placa_id, const QPoint& donde);
     void traza_lineas();
     void aplica_lineas();
     QVector<Viva>                 vivas_;
@@ -385,6 +438,10 @@ public:
     // Fase 3: los mandos de todos los dibujos, los de ahora y los que vengan
     void activa_mandos(bool si);
 
+    // Plan §34: el modo de edición, como el botón «Edición»
+    void pon_edicion(bool si);
+    bool edicion() const;
+
     // Plan §33: el botón de las líneas de esa placa; nulo en una placa suelta
     QToolButton* boton_conexiones(const QString& placa_id) const
     {
@@ -409,6 +466,8 @@ private:
     QHash<QString, Recuadro>     recuadros_;
     VistaPlaca*                  vista_ = nullptr;
     bool                         activos_ = false;
+    QToolButton*                 edicion_ = nullptr;
+    QLabel*                      ayuda_edicion_ = nullptr;
 };
 
 } // namespace mcusim
