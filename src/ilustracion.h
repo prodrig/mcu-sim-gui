@@ -34,8 +34,9 @@
 //   * y la ayuda emergente del elemento dice TODOS sus valores.
 //
 // La tabla de enlaces puede cambiar el efecto de una pieza: `brillo`,
-// `hundido`, `giro`, `pantalla` o `ninguno`. El color del halo es el del elemento: se
-// pinta en una imagen pequeña y se promedian sus píxeles, una vez, al cargar.
+// `hundido`, `giro`, `pantalla`, `angulo` o `ninguno`. El color del halo es el
+// del elemento: se pinta en una imagen pequeña y se promedian sus píxeles, una
+// vez, al cargar.
 //
 // `giro` solo lo pone la tabla -por declaración no sale nunca-: el elemento
 // GIRA sobre el centro de su caja con el primer numérico que la pieza sugiere,
@@ -45,6 +46,13 @@
 // de un encoder (`posicion`, de 0 a 29: 12 grados por clic), y ese numérico no
 // lleva etiqueta: ya lo dice el giro. Una pieza sin él se queda sin efecto, y
 // se dice.
+//
+// `angulo` es el de una pieza que sugiere un numérico EN GRADOS -la unidad
+// `°`-, y el que le toca por omisión (plan §32): el elemento GIRA sobre el
+// centro de su caja tantos grados como diga, a la derecha los positivos, sin
+// vueltas ni posiciones. Es el aspa de un servo (`angulo`, de -90 a 90), y ese
+// numérico tampoco lleva etiqueta. Pedido por la tabla en una pieza sin él,
+// se queda sin efecto, y se dice.
 //
 // `pantalla` es el de una pieza que enseña una IMAGEN -un TFT-, y es el que
 // le toca por omisión (plan §30): la imagen se pinta encima del elemento,
@@ -203,8 +211,8 @@ public:
     QGraphicsPixmapItem* pantalla(int pieza) const;
     // Los observables de las piezas dibujadas: lo que hay que suscribir
     QVector<quint16> observados() const;
-    // El efecto de una pieza dibujada: "brillo", "hundido", "giro", "pantalla" o
-    // "ninguno"
+    // El efecto de una pieza dibujada: "brillo", "hundido", "giro", "pantalla",
+    // "angulo" o "ninguno"
     QString efecto(int pieza) const;
     // Lo que se pinta encima de cada pieza, o nullptr si no lleva
     QGraphicsEllipseItem*    halo(int pieza) const;
@@ -274,7 +282,7 @@ private:
         int     pieza = -1;
         QGraphicsSvgItem* item = nullptr;
         QRectF  caja;
-        QString efecto;                      // "brillo", "hundido", "giro", "ninguno"
+        QString efecto;                      // "brillo", "hundido", "giro", "angulo"...
         QColor  color;
         int     o01 = -1;                    // el id_obs del 0/1 del efecto
         int     intensidad = -1;             // el que da la intensidad del brillo
@@ -287,7 +295,7 @@ private:
         bool    alarma = false;              // alguna disparada
         bool    hundido = false;             // como se ve ahora
         bool    hundido_obs = false;         // lo que dice la muestra
-        int     giro = -1;                   // el id_obs que lo hace girar
+        int     giro = -1;                   // el id_obs que lo hace girar (giro y angulo)
         int     imagen = -1;                 // el id_obs de su imagen, con `pantalla`
         QGraphicsPixmapItem* pixmap = nullptr;
         double  g_min = 0, g_max = 0;        // sus posiciones: una vuelta son max-min+1

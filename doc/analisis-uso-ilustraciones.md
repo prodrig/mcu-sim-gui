@@ -259,7 +259,8 @@ Los efectos también salen de la declaración, no del tipo:
 `mcusim:efecto` o la tabla de enlaces cambian el efecto de un elemento:
 `brillo`, `opacidad`, `color`, `visible`, `texto`; y más adelante `rotacion`
 para el servo o el motor que `doc/analisis_gui.md` de `mcu-sim` ya preveía.
-Hoy la tabla admite `brillo`, `hundido`, `giro`, `pantalla` y `ninguno`.
+Hoy la tabla admite `brillo`, `hundido`, `giro`, `pantalla`, `angulo` y
+`ninguno`.
 **`pantalla`** (plan §30) es el de omisión de una pieza que enseña una
 IMAGEN —el TFT de 128x160—: la imagen se pinta encima del elemento, llenando
 su caja, con su luz; si el elemento es apaisado y la imagen no, girada un
@@ -268,7 +269,10 @@ primero de esa familia de rotaciones (plan §29): el elemento gira sobre el
 centro de su caja con el primer numérico que la pieza sugiere, tomado como
 posiciones enteras de `min` a `max` —una vuelta son `max - min + 1`—, y ese
 numérico no lleva etiqueta, porque ya lo dice el giro. Es el anillo del
-encoder del KY-040, `posicion` de 0 a 29: 12° por clic.
+encoder del KY-040, `posicion` de 0 a 29: 12° por clic. **`angulo`** (plan
+§32) es el segundo, y el de omisión de una pieza que sugiere un numérico en
+grados: el elemento gira tantos grados como diga, a la derecha los positivos.
+Es el aspa de un servo, `angulo` de −90 a 90, también sin etiqueta.
 
 **El color del halo** es el del elemento. Qt SVG no dice de qué color pinta
 algo —y la hoja de estilo del dibujo lo pone por clase—, así que se saca

@@ -53,6 +53,11 @@
 //       numérico que lo mueva se dice y se queda sin efecto; y con el
 //       pulsador encima, el clic es para el pulsador y la RUEDA lo atraviesa
 //       y gira el encoder.
+//   I14 (plan §32) el aspa de un servo: el efecto `angulo`, el de omisión de
+//       una pieza que sugiere un numérico en grados -gira tantos grados como
+//       diga, a la derecha los positivos, sobre el centro de su caja, que un
+//       círculo sin pintar pone en el eje-; sin etiqueta; y pedido por la
+//       tabla en una pieza sin grados, se dice y se queda sin efecto.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -1443,6 +1448,81 @@ int main(int argc, char** argv)
         comprueba(lab && lab->pixmap().toImage().pixel(64, 2) == qRgb(255, 0, 0) &&
                       w.statusBar()->currentMessage().contains("no mide lo que dice"),
                   "un T_IMAGEN que no mide lo que dice se ignora, y se dice");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I14 El aspa de un servo: el efecto angulo\n");
+    {
+        const char* PLACA_SERVO =
+            "<placa nombre=\"servo\">\n"
+            "  <componente tipo=\"Servo\" id=\"SERVO\"><pin nombre=\"pwm\" nodo=\"PA0\"/></componente>\n"
+            "  <componente tipo=\"Led\" id=\"MUDO\"><pin nombre=\"anodo\" nodo=\"PA1\"/></componente>\n"
+            "  <ilustracion>\n"
+            "    <enlace pieza=\"MUDO\" elemento=\"MUDO\" efecto=\"angulo\"/>\n"
+            "  </ilustracion>\n"
+            "</placa>\n";
+        const char* CAT_SERVO =
+            "<catalogo>\n"
+            "  <pieza idx=\"0\" id=\"SERVO\" tipo=\"Servo\">\n"
+            "    <observable idx=\"0\" id_obs=\"0\" nombre=\"angulo\" unidad=\"°\" min=\"-90\" max=\"90\" interesante=\"si\"/>\n"
+            "    <observable idx=\"1\" id_obs=\"1\" nombre=\"pulso\" unidad=\"us\" min=\"0\" max=\"3000\" interesante=\"no\"/>\n"
+            "    <mando idx=\"0\" nombre=\"bloquear\" tipo=\"interruptor\" min=\"0\" max=\"1\" valor=\"0\"/>\n"
+            "  </pieza>\n"
+            "  <pieza idx=\"1\" id=\"MUDO\" tipo=\"Led\">\n"
+            "    <observable idx=\"0\" id_obs=\"2\" nombre=\"corriente\" unidad=\"mA\" min=\"0\" max=\"25\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "</catalogo>\n";
+        // El aspa: una sola pala, hacia arriba desde el eje (50, 50), y un
+        // circulo SIN PINTAR centrado en el eje que pone ahi el centro de la caja
+        const char* DIBUJO_SERVO =
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 140 100\">\n"
+            "  <rect x=\"0\" y=\"0\" width=\"140\" height=\"100\" fill=\"#1e5631\"/>\n"
+            "  <g id=\"SERVO\">\n"
+            "    <circle cx=\"50\" cy=\"50\" r=\"42\" fill=\"none\" stroke=\"none\"/>\n"
+            "    <rect x=\"46\" y=\"12\" width=\"8\" height=\"40\" fill=\"#ffffff\"/>\n"
+            "  </g>\n"
+            "  <rect id=\"MUDO\" x=\"110\" y=\"40\" width=\"20\" height=\"20\" fill=\"#808080\"/>\n"
+            "</svg>\n";
+        const PlacaGui p = placa_de(PLACA_SERVO, CAT_SERVO);
+        QString e;
+        std::unique_ptr<VistaPlaca> v(VistaPlaca::crea(p, QString(), DIBUJO_SERVO, p.tabla_de(QString()), e));
+        comprueba(v != nullptr, "la vista se construye " + e.toStdString());
+        if (!v) return resultado();
+        v->resize(700, 500);
+        v->show();
+        espera([] { return false; }, 50);
+        comprueba(v->efecto(0) == "angulo" && v->efecto(1) == "ninguno" &&
+                      v->informe().avisos.join(" ").contains("MUDO: el efecto «angulo» necesita"),
+                  "el servo, que sugiere un angulo en grados, gira sin que nadie lo diga; el LED, "
+                  "con la tabla pidiendolo y sin grados, sin efecto, y se dice: " +
+                      v->informe().avisos.join(" | ").toStdString());
+        const QRectF caja = v->vivo(0)->boundingRect();
+        const QPointF origen = v->vivo(0)->transformOriginPoint();
+        comprueba(std::abs(caja.width() - 84) < 0.5 && std::abs(caja.height() - 84) < 0.5 &&
+                      origen == caja.center() && v->vivo(0)->rotation() == 0,
+                  "la caja es la del circulo sin pintar, 84 x 84 -sin el, la de la pala, 8 x 40-, "
+                  "y gira sobre su centro, que es el eje: " + std::to_string(caja.width()) + " x " +
+                      std::to_string(caja.height()));
+        auto pala = [&](const QImage& img, double x, double y) {
+            return luz(en(img, *v, x, y)) > 600;
+        };
+        v->pon_valor(0, 0.f);
+        const QImage cero = v->imagen(560);
+        v->pon_valor(0, 90.f);
+        const QImage noventa = v->imagen(560);
+        const double r90 = v->vivo(0)->rotation();
+        v->pon_valor(0, -45.f);
+        const QImage menos45 = v->imagen(560);
+        const double rm45 = v->vivo(0)->rotation();
+        comprueba(pala(cero, 50, 20) && !pala(cero, 80, 50) && pala(noventa, 80, 50) &&
+                      !pala(noventa, 50, 20) && pala(menos45, 30, 30) && !pala(menos45, 70, 30),
+                  "la pala, arriba en el 0, a la derecha en +90 y arriba a la izquierda en -45");
+        comprueba(r90 == 90 && rm45 == -45,
+                  "los grados, tal cual: +90 son 90 y -45 son -45 (" + std::to_string(r90) +
+                      ", " + std::to_string(rm45) + ")");
+        comprueba(!v->etiqueta(0) && v->vivo(0)->toolTip().contains("angulo: -45"),
+                  "el angulo no lleva etiqueta -ya lo dice el aspa-, y la ayuda lo dice: " +
+                      v->vivo(0)->toolTip().toStdString());
     }
 
     return resultado();

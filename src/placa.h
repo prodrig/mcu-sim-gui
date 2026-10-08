@@ -89,7 +89,7 @@ struct PiezaGui {
 struct EnlaceTabla {
     QString pieza;            // el nombre en la placa: "LD2", no "N/LD2"
     QString elemento;         // el id en el SVG
-    QString efecto;           // "", "brillo", "hundido", "giro", "pantalla", "ninguno"
+    QString efecto;           // "", "brillo", "hundido", "giro", "pantalla", "angulo", "ninguno"
 };
 
 // UNA PLACA DE UN <sistema>, descrita entera: es lo que hace falta para

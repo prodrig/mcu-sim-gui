@@ -2350,3 +2350,38 @@ un giro que no sea de cuarto en cuarto.
 media vuelta no son «girado» y su caja es exacta; y la imagen de una pantalla
 sobre una placa girada 90 grados gira con ella. Contra el `mcu-sim` de
 verdad, su `make gui-sistema` C15.
+
+## 32. El aspa de un servo: el efecto `angulo`
+
+Pedido por el uso: `mcu-sim` trae un `Servo` —el SG90— y su placa,
+`placas/servo_sg90.xml`, cuyo dibujo tiene el aspa en el eje. El servo deja
+ver `angulo`, en grados —unidad `°`—, de −90 a 90 en uno normal y de 0 a 360
+en uno de giro continuo. `giro` no vale: toma el numérico como posiciones
+enteras y reparte una vuelta entre ellas. Hacía falta otro efecto:
+
+1. **`angulo`**, el de omisión de una pieza que sugiere un numérico **en
+   grados**, y que la tabla de enlaces también puede pedir: el elemento gira
+   sobre el centro de su caja tantos grados como diga ese numérico, a la
+   derecha los positivos, sin vueltas ni posiciones. El dibujo pone el aspa
+   en el 0.
+2. Ese numérico **no lleva etiqueta**: ya lo dice el aspa, y la ayuda
+   emergente sigue diciendo el valor.
+3. Pedido por la tabla en una pieza sin numérico en grados, **se dice** en los
+   avisos del dibujo y se queda sin efecto.
+
+El centro de giro es el de la caja del elemento, como con `giro`. Para que
+sea el eje aunque el aspa sea de una sola pala, el dibujo lleva dentro del
+elemento un círculo **sin pintar** centrado en el eje y más grande que todo
+lo demás: Qt SVG lo cuenta en la caja aunque no pinte nada.
+
+El cuerpo y el aspa del servo son **variantes** del dibujo
+(`SERVO.cuerpo@azul`, `SERVO.aspa@cuatro`...), y las resuelve `mcu-sim` antes
+de mandarlo: a la ventana le llega un SVG normal.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 180 → **186** (I14): un servo
+con un aspa de una pala y un LED con `angulo` en la tabla; el efecto por
+omisión y el aviso del que no puede; la caja, que es la del círculo sin
+pintar; la pala arriba en el 0, a la derecha en +90 y arriba a la izquierda
+en −45, por los píxeles; los grados tal cual; sin etiqueta y con el ángulo en
+la ayuda. Contra el `mcu-sim` de verdad, su `make gui-marcha` M8 y
+`make gui-ordenes` O7.

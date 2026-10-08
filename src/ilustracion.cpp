@@ -518,6 +518,26 @@ void VistaPlaca::prepara(Capa& cp)
             // Lo que lo hace girar ya se ve -es el giro-: sin etiqueta
             rotulos.removeIf([&](const ObservableGui* o) { return o->id_obs == w.giro; });
         }
+        // Una pieza con un ÁNGULO -un numérico que sugiere, en grados- gira con
+        // él, si la tabla no dice otra cosa: el aspa de un servo (plan §32)
+        if (w.efecto.isEmpty() || w.efecto == QLatin1String("angulo")) {
+            int ang = -1;
+            for (const ObservableGui& o : pz.observables)
+                if (o.interesante && !o.alarma && !es_01(o) && o.unidad == QStringLiteral("°")) {
+                    ang = o.id_obs;
+                    break;
+                }
+            if (ang >= 0) {
+                w.efecto = QStringLiteral("angulo");
+                w.giro = ang;
+                rotulos.removeIf([&](const ObservableGui* o) { return o->id_obs == ang; });
+            } else if (!w.efecto.isEmpty()) {
+                cp.informe.avisos << QObject::tr("%1: el efecto «angulo» necesita un numérico "
+                                               "en grados que la pieza sugiera; se queda sin "
+                                               "efecto").arg(pz.id_local);
+                w.efecto = QStringLiteral("ninguno");
+            }
+        }
         // Una pieza que enseña una imagen la enseña, si la tabla no dice otra cosa
         if (w.efecto.isEmpty() && !pz.imagenes.isEmpty()) w.efecto = QStringLiteral("pantalla");
         if (w.efecto == QLatin1String("pantalla") && pz.imagenes.isEmpty()) {
@@ -530,6 +550,7 @@ void VistaPlaca::prepara(Capa& cp)
                                    w.efecto != QLatin1String("hundido") &&
                                    w.efecto != QLatin1String("giro") &&
                                    w.efecto != QLatin1String("pantalla") &&
+                                   w.efecto != QLatin1String("angulo") &&
                                    w.efecto != QLatin1String("ninguno"))) {
             if (!e.efecto.isEmpty())
                 cp.informe.avisos << QObject::tr("%1: el efecto «%2» no existe; se usa el que "
@@ -555,7 +576,8 @@ void VistaPlaca::prepara(Capa& cp)
             w.halo->setOpacity(0);
             w.halo->setZValue(2);
             w.halo->setAcceptedMouseButtons(Qt::NoButton);
-        } else if (w.efecto == QLatin1String("hundido") || w.efecto == QLatin1String("giro")) {
+        } else if (w.efecto == QLatin1String("hundido") || w.efecto == QLatin1String("giro") ||
+                   w.efecto == QLatin1String("angulo")) {
             w.item->setTransformOriginPoint(w.item->boundingRect().center());
         } else if (w.efecto == QLatin1String("pantalla")) {
             // Hija del elemento: va con él, con las transformaciones de sus
@@ -664,8 +686,15 @@ void VistaPlaca::repinta(Viva& w)
             w.item->setOpacity(h ? 0.8 : 1.0);
         }
     }
+    // El ángulo: los grados, tal cual, a la derecha los positivos
+    if (w.efecto == QLatin1String("angulo")) {
+        if (w.giro >= 0 && w.valores.contains(quint16(w.giro))) {
+            const double ang = double(w.valores.value(quint16(w.giro)));
+            if (std::isfinite(ang) && w.item->rotation() != ang) w.item->setRotation(ang);
+        }
+    }
     // El giro: la posición, en vueltas de max - min + 1
-    if (w.giro >= 0 && w.valores.contains(quint16(w.giro))) {
+    else if (w.giro >= 0 && w.valores.contains(quint16(w.giro))) {
         const double v = std::clamp(double(w.valores.value(quint16(w.giro))), w.g_min, w.g_max);
         const double ang = 360.0 * (v - w.g_min) / (w.g_max - w.g_min + 1.0);
         if (w.item->rotation() != ang) w.item->setRotation(ang);
