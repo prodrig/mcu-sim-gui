@@ -81,6 +81,8 @@ bool Configuracion::lee(const QString& ruta, Configuracion& c, QString& error)
     const double per = vi.value(QStringLiteral("periodo_ms")).toDouble(c.periodo_ms);
     if (per > 0) c.periodo_ms = per;
     c.siempre_encima = vi.value(QStringLiteral("siempre_encima")).toBool(c.siempre_encima);
+    c.disposiciones = r.value(QStringLiteral("ilustracion")).toObject()
+                          .value(QStringLiteral("disposiciones")).toObject();
     return true;
 }
 
@@ -119,6 +121,7 @@ bool Configuracion::guarda(QString& error) const
     pon(QStringLiteral("vista"), QStringLiteral("ritmo"), ritmo);
     pon(QStringLiteral("vista"), QStringLiteral("periodo_ms"), periodo_ms);
     pon(QStringLiteral("vista"), QStringLiteral("siempre_encima"), siempre_encima);
+    pon(QStringLiteral("ilustracion"), QStringLiteral("disposiciones"), disposiciones);
     QDir().mkpath(QFileInfo(ruta).absolutePath());
     QSaveFile f(ruta);
     if (!f.open(QIODevice::WriteOnly)) {

@@ -24,6 +24,7 @@
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
+#include <QJsonArray>
 #include <QToolButton>
 #include <QSvgRenderer>
 #include <QVBoxLayout>
@@ -1023,6 +1024,61 @@ void VistaPlaca::zoom(double factor, const QPoint& centro)
     centerOn(mapToScene(viewport()->rect().center()) - d);
 }
 
+// -----------------------------------------------------------------------------
+// Plan §36: lo colocado, en JSON
+// -----------------------------------------------------------------------------
+QJsonObject VistaPlaca::disposicion() const
+{
+    QJsonObject d;
+    if (lienzo_fijo_)
+        d.insert(QStringLiteral("lienzo"), QJsonArray{lienzo_mm_.x(), lienzo_mm_.y(),
+                                                      lienzo_mm_.width(), lienzo_mm_.height()});
+    QJsonObject placas;
+    for (auto it = ajustes_.constBegin(); it != ajustes_.constEnd(); ++it) {
+        const Ajuste& a = it.value();
+        QJsonObject o;
+        if (a.fija) {
+            o.insert(QStringLiteral("x"), a.pos_mm.x());
+            o.insert(QStringLiteral("y"), a.pos_mm.y());
+        }
+        if (a.giro) o.insert(QStringLiteral("giro"), a.giro);
+        if (a.escala != 1.0) o.insert(QStringLiteral("escala"), a.escala);
+        if (!o.isEmpty()) placas.insert(it.key(), o);
+    }
+    if (!placas.isEmpty()) d.insert(QStringLiteral("placas"), placas);
+    return d;
+}
+
+void VistaPlaca::pon_disposicion(const QJsonObject& d)
+{
+    ajustes_.clear();
+    const QJsonObject placas = d.value(QStringLiteral("placas")).toObject();
+    for (auto it = placas.constBegin(); it != placas.constEnd(); ++it) {
+        // Solo las placas que hay
+        const bool hay = placa_.es_sistema() ? placa_.subplaca(it.key()) != nullptr
+                                             : it.key().isEmpty();
+        if (!hay) continue;
+        const QJsonObject o = it.value().toObject();
+        Ajuste a;
+        const QJsonValue x = o.value(QStringLiteral("x")), y = o.value(QStringLiteral("y"));
+        if (x.isDouble() && y.isDouble()) {
+            a.fija = true;
+            a.pos_mm = QPointF(x.toDouble(), y.toDouble());
+        }
+        const int g = o.value(QStringLiteral("giro")).toInt(0);
+        if (g % 90 == 0) a.giro = ((g % 360) + 360) % 360;
+        const double k = o.value(QStringLiteral("escala")).toDouble(1.0);
+        if (k > 0) a.escala = std::clamp(k, escalas().front(), escalas().back());
+        ajustes_.insert(it.key(), a);
+    }
+    const QJsonArray l = d.value(QStringLiteral("lienzo")).toArray();
+    lienzo_fijo_ = l.size() == 4 && l[2].toDouble() > 0 && l[3].toDouble() > 0;
+    if (lienzo_fijo_)
+        lienzo_mm_ = QRectF(l[0].toDouble(), l[1].toDouble(), l[2].toDouble(), l[3].toDouble());
+    hay_sel_ = false;
+    coloca();
+}
+
 void VistaPlaca::ajusta()
 {
     const bool cambia = !ajustada_;
@@ -1640,13 +1696,32 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
         connect(ajustar_, &QToolButton::clicked, vista_, &VistaPlaca::ajusta);
         connect(vista_, &VistaPlaca::ajuste_vista, ajustar_,
                 [this](bool ajustada) { ajustar_->setEnabled(!ajustada); });
+        // Plan §36: volver al principio, y olvidarlo
+        restablecer_ = new QToolButton(this);
+        restablecer_->setObjectName(QStringLiteral("restablecer"));
+        restablecer_->setText(tr("Restablecer"));
+        restablecer_->setToolTip(tr("Todas las placas como al principio, el lienzo a su medida, "
+                                    "y olvidar lo que se habia guardado"));
+        restablecer_->setEnabled(false);
+        connect(restablecer_, &QToolButton::clicked, this, [this] {
+            vista_->restablece_todas();
+            vista_->lienzo_automatico();
+            vista_->ajusta();
+            cambiada_ = true;
+        });
+        connect(vista_, &VistaPlaca::disposicion_cambiada, this, [this] { cambiada_ = true; });
         connect(edicion_, &QToolButton::toggled, this, [this](bool si) {
             vista_->pon_edicion(si);
             ayuda_edicion_->setVisible(si);
             boton_lienzo_->setEnabled(si);
+            restablecer_->setEnabled(si);
+            // Al salir, lo nuevo se guarda
+            if (!si && cambiada_) emit guarda_disposicion(clave_disposicion(), disposicion());
+            cambiada_ = false;
         });
         barra->addWidget(edicion_);
         barra->addWidget(boton_lienzo_);
+        barra->addWidget(restablecer_);
         barra->addWidget(ayuda_edicion_, 1);
         barra->addWidget(ajustar_);
         v->insertLayout(0, barra);
@@ -1867,6 +1942,29 @@ void VistaIlustracion::abre_lienzo()
         vista_->ajusta();
     });
     d->open();
+}
+
+QString VistaIlustracion::clave_disposicion(const PlacaGui& p)
+{
+    if (!p.es_sistema()) return QStringLiteral("placa %1").arg(p.nombre);
+    QStringList l;
+    for (const SubPlacaGui& s : p.placas) l << QStringLiteral("%1=%2").arg(s.id, s.nombre);
+    return QStringLiteral("%1 [%2]").arg(p.nombre, l.join(QLatin1Char(' ')));
+}
+
+QJsonObject VistaIlustracion::disposicion() const
+{
+    return vista_->disposicion();
+}
+
+void VistaIlustracion::pon_disposicion(const QJsonObject& d)
+{
+    vista_->pon_disposicion(d);
+}
+
+void VistaIlustracion::termina_edicion()
+{
+    if (edicion_->isChecked()) edicion_->setChecked(false);
 }
 
 void VistaIlustracion::activa_mandos(bool si)

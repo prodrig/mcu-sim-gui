@@ -315,7 +315,8 @@ la misma escala, como en la mesa. Si no lo da, se iguala la altura y se avisa.
   dibujo marca los pines. Las líneas nacen escondidas, y cada placa enseña
   las suyas con un botón (plan §33). Con el botón «Edición» las placas se
   mueven, se giran y se escalan con el ratón, y el lienzo tiene el tamaño
-  que se le dé (plan §34 y §35, `doc/analisis_disposicion_ilustracion.md`);
+  que se le dé; y se recuerda en la configuración (plan §34 a §36,
+  `doc/analisis_disposicion_ilustracion.md`);
 * **apiladas**: un shield encima de su Nucleo, o una pila PC/104 en cascada.
   Si el dibujo de cada placa marca dónde están sus conectores, **dos conectores
   acoplados en cada placa** dan la posición y el giro de la de arriba sobre la

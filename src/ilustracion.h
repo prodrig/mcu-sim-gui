@@ -133,6 +133,11 @@
 // líneas; las etiquetas, derechas y debajo de su pieza, y del mismo tamaño
 // aunque la placa crezca.
 //
+// LO QUE SE HA COLOCADO SE RECUERDA (plan §36): al soltar «Edición», si algo
+// ha cambiado, la ventana lo guarda en su configuración, por sistema -o por
+// placa-, y lo pone la próxima vez que se abra el mismo. «Restablecer», en la
+// edición, lo deja todo como al principio y lo olvida.
+//
 // EL LIENZO Y EL ZOOM (plan §35): sin decir nada, la vista enseña todas las
 // placas, justas, como siempre. Ctrl+rueda acerca o aleja -en la edición y
 // fuera de ella- y entonces hay barras para moverse; «Ajustar» vuelve a
@@ -143,7 +148,8 @@
 // Como el panel, cada widget lleva un `objectName` para las pruebas:
 // `dibujo:<placa>` la fila de cada placa, `abrir:<placa>` su botón,
 // `conexiones:<placa>` el de sus líneas, `edicion` el botón del modo de
-// edición, `lienzo` y `ajustar` los del lienzo y el zoom,
+// edición, `lienzo` y `ajustar` los del lienzo y el zoom, `restablecer` el
+// de volver al principio,
 // `informe:<placa>` lo encontrado, `vista:` el dibujo -uno para todas-, y en
 // la escena `vivo:<pieza>`. En una placa suelta, <placa> es vacío: `dibujo:`.
 // =============================================================================
@@ -154,6 +160,7 @@
 #include <QGraphicsView>
 #include <QHash>
 #include <QImage>
+#include <QJsonObject>
 #include <QMenu>
 #include <QPointer>
 #include <QSet>
@@ -304,6 +311,14 @@ public:
     void zoom(double factor, const QPoint& centro);
     void ajusta();
     bool ajustada() const { return ajustada_; }
+    // Plan §36: todo lo colocado -cada placa con algo cambiado, y el lienzo si
+    // es fijo-, en JSON y en mm: {"lienzo": [x, y, ancho, alto], "placas":
+    // {"N": {"x": .., "y": .., "giro": 90, "escala": 1.5}}}. Vacío si no se ha
+    // tocado nada. `pon_disposicion` lo aplica: lo que no vale -un giro que no
+    // es de un cuarto, una escala fuera de rango, una placa que no está- se
+    // ignora
+    QJsonObject disposicion() const;
+    void pon_disposicion(const QJsonObject& d);
     // Como al principio: una placa -vuelve a colocarse sola- o todas
     void restablece(const QString& placa_id);
     void restablece_todas();
@@ -480,6 +495,16 @@ public:
     // Plan §35: el diálogo del lienzo (`dialogo_lienzo`), sin esperar a que se
     // cierre: lo que se acepte se aplica
     void abre_lienzo();
+    // Plan §36: lo colocado, para la configuración. La clave es el sistema
+    // con sus placas -«nucleo-f446re-servo [N=nucleo-f446re S=servo-sg90]»-
+    // o «placa nombre» en una placa suelta: otro sistema, u otras placas, no
+    // reciben lo que no es suyo
+    static QString clave_disposicion(const PlacaGui& p);
+    QString clave_disposicion() const { return clave_disposicion(placa_); }
+    QJsonObject disposicion() const;
+    void pon_disposicion(const QJsonObject& d);
+    // Sale de la edición si se estaba en ella -y guarda, si hay algo nuevo-
+    void termina_edicion();
 
     // Plan §33: el botón de las líneas de esa placa; nulo en una placa suelta
     QToolButton* boton_conexiones(const QString& placa_id) const
@@ -492,6 +517,9 @@ signals:
     void pide_dibujo(const QString& placa_id);
     // Una orden de cualquiera de sus dibujos
     void orden(quint16 pieza, quint16 mando, float valor);
+    // Plan §36: al salir de la edición con algo cambiado. `d` vacío: no hay
+    // nada que recordar
+    void guarda_disposicion(const QString& clave, const QJsonObject& d);
 
 private:
     // La fila de cada placa, encima del dibujo: su nombre, lo que se ha
@@ -508,6 +536,8 @@ private:
     QToolButton*                 edicion_ = nullptr;
     QToolButton*                 boton_lienzo_ = nullptr;
     QToolButton*                 ajustar_ = nullptr;
+    QToolButton*                 restablecer_ = nullptr;
+    bool                         cambiada_ = false;   // algo nuevo desde que se entró
     QLabel*                      ayuda_edicion_ = nullptr;
 };
 

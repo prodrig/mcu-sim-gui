@@ -2517,3 +2517,46 @@ La fase 2 de [`doc/analisis_disposicion_ilustracion.md`](analisis_disposicion_il
 * Ctrl+rueda sobre un potenciómetro, que no lo mueve;
 * una placa al doble con su etiqueta del mismo tamaño, y nunca más de 4
   veces.
+
+## 36. Colocar las placas: lo colocado se recuerda
+
+La fase 3 de [`doc/analisis_disposicion_ilustracion.md`](analisis_disposicion_ilustracion.md):
+lo colocado se guarda en la configuración de la ventana y vuelve la próxima
+vez que se abre el mismo sistema, sin tocar `mcu-sim` ni el protocolo.
+
+1. **Qué se guarda.** `VistaPlaca::disposicion()` da lo colocado en JSON, en
+   mm de la escena: de cada placa con algo cambiado, su esquina, su giro y su
+   escala —cada cosa solo si no es la de siempre—, y el lienzo si es fijo.
+   `pon_disposicion()` lo aplica e ignora lo que no vale: un giro que no es
+   de un cuarto, una placa que no está o un lienzo sin tamaño. Una escala
+   fuera de rango la lleva a su límite.
+2. **De quién es.** La clave es el sistema con sus placas, o `placa nombre`
+   (`VistaIlustracion::clave_disposicion`). Otro sistema, o el mismo con
+   otras placas, no recibe lo que no es suyo.
+3. **Cuándo se guarda.** Al soltar «Edición», si algo cambió desde que se
+   pulsó (`guarda_disposicion`); si no, nada. También al cerrar la ventana
+   en plena edición, o cuando llega otra placa. `VentanaPrincipal` lo pone en
+   `Configuracion::disposiciones` —`ilustracion.disposiciones` en el JSON,
+   con lo demás del fichero intacto— y lo escribe; la barra de estado dice
+   dónde.
+4. **Cuándo se pone.** Nada más crear la ilustración, antes de que llegue
+   ningún dibujo. Como los ajustes se aplican en cada `coloca()`, valen para
+   el dibujo generado y para el de verdad cuando llegue. Una placa sin sitio
+   guardado se coloca sola, a la derecha de las que lo tienen.
+5. **«Restablecer»** (`restablecer`), en la edición, lo deja todo como al
+   principio —las placas, el lienzo y la vista—. Al salir se guarda vacío,
+   que es olvidarlo.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 229 → **241** (I17):
+
+* la clave de un sistema y la de una placa suelta;
+* entrar y salir sin tocar nada no guarda nada;
+* con algo cambiado, se guarda una vez y con lo que debe;
+* puesto en otra ilustración, todo donde estaba;
+* lo que no vale;
+* una placa nueva, con otra clave y colocada sola;
+* «Restablecer», que guarda vacío;
+* la configuración de ida y vuelta, sin perder sus comentarios ni lo demás;
+* y la ventana entera, con un modelo falso: colocar, cerrar en plena
+  edición, abrir otra ventana con la misma configuración y encontrar la
+  placa donde se dejó.

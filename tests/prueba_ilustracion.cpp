@@ -71,6 +71,11 @@
 //       centro, sin que crezcan sus etiquetas; el LIENZO fijo con su diálogo,
 //       centrado en las placas, y otra vez automático; y el ZOOM con
 //       Ctrl+rueda -también sobre un mando, sin moverlo- y «Ajustar».
+//   I17 (plan §36) lo colocado SE RECUERDA: la clave de cada sistema, lo
+//       colocado en JSON al salir de la edición -y nada si no cambió nada-,
+//       ponerlo en otra ilustración, lo que no vale, una placa nueva que se
+//       coloca sola, «Restablecer», la configuración de ida y vuelta, y la
+//       ventana entera: colocar, cerrar, volver a abrir y encontrarlo igual.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -91,6 +96,12 @@
 #include <QAction>
 #include <QPushButton>
 #include <QToolButton>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QTemporaryDir>
+#include <QFile>
+#include "configuracion.h"
 #include <QCheckBox>
 #include <QDialog>
 #include <QDoubleSpinBox>
@@ -1935,6 +1946,186 @@ int main(int argc, char** argv)
                   "centrada bajo ella");
         v->escala_placa(QString(), 9.0);
         comprueba(v->ajuste(QString()).escala == 4.0, "y nunca mas de 4 veces");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I17 Lo colocado se recuerda: la configuracion de la ventana\n");
+    {
+        const PlacaGui s = placa_de(SISTEMA_XML, CATALOGO_SISTEMA_XML);
+        const PlacaGui suelta = placa_de(PLACA_MANDOS, CATALOGO_MANDOS);
+        comprueba(VistaIlustracion::clave_disposicion(s) ==
+                          "nucleo-y-shield [N=nucleo-f446re S=shield-leds]" &&
+                      VistaIlustracion::clave_disposicion(suelta) == "placa mandos",
+                  "la clave: el sistema con sus placas, o la placa suelta: \"" +
+                      VistaIlustracion::clave_disposicion(s).toStdString() + "\"");
+        VistaIlustracion il(s);
+        il.resize(900, 500);
+        il.show();
+        espera([] { return false; }, 50);
+        VistaPlaca* v = il.vista("N");
+        QVector<std::pair<QString, QJsonObject>> guardadas;
+        QObject::connect(&il, &VistaIlustracion::guarda_disposicion,
+                         [&](const QString& k, const QJsonObject& d) { guardadas.push_back({k, d}); });
+        il.pon_edicion(true);
+        il.pon_edicion(false);
+        comprueba(guardadas.isEmpty() && il.disposicion().isEmpty(),
+                  "entrar y salir de la edicion sin tocar nada no guarda nada");
+        il.pon_edicion(true);
+        v->gira_placa("S", 90);
+        v->escala_placa("S", 1.5);
+        v->mueve_placa("S", QPointF(120, -40));
+        v->pon_lienzo(QRectF(-20, -60, 300, 200));
+        il.pon_edicion(false);
+        const QJsonObject d = guardadas.isEmpty() ? QJsonObject() : guardadas[0].second;
+        const QJsonObject js = d.value("placas").toObject().value("S").toObject();
+        const QJsonObject jn = d.value("placas").toObject().value("N").toObject();
+        comprueba(guardadas.size() == 1 && guardadas[0].first == il.clave_disposicion() &&
+                      js.value("x").toDouble() == 120 && js.value("y").toDouble() == -40 &&
+                      js.value("giro").toInt() == 90 && js.value("escala").toDouble() == 1.5 &&
+                      jn.contains("x") && !jn.contains("giro") && !jn.contains("escala") &&
+                      d.value("lienzo").toArray() == QJsonArray({-20, -60, 300, 200}),
+                  "al salir con algo cambiado, se guarda una vez: S, con su sitio, su giro y "
+                  "su escala; N, solo su sitio; y el lienzo: " +
+                      QJsonDocument(d).toJson(QJsonDocument::Compact).toStdString());
+
+        // En otra ilustracion del mismo sistema
+        VistaIlustracion il2(s);
+        il2.resize(900, 500);
+        il2.show();
+        il2.pon_disposicion(d);
+        VistaPlaca* v2 = il2.vista("N");
+        auto igual = [](const QRectF& a, const QRectF& b) {
+            return std::abs(a.x() - b.x()) < 1e-6 && std::abs(a.y() - b.y()) < 1e-6 &&
+                   std::abs(a.width() - b.width()) < 1e-6 && std::abs(a.height() - b.height()) < 1e-6;
+        };
+        comprueba(igual(v2->en_escena("S"), v->en_escena("S")) &&
+                      igual(v2->en_escena("N"), v->en_escena("N")) && v2->lienzo_fijo() &&
+                      v2->lienzo() == QRectF(-20, -60, 300, 200) &&
+                      v2->ajuste("S").giro == 90 && v2->ajuste("S").escala == 1.5,
+                  "puesta en otra ilustracion, todo queda donde estaba");
+
+        // Lo que no vale
+        QJsonObject mal = d;
+        QJsonObject pl = mal.value("placas").toObject();
+        QJsonObject ms = pl.value("S").toObject();
+        ms.insert("giro", 45);
+        ms.insert("escala", 10);
+        pl.insert("S", ms);
+        pl.insert("Z", QJsonObject{{"x", 1}, {"y", 2}});
+        mal.insert("placas", pl);
+        mal.insert("lienzo", QJsonArray{0, 0, -5, 10});
+        il2.pon_disposicion(mal);
+        comprueba(v2->ajuste("S").giro == 0 && v2->ajuste("S").escala == 4.0 &&
+                      !v2->disposicion().value("placas").toObject().contains("Z") &&
+                      !v2->lienzo_fijo(),
+                  "lo que no vale se ignora: un giro de 45, una placa que no esta, un lienzo "
+                  "sin tamano; y una escala de 10 se queda en 4");
+
+        // Una placa que no estaba se coloca sola, a la derecha de las fijas
+        QByteArray sz(SISTEMA_XML);
+        sz.replace("  <mcu tipo=", "  <placa id=\"Z\" nombre=\"suelta\" fichero=\"z.xml\"/>\n  <mcu tipo=");
+        const PlacaGui pz = placa_de(sz.constData(), CATALOGO_SISTEMA_XML);
+        VistaIlustracion iz(pz);
+        iz.pon_disposicion(d);
+        VistaPlaca* vz = iz.vista("Z");
+        const double der = std::max(vz->en_escena("N").right(), vz->en_escena("S").right());
+        comprueba(iz.clave_disposicion() != il.clave_disposicion() &&
+                      vz->en_escena("Z").left() > der && !vz->ajuste("Z").fija,
+                  "con otra placa es otra clave; y si se le pone, la nueva se coloca sola a la "
+                  "derecha de las que tienen sitio");
+
+        // Restablecer
+        auto* rest = il.findChild<QToolButton*>("restablecer");
+        comprueba(rest && !rest->isEnabled(), "Restablecer, apagado fuera de la edicion");
+        il.pon_edicion(true);
+        rest->click();
+        il.pon_edicion(false);
+        comprueba(guardadas.size() == 2 && guardadas[1].second.isEmpty() && !v->lienzo_fijo() &&
+                      !v->ajuste("S").fija && v->ajuste("S").giro == 0,
+                  "Restablecer lo deja todo como al principio, y al salir se guarda vacio: "
+                  "olvidarlo");
+    }
+    {
+        // La configuracion, de ida y vuelta
+        QTemporaryDir dir;
+        const QString ruta = dir.filePath("config.json");
+        {
+            QFile f(ruta);
+            f.open(QIODevice::WriteOnly);
+            f.write("{\"_comentario\": \"hola\", \"vista\": {\"ritmo\": \"libre\"}}");
+        }
+        Configuracion c;
+        QString e;
+        Configuracion::lee(ruta, c, e);
+        const QJsonObject una{{"placas", QJsonObject{{"N", QJsonObject{{"x", 3}, {"y", 4}}}}}};
+        c.disposiciones.insert("nucleo-y-shield [N=nucleo-f446re S=shield-leds]", una);
+        comprueba(c.guarda(e), "se guarda " + e.toStdString());
+        Configuracion c2;
+        Configuracion::lee(ruta, c2, e);
+        QFile f(ruta);
+        f.open(QIODevice::ReadOnly);
+        const QJsonObject r = QJsonDocument::fromJson(f.readAll()).object();
+        comprueba(c2.disposiciones == c.disposiciones && c2.ritmo == "libre" &&
+                      r.value("_comentario").toString() == "hola" &&
+                      r.value("ilustracion").toObject().contains("disposiciones"),
+                  "la configuracion lleva las disposiciones en ilustracion.disposiciones, y "
+                  "vuelven igual, sin perder lo demas");
+    }
+    {
+        // La ventana entera: colocar, cerrar, abrir otra vez
+        QTemporaryDir dir;
+        Configuracion c;
+        QString e;
+        Configuracion::lee(dir.filePath("config.json"), c, e);
+        c.puerto = 0;
+        QRectF s_antes;
+        {
+            VentanaPrincipal v(c);
+            v.show();
+            ModeloFalso m;
+            m.conecta(v.sesion().puerto());
+            m.manda(T_HOLA, "protocolo_max=2\nplaca=placas/nucleo_y_shield.xml\n");
+            m.espera_leidos(1);
+            m.version(2);
+            m.manda(T_PLACA, SISTEMA_XML);
+            m.manda(T_CATALOGO, CATALOGO_SISTEMA_XML);
+            m.manda(T_LISTO);
+            espera([&] { return v.findChild<VistaIlustracion*>("ilustracion"); });
+            auto* ilus = v.findChild<VistaIlustracion*>("ilustracion");
+            if (!ilus) return resultado();
+            ilus->pon_edicion(true);
+            ilus->vista("S")->gira_placa("S", -90);
+            ilus->vista("S")->mueve_placa("S", QPointF(150, 30));
+            s_antes = ilus->vista("S")->en_escena("S");
+            v.close();                               // en plena edicion: se guarda igual
+            comprueba(!ilus->edicion() &&
+                          v.configuracion().disposiciones.contains(ilus->clave_disposicion()),
+                      "cerrar la ventana en plena edicion sale de ella y lo guarda");
+            m.s.disconnectFromHost();
+        }
+        Configuracion c2;
+        Configuracion::lee(dir.filePath("config.json"), c2, e);
+        c2.puerto = 0;
+        VentanaPrincipal v(c2);
+        v.show();
+        ModeloFalso m;
+        m.conecta(v.sesion().puerto());
+        m.manda(T_HOLA, "protocolo_max=2\nplaca=placas/nucleo_y_shield.xml\n");
+        m.espera_leidos(1);
+        m.version(2);
+        m.manda(T_PLACA, SISTEMA_XML);
+        m.manda(T_CATALOGO, CATALOGO_SISTEMA_XML);
+        m.manda(T_LISTO);
+        espera([&] { return v.findChild<VistaIlustracion*>("ilustracion"); });
+        auto* ilus = v.findChild<VistaIlustracion*>("ilustracion");
+        VistaPlaca* vp = ilus ? ilus->vista("S") : nullptr;
+        comprueba(vp && vp->ajuste("S").giro == 270 &&
+                      std::abs(vp->en_escena("S").left() - s_antes.left()) < 1e-6 &&
+                      std::abs(vp->en_escena("S").top() - s_antes.top()) < 1e-6 &&
+                      vp->en_escena("S").size() == s_antes.size(),
+                  "y otra ventana con la misma configuracion, al abrir el mismo sistema, lo "
+                  "pone donde se dejo");
+        m.s.disconnectFromHost();
     }
 
     return resultado();

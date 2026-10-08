@@ -51,5 +51,15 @@
     "ritmo": "real",
     "periodo_ms": 16.6667,
     "siempre_encima": false
+  },
+
+  "ilustracion": {
+    "_comentario": [
+      "disposiciones: lo colocado en la ilustracion con el boton Edicion, por",
+      "sistema (o 'placa nombre'): donde esta cada placa, en mm, su giro y su",
+      "escala, y el lienzo [x, y, ancho, alto] si es fijo. La ventana lo escribe",
+      "sola al salir de la edicion; Restablecer lo borra."
+    ],
+    "disposiciones": {}
   }
 }

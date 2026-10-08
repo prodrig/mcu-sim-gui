@@ -19,6 +19,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
+#include <QJsonValue>
 #include <QStatusBar>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -380,6 +381,8 @@ void VentanaPrincipal::hijo_termino(int codigo, bool estrellado)
 // mata. Un hijo no sobrevive a su ventana.
 void VentanaPrincipal::closeEvent(QCloseEvent* e)
 {
+    // Plan §36: si se estaba colocando placas, lo colocado se guarda
+    if (ilus_) ilus_->termina_edicion();
     if (lanz_.corriendo()) {
         if (!ses_.para()) lanz_.detiene();
         QElapsedTimer t;
@@ -508,8 +511,25 @@ void VentanaPrincipal::pon_placa()
         ventana_ilus_->installEventFilter(this);
         if (cfg_.siempre_encima) ventana_ilus_->setWindowFlag(Qt::WindowStaysOnTopHint, true);
     }
+    if (ilus_) ilus_->termina_edicion();          // lo que estuviera colocando, guardado
     delete ilus_;
     ilus_ = new VistaIlustracion(p, ventana_ilus_);
+    // Plan §36: lo que se colocó la otra vez, y guardar lo que se coloque
+    {
+        const QJsonValue d = cfg_.disposiciones.value(ilus_->clave_disposicion());
+        if (d.isObject()) ilus_->pon_disposicion(d.toObject());
+    }
+    connect(ilus_, &VistaIlustracion::guarda_disposicion, this,
+            [this](const QString& clave, const QJsonObject& d) {
+                if (d.isEmpty()) cfg_.disposiciones.remove(clave);
+                else cfg_.disposiciones.insert(clave, d);
+                if (cfg_.ruta.isEmpty()) return;
+                QString e;
+                statusBar()->showMessage(cfg_.guarda(e)
+                                             ? tr("Disposicion de la ilustracion guardada en %1")
+                                                   .arg(cfg_.ruta)
+                                             : tr("No se pudo guardar la disposicion: %1").arg(e));
+            });
     ventana_ilus_->layout()->addWidget(ilus_);
     {
         QStringList nombres;

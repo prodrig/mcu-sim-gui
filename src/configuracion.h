@@ -12,7 +12,11 @@
 //   * lo que se escribió a mano, tal cual;
 //   * el host y el puerto donde escucha la ventana, que son una PREFERENCIA:
 //     si el puerto está cogido se usa otro, sin decir nada;
-//   * el ritmo con el que arrancar y el periodo de las instantáneas.
+//   * el ritmo con el que arrancar y el periodo de las instantáneas;
+//   * y LAS DISPOSICIONES de la ilustración (plan §36): dónde se ha puesto
+//     cada placa, girada y escalada, y el lienzo, por placa o sistema. La
+//     clave dice el sistema y sus placas (`VistaIlustracion::clave_disposicion`);
+//     el valor es lo que da `VistaPlaca::disposicion()`.
 //
 // Las rutas relativas del ejecutable y del directorio de trabajo se toman
 // respecto al fichero de configuración; la placa y el firmware, respecto al
@@ -22,6 +26,7 @@
 #ifndef MCU_SIM_GUI_CONFIGURACION_H
 #define MCU_SIM_GUI_CONFIGURACION_H
 
+#include <QJsonObject>
 #include <QString>
 
 #include "argumentos.h"
@@ -46,6 +51,8 @@ struct Configuracion {
     // La ventana por encima de las demás: para ver los LED y tocar los
     // botones mientras se depura en el IDE, sin traerla delante cada vez.
     bool       siempre_encima = false;
+    // Plan §36: clave -> disposición, en `ilustracion.disposiciones`
+    QJsonObject disposiciones;
 
     // Lee `ruta`. Si no existe, la configuración por omisión con esa ruta —para
     // guardarla ahí— y true; false solo si existe y no se puede leer.

@@ -314,3 +314,41 @@ ahora, y se puede usar sin las siguientes.
   las barras de desplazamiento y la vista deja de seguir el tamaño de la
   ventana. «Ajustar» vuelve a enseñar todo el lienzo.
 * **Cómo se comprueba**: `prueba_ilustracion` I16 (210 → 229).
+
+### Fase 3, hecha (plan §36 de `mcu-sim-gui`)
+
+* **Al soltar «Edición»**, si algo ha cambiado desde que se pulsó, lo
+  colocado se guarda en la configuración de la ventana, en
+  `ilustracion.disposiciones`. Si no ha cambiado nada, no se escribe nada.
+  Cerrar la ventana en plena edición también lo guarda, y lo mismo pasa
+  cuando llega otra placa.
+* **La clave** es el sistema con sus placas —`nucleo-f446re-servo
+  [N=nucleo-f446re S=servo-sg90 K=ky040 T=tft-128x160]`— o
+  `placa nombre` en una placa suelta. Otro sistema, o el mismo con otras
+  placas, no recibe lo que no es suyo.
+* **El valor**, en milímetros de la escena:
+  * de cada placa con algo cambiado, su esquina —`x`, `y`—, su `giro` y su
+    `escala`, cada cosa solo si no es la de siempre;
+  * y el `lienzo`, `[x, y, ancho, alto]`, si es fijo.
+
+  ```json
+  "nucleo-y-shield [N=nucleo-f446re S=shield-leds]": {
+    "lienzo": [-20, -60, 300, 200],
+    "placas": { "N": {"x": 0, "y": 0},
+                "S": {"x": 120, "y": -40, "giro": 90, "escala": 1.5} }
+  }
+  ```
+* **Al abrir el mismo sistema**, se pone antes de que llegue ningún dibujo:
+  vale para el generado y para el de verdad.
+  * Lo que no vale se ignora: un giro que no es de un cuarto, una placa que
+    no está o un lienzo sin tamaño. Una escala fuera de rango se lleva a su
+    límite.
+  * Una placa que no tiene sitio guardado se coloca sola, a la derecha de
+    las que lo tienen.
+* **«Restablecer»**, en la edición, lo deja todo como al principio —las
+  placas, el lienzo y la vista— y al salir se olvida lo guardado.
+* `config.ejemplo.json` lo explica.
+* **Cómo se comprueba**: `prueba_ilustracion` I17 (229 → 241).
+
+**Lo que queda** es la fase 4 —la disposición en el XML del sistema, leída por
+`mcu-sim` y mandada en `T_PLACA`, y «Copiar como XML»— y, si hace falta, la 5.
