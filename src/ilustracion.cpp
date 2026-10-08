@@ -19,6 +19,7 @@
 #include <QWheelEvent>
 #include <QWidgetAction>
 #include <QPushButton>
+#include <QToolButton>
 #include <QSvgRenderer>
 #include <QVBoxLayout>
 
@@ -447,6 +448,26 @@ void VistaPlaca::traza_lineas()
     for (const HiloGui& h : placa_.hilos)
         traza(h.a, h.b, true, QColor(0x55, 0x55, 0x55),
               tr("hilo %1 - %2").arg(h.a, h.b));
+    aplica_lineas();
+}
+
+// Plan §33: cada línea, visible si se ven las de alguna de sus dos placas
+void VistaPlaca::aplica_lineas()
+{
+    auto placa_de = [](const QString& r) {
+        const int b = r.indexOf(QLatin1Char('/'));
+        return b > 0 ? r.left(b) : QString();
+    };
+    for (const Linea& l : std::as_const(lineas_))
+        l.item->setVisible(con_lineas_.contains(placa_de(l.a)) ||
+                           con_lineas_.contains(placa_de(l.b)));
+}
+
+void VistaPlaca::muestra_lineas(const QString& placa_id, bool si)
+{
+    if (si) con_lineas_.insert(placa_id);
+    else con_lineas_.remove(placa_id);
+    aplica_lineas();
 }
 
 // -----------------------------------------------------------------------------
@@ -1086,6 +1107,41 @@ void VistaPlaca::activa_mandos(bool si)
 // =============================================================================
 // VistaIlustracion
 // =============================================================================
+namespace {
+// El icono del botón de las líneas (plan §33): dos placas y el cable que las
+// une. Encendido, el cable del color del primer acople; apagado, gris y de
+// trazos. Se dibuja aquí: la ventana no lleva ficheros de iconos
+QIcon icono_conexiones()
+{
+    auto pinta = [](bool on) {
+        const qreal k = 2;                         // nítido en pantallas densas
+        QPixmap px(QSize(28, 18) * k);
+        px.setDevicePixelRatio(k);
+        px.fill(Qt::transparent);
+        QPainter p(&px);
+        p.setRenderHint(QPainter::Antialiasing);
+        const QColor placa = on ? QColor(0x1e, 0x56, 0x31) : QColor(0x9a, 0x9a, 0x9a);
+        p.setPen(QPen(placa.darker(140), 1));
+        p.setBrush(placa);
+        p.drawRoundedRect(QRectF(1.5, 3.5, 7, 11), 1.5, 1.5);
+        p.drawRoundedRect(QRectF(19.5, 3.5, 7, 11), 1.5, 1.5);
+        QPainterPath cable(QPointF(8.5, 7));
+        cable.cubicTo(QPointF(14, 7), QPointF(14, 11), QPointF(19.5, 11));
+        QPen lapiz(on ? QColor(0xd9, 0x48, 0x1c) : QColor(0x80, 0x80, 0x80), 2);
+        lapiz.setCapStyle(Qt::RoundCap);
+        if (!on) lapiz.setDashPattern({1.2, 1.6});
+        p.setPen(lapiz);
+        p.setBrush(Qt::NoBrush);
+        p.drawPath(cable);
+        return px;
+    };
+    QIcon i;
+    i.addPixmap(pinta(false), QIcon::Normal, QIcon::Off);
+    i.addPixmap(pinta(true), QIcon::Normal, QIcon::On);
+    return i;
+}
+} // namespace
+
 VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
     : QWidget(padre), placa_(placa)
 {
@@ -1093,7 +1149,7 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
     auto* v = new QVBoxLayout(this);
     v->setContentsMargins(0, 0, 0, 0);
 
-    struct Cual { QString id, titulo, ayuda; };
+    struct Cual { QString id, titulo, ayuda; bool unida = false; };
     QVector<Cual> cuales;
     if (!placa.es_sistema()) {
         cuales.push_back({QString(), placa.nombre, QString()});
@@ -1102,12 +1158,15 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
         for (const SubPlacaGui& s : placa.placas) {
             QStringList ayuda;
             if (!s.fichero.isEmpty()) ayuda << s.fichero;
+            bool unida = false;
             for (const EnlaceGui& e : enlaces) {
                 if (e.placa_a == s.id) ayuda << tr("unida a %1 por %2").arg(e.placa_b, e.por);
                 else if (e.placa_b == s.id) ayuda << tr("unida a %1 por %2").arg(e.placa_a, e.por);
+                else continue;
+                unida = true;
             }
             cuales.push_back({s.id, QStringLiteral("%1 · %2").arg(s.id, s.nombre),
-                              ayuda.join(QLatin1Char('\n'))});
+                              ayuda.join(QLatin1Char('\n')), unida});
         }
     }
     // Fase 6: UN dibujo para todas las placas, una al lado de otra con las
@@ -1137,11 +1196,29 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
                              "manda mcu-sim."));
         const QString id = c.id;
         connect(abrir, &QPushButton::clicked, this, [this, id] { emit pide_dibujo(id); });
+        // Plan §33: el botón de SUS líneas, junto al nombre; nace apagado
+        QToolButton* con = nullptr;
+        if (placa.es_sistema()) {
+            con = new QToolButton(marco);
+            con->setObjectName(QStringLiteral("conexiones:%1").arg(c.id));
+            con->setCheckable(true);
+            con->setChecked(false);
+            con->setAutoRaise(true);
+            con->setIcon(icono_conexiones());
+            con->setIconSize(QSize(28, 18));
+            con->setEnabled(c.unida);
+            con->setToolTip(c.unida ? tr("Ver u ocultar las conexiones de %1 con las demas "
+                                         "placas").arg(c.id)
+                                    : tr("%1 no esta unida a ninguna otra placa").arg(c.id));
+            connect(con, &QToolButton::toggled, this,
+                    [this, id](bool si) { vista_->muestra_lineas(id, si); });
+        }
+        if (con) fila->addWidget(con);
         fila->addWidget(titulo);
         fila->addWidget(inf, 1);
         fila->addWidget(abrir);
         v->addWidget(marco);
-        recuadros_.insert(c.id, {marco, inf});
+        recuadros_.insert(c.id, {marco, inf, con});
         QString e;
         vista_->pon_capa(c.id, false, dibujo_generado(placa_, c.id), {},
                          QStringLiteral("generado"), e);

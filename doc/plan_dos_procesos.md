@@ -2385,3 +2385,33 @@ pintar; la pala arriba en el 0, a la derecha en +90 y arriba a la izquierda
 en −45, por los píxeles; los grados tal cual; sin etiqueta y con el ángulo en
 la ayuda. Contra el `mcu-sim` de verdad, su `make gui-marcha` M8 y
 `make gui-ordenes` O7.
+
+## 33. Las líneas entre placas, a la vista solo si se piden
+
+Pedido por el uso: en un sistema con varias placas cableadas
+—`placas/nucleo_f446re_servo.xml`, con el servo, el encoder y la pantalla—
+las líneas de todos los hilos a la vez tapan el dibujo, y casi nunca hacen
+falta todas.
+
+1. **Nacen escondidas.** La ilustración de cada simulación empieza sin
+   ninguna línea a la vista; se siguen trazando como antes (§26), solo que
+   invisibles.
+2. **Un botón por placa**, en su fila, a la izquierda del nombre
+   (`conexiones:<placa>`): un icono con dos placas y un cable —gris y de
+   trazos, apagado; con el cable del color del primer acople, encendido—.
+   Enseña o esconde LAS LÍNEAS DE ESA PLACA: una línea se ve si están
+   encendidos los de cualquiera de sus dos placas, así que encender el del
+   servo enseña sus tres hilos con la Nucleo, y no los del encoder.
+3. Lo elegido **se recuerda** al volver a trazar las líneas: abrir otro dibujo
+   para una placa las recoloca y no las vuelve a esconder
+   (`VistaPlaca::muestra_lineas`, `lineas_visibles`).
+4. Una placa que **no está unida a ninguna otra** tiene el botón apagado, y su
+   ayuda lo dice. Una placa suelta —no un sistema— no lo lleva.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 186 → **195** (I11): las dos
+líneas de la Nucleo y el shield nacen escondidas y no se ven en los píxeles;
+el botón de N las enseña y se ven; con el de S y sin el de N siguen a la
+vista, y sin ninguno, escondidas; un dibujo nuevo en N no las esconde; en la
+pila, el botón de CPU enseña su acople y su hilo y no el acople de L1 con L2,
+y el de L1 sus dos acoples y no el hilo; una placa sin uniones tiene el botón
+apagado, y una placa suelta no lo tiene.

@@ -41,7 +41,10 @@
 //       misma escala y centradas, con una línea por cada par de conectores
 //       enchufados -en una pila, cada uno con el siguiente- y una de trazos
 //       por cada hilo, de conector a conector o, si no está dibujado, desde
-//       el borde de la placa.
+//       el borde de la placa. Y las líneas NACEN ESCONDIDAS (plan §33): el
+//       botón de cada placa enseña las suyas -una línea se ve si se ven las
+//       de cualquiera de sus dos placas-, y se recuerda al cambiar un dibujo;
+//       una placa sin uniones lo tiene apagado.
 //   I13 (plan §30) una PANTALLA: la imagen del catálogo, que se pide en la
 //       suscripción y llega en T_IMAGEN; el efecto `pantalla`, el de omisión
 //       de una pieza con imagen, que la pinta encima de su elemento -girada a
@@ -77,6 +80,7 @@
 #include <QContextMenuEvent>
 #include <QAction>
 #include <QPushButton>
+#include <QToolButton>
 #include <QScrollArea>
 #include <QStatusBar>
 #include <QTabWidget>
@@ -1138,13 +1142,36 @@ int main(int argc, char** argv)
         comprueba(l0.item->childItems().size() == 2 && l1.item->childItems().isEmpty(),
                   "la del acople lleva un punto en cada conector; la del hilo, ninguno: llega "
                   "al borde de cada pin y no lo tapa, que se vea como sus vecinos");
+        const QPointF medio = l0.item->path().pointAtPercent(0.5);
+        const QImage oculta = v->imagen(1200);
+        QToolButton* bn = il.boton_conexiones("N");
+        QToolButton* bs = il.boton_conexiones("S");
+        comprueba(!l0.item->isVisible() && !l1.item->isVisible() && bn && bs &&
+                      bn == il.findChild<QToolButton*>("conexiones:N") && bn->isCheckable() &&
+                      !bn->isChecked() && !bs->isChecked() && bn->isEnabled() &&
+                      !bn->icon().isNull() &&
+                      !parecido(en(oculta, *v, medio.x(), medio.y()), qRgb(0xd9, 0x48, 0x1c), 70),
+                  "las LINEAS NACEN ESCONDIDAS: cada placa tiene su boton con icono, apagado, "
+                  "y a mitad de camino no hay linea");
+        bn->click();
+        comprueba(bn->isChecked() && v->lineas_visibles("N") && !v->lineas_visibles("S") &&
+                      l0.item->isVisible() && l1.item->isVisible(),
+                  "el boton de N las enseña: las dos son suyas");
         l1.item->setVisible(false);          // va casi por el mismo sitio
         const QImage img = v->imagen(1200);
         l1.item->setVisible(true);
-        const QPointF medio = l0.item->path().pointAtPercent(0.5);
         comprueba(parecido(en(img, *v, medio.x(), medio.y()), qRgb(0xd9, 0x48, 0x1c), 70),
                   "y se ve: a mitad de camino, el color de la linea, " +
                       hex(en(img, *v, medio.x(), medio.y())).toStdString());
+        bs->click();
+        bn->click();
+        comprueba(!v->lineas_visibles("N") && v->lineas_visibles("S") && l0.item->isVisible() &&
+                      l1.item->isVisible(),
+                  "con el de S y sin el de N, se siguen viendo: tambien son de S");
+        bs->click();
+        comprueba(!l0.item->isVisible() && !l1.item->isVisible(),
+                  "y sin ninguno de los dos, escondidas otra vez");
+        bn->click();
 
         // Un dibujo de verdad en N: a su escala -70 mm en 70 unidades- y las
         // lineas, a su CN5
@@ -1164,6 +1191,9 @@ int main(int argc, char** argv)
                       v->lineas()[1].item->childItems().size() == 1,
                   "el hilo, sin un CN5.7 dibujado, sale de CN5, y ahi si lleva su punto -en "
                   "el pin 8 de J5, que esta dibujado, no-");
+        comprueba(v->lineas()[0].item->isVisible() && v->lineas()[1].item->isVisible(),
+                  "las lineas trazadas de nuevo con el dibujo nuevo se siguen viendo: el boton "
+                  "de N sigue encendido");
         comprueba(!il.informe("N").avisos.join(" ").contains("no dice su tamano"),
                   "un dibujo que si dice sus milimetros no avisa de su tamano");
         const QByteArray sin_mm = QByteArray(DIBUJO_NUCLEO).replace(" width=\"70mm\" height=\"80mm\"", "");
@@ -1204,6 +1234,32 @@ int main(int argc, char** argv)
                       std::abs(h.pb.x() - vp->caja_de("L2/J9.1").left()) < 0.01,
                   "un pin de chip no esta dibujado: el hilo sale del borde de la CPU, y llega "
                   "al pin 1 de J9 de L2");
+        ip.boton_conexiones("CPU")->click();
+        comprueba(vp->lineas()[0].item->isVisible() && !vp->lineas()[1].item->isVisible() &&
+                      vp->lineas()[2].item->isVisible(),
+                  "el boton de CPU enseña sus dos lineas -su acople con L1 y su hilo a L2- y no "
+                  "la de L1 con L2");
+        {
+            // Una tercera placa, Z, sin nada que la una a las otras
+            QByteArray sz(SISTEMA_XML);
+            sz.replace("  <mcu tipo=", "  <placa id=\"Z\" nombre=\"suelta\" fichero=\"z.xml\"/>\n  <mcu tipo=");
+            const PlacaGui pz = placa_de(sz.constData(), CATALOGO_SISTEMA_XML);
+            VistaIlustracion iz(pz);
+            QToolButton* bz = iz.boton_conexiones("Z");
+            comprueba(pz.subplaca("Z") && bz && !bz->isEnabled() &&
+                          bz->toolTip().contains("no esta unida") &&
+                          iz.boton_conexiones("N")->isEnabled(),
+                      "una placa que no esta unida a ninguna otra tiene el boton apagado");
+            VistaIlustracion suelta(placa_de(PLACA_MANDOS, CATALOGO_MANDOS));
+            comprueba(!suelta.boton_conexiones(QString()) &&
+                          !suelta.findChild<QToolButton*>("conexiones:"),
+                      "y una placa suelta no lo lleva: no tiene con quien unirse");
+        }
+        ip.boton_conexiones("CPU")->click();
+        ip.boton_conexiones("L1")->click();
+        comprueba(vp->lineas()[0].item->isVisible() && vp->lineas()[1].item->isVisible() &&
+                      !vp->lineas()[2].item->isVisible(),
+                  "el de L1, sus dos acoples, y no el hilo, que no es suyo");
     }
 
     // -------------------------------------------------------------------------

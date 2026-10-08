@@ -115,8 +115,15 @@
 // dibujados; si no, desde el borde de la placa que mira a la otra. Apiladas
 // -un shield encima de su Nucleo- no: lo que se pidió es una al lado de otra.
 //
+// LAS LÍNEAS NACEN ESCONDIDAS (plan §33): con varias placas cableadas, todas
+// a la vez tapan el dibujo. La fila de cada placa lleva un botón con un icono
+// -dos placas y un cable- que enseña o esconde LAS SUYAS: una línea se ve si
+// se ven las de cualquiera de sus dos placas. Una placa que no está unida a
+// ninguna otra lo tiene apagado.
+//
 // Como el panel, cada widget lleva un `objectName` para las pruebas:
 // `dibujo:<placa>` la fila de cada placa, `abrir:<placa>` su botón,
+// `conexiones:<placa>` el de sus líneas,
 // `informe:<placa>` lo encontrado, `vista:` el dibujo -uno para todas-, y en
 // la escena `vivo:<pieza>`. En una placa suelta, <placa> es vacío: `dibujo:`.
 // =============================================================================
@@ -129,6 +136,7 @@
 #include <QImage>
 #include <QMenu>
 #include <QPointer>
+#include <QSet>
 #include <QTimer>
 #include <QWidget>
 
@@ -143,6 +151,7 @@ class QGraphicsRectItem;
 class QGraphicsSimpleTextItem;
 class QGraphicsSvgItem;
 class QLabel;
+class QToolButton;
 class QSvgRenderer;
 class QVBoxLayout;
 
@@ -186,6 +195,11 @@ public:
         QGraphicsPathItem* item = nullptr;
     };
     const QVector<Linea>& lineas() const { return lineas_; }
+    // Plan §33: enseñar o esconder las líneas de una placa. Una línea se ve
+    // si se ven las de cualquiera de sus dos placas; nacen escondidas, y se
+    // recuerda al volver a trazarlas -un dibujo nuevo en una placa-
+    void muestra_lineas(const QString& placa_id, bool si);
+    bool lineas_visibles(const QString& placa_id) const { return con_lineas_.contains(placa_id); }
     // Dónde está en la escena lo que se llama así en su placa: `N/CN5` es el
     // elemento CN5 del dibujo de N. Si el dibujo no lo tiene, se prueba con lo
     // que hay antes del punto (`N/CN9.2` -> CN9); si tampoco, nulo.
@@ -319,7 +333,9 @@ private:
 
     QHash<int, QGraphicsSvgItem*> vivos_;
     QVector<Linea>                lineas_;
+    QSet<QString>                 con_lineas_;   // las placas que enseñan las suyas
     void traza_lineas();
+    void aplica_lineas();
     QVector<Viva>                 vivas_;
     QHash<int, int>               viva_de_;     // pieza -> índice en vivas_
     QHash<quint16, int>           obs_de_;      // id_obs -> índice en vivas_
@@ -369,6 +385,12 @@ public:
     // Fase 3: los mandos de todos los dibujos, los de ahora y los que vengan
     void activa_mandos(bool si);
 
+    // Plan §33: el botón de las líneas de esa placa; nulo en una placa suelta
+    QToolButton* boton_conexiones(const QString& placa_id) const
+    {
+        return recuadros_.value(placa_id).conexiones;
+    }
+
 signals:
     // Se ha pulsado «Abrir dibujo…» en el recuadro de esa placa
     void pide_dibujo(const QString& placa_id);
@@ -381,6 +403,7 @@ private:
     struct Recuadro {
         QWidget*     marco = nullptr;
         QLabel*      informe = nullptr;
+        QToolButton* conexiones = nullptr;   // sus líneas; nulo si no es un sistema
     };
     PlacaGui                     placa_;
     QHash<QString, Recuadro>     recuadros_;
