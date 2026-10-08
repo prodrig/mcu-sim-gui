@@ -350,5 +350,40 @@ ahora, y se puede usar sin las siguientes.
 * `config.ejemplo.json` lo explica.
 * **Cómo se comprueba**: `prueba_ilustracion` I17 (229 → 241).
 
+### Además: los hilos de colores y las líneas en tramos rectos (plan §37)
+
+Pedido después de la fase 3, y guardado con lo demás.
+
+* **Cada hilo de su color**, como los cables de una placa de prototipos:
+  * negro si alguno de sus extremos es una masa (`GND`, `VSS`...);
+  * rojo si es una alimentación (`VCC`, `VDD`, `5V`, `3V3`...);
+  * los demás, de una paleta de diez colores sin rojo ni negro.
+
+  Un hilo es ahora una línea continua, no de trazos. Los acoples siguen
+  del color de su acople.
+* **El enrutado**, en la edición, para cualquier línea que se vea:
+  * un doble clic en una curva la pasa a tramos horizontales y verticales,
+    con un codo a mitad de camino y las esquinas redondeadas;
+  * un doble clic en un tramo le pone un codo ahí, que se separa
+    arrastrando;
+  * arrastrar un tramo lo mueve —en vertical uno horizontal, en horizontal
+    uno vertical—, a milímetros enteros;
+  * el primer tramo y el último van pegados a sus extremos;
+  * el botón derecho tiene «Un codo aqui», «Solo un codo, a mitad de
+    camino» y «Otra vez en curva».
+* **Cómo se guarda una ruta**: el eje del primer tramo y la coordenada en mm
+  a la que llega cada tramo, alternando x e y. Los dos últimos tramos llegan
+  solos al otro extremo. Por eso, al mover una placa, los codos se quedan
+  donde estaban y solo cambian los tramos de los extremos, siempre en ángulo
+  recto. En la disposición:
+
+  ```json
+  "lineas": { "hilo S/P1.PWM N/CN9.6": {"eje": "h", "codos": [60, 35, 110]} }
+  ```
+
+  Una línea que no está, o un eje que no es `h` ni `v`, se ignoran.
+  «Restablecer» las deja todas en curva.
+* **Cómo se comprueba**: `prueba_ilustracion` I18 (241 → 255).
+
 **Lo que queda** es la fase 4 —la disposición en el XML del sistema, leída por
 `mcu-sim` y mandada en `T_PLACA`, y «Copiar como XML»— y, si hace falta, la 5.

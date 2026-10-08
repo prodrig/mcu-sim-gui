@@ -57,7 +57,8 @@
     "_comentario": [
       "disposiciones: lo colocado en la ilustracion con el boton Edicion, por",
       "sistema (o 'placa nombre'): donde esta cada placa, en mm, su giro y su",
-      "escala, y el lienzo [x, y, ancho, alto] si es fijo. La ventana lo escribe",
+      "escala, el lienzo [x, y, ancho, alto] si es fijo, y las lineas en tramos",
+      "rectos ('lineas': su eje, h o v, y sus codos en mm). La ventana lo escribe",
       "sola al salir de la edicion; Restablecer lo borra."
     ],
     "disposiciones": {}

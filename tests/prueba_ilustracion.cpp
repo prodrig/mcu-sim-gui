@@ -76,6 +76,11 @@
 //       ponerlo en otra ilustración, lo que no vale, una placa nueva que se
 //       coloca sola, «Restablecer», la configuración de ida y vuelta, y la
 //       ventana entera: colocar, cerrar, volver a abrir y encontrarlo igual.
+//   I18 (plan §37) LOS HILOS DE COLORES -negro la masa, rojo la
+//       alimentación, una paleta los demás- y EL ENRUTADO de una línea en
+//       tramos horizontales y verticales con las esquinas redondeadas: doble
+//       clic, arrastrar un tramo, un codo más, mover una placa, volver a la
+//       curva, y guardarlo con lo demás.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -96,6 +101,7 @@
 #include <QAction>
 #include <QPushButton>
 #include <QToolButton>
+#include <QSet>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -1149,7 +1155,7 @@ int main(int argc, char** argv)
         comprueba(v->lineas().size() == 2 && !v->lineas()[0].hilo && v->lineas()[1].hilo &&
                       v->lineas()[0].a == "N/CN5" && v->lineas()[0].b == "S/J5" &&
                       v->lineas()[0].item->toolTip() == QString::fromUtf8("N/CN5 ⇄ S/J5"),
-                  "dos lineas: la del acople CN5-J5 y la del hilo, que va de trazos");
+                  "dos lineas: la del acople CN5-J5 y la del hilo");
         const QRectF cn5 = v->caja_de("N/CN5"), j5 = v->caja_de("S/J5");
         const VistaPlaca::Linea& l0 = v->lineas()[0];
         comprueba(!cn5.isNull() && !j5.isNull() && std::abs(l0.pa.x() - cn5.right()) < 0.01 &&
@@ -1161,8 +1167,10 @@ int main(int argc, char** argv)
         const QRectF p7 = v->caja_de("N/CN5.7"), p8 = v->caja_de("S/J5.8");
         comprueba(l1.a == "N/CN5.7" && std::abs(l1.pa.x() - p7.right()) < 0.01 &&
                       std::abs(l1.pb.x() - p8.left()) < 0.01 &&
-                      l1.item->pen().style() == Qt::DashLine,
-                  "el hilo, de pin a pin: del 7 de CN5 al 8 de J5");
+                      l1.item->pen().style() == Qt::SolidLine &&
+                      l1.item->pen().color() == QColor(0x1f, 0x77, 0xb4),
+                  "el hilo, de pin a pin: del 7 de CN5 al 8 de J5, como un cable de su color "
+                  "(plan §37)");
         comprueba(l0.item->childItems().size() == 2 && l1.item->childItems().isEmpty(),
                   "la del acople lleva un punto en cada conector; la del hilo, ninguno: llega "
                   "al borde de cada pin y no lo tapa, que se vea como sus vecinos");
@@ -2126,6 +2134,185 @@ int main(int argc, char** argv)
                   "y otra ventana con la misma configuracion, al abrir el mismo sistema, lo "
                   "pone donde se dejo");
         m.s.disconnectFromHost();
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I18 Los hilos de colores, y las lineas en tramos rectos\n");
+    {
+        const QColor negro(0x26, 0x26, 0x26), rojo(0xd3, 0x2f, 0x2f);
+        QSet<QRgb> distintos;
+        for (int k = 0; k < 10; ++k)
+            distintos.insert(VistaPlaca::color_de_hilo("N/CN9.6", "S/P1.PWM", k).rgb());
+        comprueba(VistaPlaca::color_de_hilo("S/P1.GND", "N/CN6.7", 3) == negro &&
+                      VistaPlaca::color_de_hilo("N/CN6.5", "S/P1.VCC", 3) == rojo &&
+                      VistaPlaca::color_de_hilo("T/P1.LED", "N/CN6.2", 0) == QColor(0x1f, 0x77, 0xb4) &&
+                      VistaPlaca::color_de_hilo("K/P1.GND", "N/CN7.20", 0) == negro &&
+                      distintos.size() == 10 && !distintos.contains(negro.rgb()) &&
+                      !distintos.contains(rojo.rgb()),
+                  "cada hilo de su color: negro si va a una masa, rojo si a una alimentacion, "
+                  "y los demas de una paleta de diez, sin rojo ni negro");
+
+        QByteArray sx(SISTEMA_XML);
+        sx.replace("<placa id=\"N\" nombre=\"nucleo-f446re\" fichero=\"nucleo_f446re.xml\"/>",
+                   "<placa id=\"N\" nombre=\"nucleo-f446re\" fichero=\"nucleo_f446re.xml\">\n"
+                   "    <conector ref=\"N/CN5\" filas=\"1\" columnas=\"10\" numeracion=\"zigzag\" acople=\"0\"/>\n"
+                   "  </placa>");
+        sx.replace("<placa id=\"S\" nombre=\"shield-leds\" fichero=\"shield_leds.xml\"/>",
+                   "<placa id=\"S\" nombre=\"shield-leds\" fichero=\"shield_leds.xml\">\n"
+                   "    <conector ref=\"S/J5\" filas=\"1\" columnas=\"10\" numeracion=\"zigzag\" acople=\"0\"/>\n"
+                   "  </placa>");
+        const PlacaGui s = placa_de(sx.constData(), CATALOGO_SISTEMA_XML);
+        VistaIlustracion il(s);
+        il.resize(900, 500);
+        il.show();
+        espera([] { return false; }, 50);
+        VistaPlaca* v = il.vista("N");
+        il.boton_conexiones("N")->click();
+        il.pon_edicion(true);
+        int cambios = 0;
+        QObject::connect(v, &VistaPlaca::disposicion_cambiada, [&] { ++cambios; });
+        const QString clave = "acople N/CN5 S/J5";
+        auto linea = [&]() -> const VistaPlaca::Linea* {
+            for (const VistaPlaca::Linea& l : v->lineas())
+                if (l.clave == clave) return &l;
+            return nullptr;
+        };
+        auto recta = [](const QVector<QPointF>& p) {
+            for (int k = 0; k + 1 < p.size(); ++k)
+                if (std::abs(p[k].x() - p[k + 1].x()) > 1e-6 && std::abs(p[k].y() - p[k + 1].y()) > 1e-6)
+                    return false;
+            return p.size() >= 3;
+        };
+        // El hilo va casi por el mismo sitio: fuera de la vista, no se toca
+        for (const VistaPlaca::Linea& l : v->lineas())
+            if (l.hilo) l.item->setVisible(false);
+        // S, mas abajo: que haya esquinas
+        v->mueve_placa("S", v->en_escena("S").topLeft() * v->mm_escena() + QPointF(0, 30));
+        cambios = 0;
+        const VistaPlaca::Linea* l = linea();
+        comprueba(l && !l->recta && !v->enrutada(clave), "la linea del acople nace en curva");
+        if (!l) return resultado();
+        const QPointF medio = l->item->path().pointAtPercent(0.5);
+        raton(v, QEvent::MouseButtonDblClick, v->mapFromScene(medio));
+        l = linea();
+        const QRectF cn5 = v->caja_de("N/CN5"), j5 = v->caja_de("S/J5");
+        comprueba(l && l->recta && v->enrutada(clave) && v->ruta(clave).horizontal &&
+                      v->ruta(clave).codos.size() == 1 && recta(l->puntos) &&
+                      std::abs(l->pa.x() - cn5.right()) < 1e-6 &&
+                      std::abs(l->pb.x() - j5.left()) < 1e-6 && cambios == 1,
+                  "un doble clic en ella, en tramos rectos: sale de CN5 en horizontal, un "
+                  "codo a mitad de camino, y entra en J5");
+        bool curvas = false;
+        for (int k = 0; k < l->item->path().elementCount(); ++k)
+            curvas = curvas || l->item->path().elementAt(k).type == QPainterPath::CurveToElement;
+        comprueba(curvas, "con las esquinas redondeadas");
+
+        // Arrastrar el tramo de en medio
+        const double mm = v->mm_escena();
+        const double x0 = v->ruta(clave).codos[0];
+        const QPointF t1 = (l->puntos[1] + l->puntos[2]) / 2;
+        const QPoint ini = v->mapFromScene(t1);
+        const QPoint fin = ini + QPoint(-40, 15);
+        const double esperado = std::round(v->mapToScene(fin).x() * mm);
+        const QRectF s_antes = v->en_escena("S");
+        raton(v, QEvent::MouseButtonPress, ini);
+        raton(v, QEvent::MouseMove, fin);
+        raton(v, QEvent::MouseButtonRelease, fin);
+        l = linea();
+        comprueba(v->ruta(clave).codos[0] == esperado && esperado != x0 && recta(l->puntos) &&
+                      std::abs(l->puntos[1].x() * mm - esperado) < 1e-6 &&
+                      std::abs(l->puntos[2].x() * mm - esperado) < 1e-6 &&
+                      v->en_escena("S") == s_antes,
+                  "arrastrar el tramo vertical lo lleva a otra x, a milimetros enteros, sin "
+                  "mover ninguna placa");
+
+        // Un codo mas, en el tramo de en medio
+        const QPointF t1b = (l->puntos[1] + l->puntos[2]) / 2;
+        raton(v, QEvent::MouseButtonDblClick, v->mapFromScene(t1b));
+        l = linea();
+        comprueba(v->ruta(clave).codos.size() == 3 && recta(l->puntos) &&
+                      std::abs(l->pa.x() - cn5.right()) < 1e-6 &&
+                      std::abs(l->pb.x() - j5.left()) < 1e-6,
+                  "un doble clic en un tramo le pone un codo: tres, y sigue en angulo recto");
+        // Y se separa arrastrando la segunda mitad
+        const QVector<QPointF> p3 = l->puntos;
+        int largo = -1;
+        for (int k = 1; k + 1 < p3.size(); ++k)
+            if (QLineF(p3[k], p3[k + 1]).length() > 1e-6 && k >= 3) { largo = k; break; }
+        const QPointF mitad = largo > 0 ? (p3[largo] + p3[largo + 1]) / 2 : QPointF();
+        if (largo > 0) {
+            const QPoint a = v->mapFromScene(mitad);
+            raton(v, QEvent::MouseButtonPress, a);
+            raton(v, QEvent::MouseMove, a + QPoint(25, 0));
+            raton(v, QEvent::MouseButtonRelease, a + QPoint(25, 0));
+        }
+        l = linea();
+        comprueba(largo > 0 && recta(l->puntos) && l->puntos.size() == 6,
+                  "y arrastrando la segunda mitad, un escalon: seis puntos, todos en angulo "
+                  "recto");
+
+        // Mover S: los codos se quedan, y los extremos la siguen
+        const QVector<double> codos = v->ruta(clave).codos;
+        v->mueve_placa("S", v->ajuste("S").pos_mm + QPointF(10, 25));
+        l = linea();
+        const QRectF j5b = v->caja_de("S/J5");
+        comprueba(v->ruta(clave).codos == codos && recta(l->puntos) &&
+                      (std::abs(l->pb.x() - j5b.left()) < 1e-6 ||
+                       std::abs(l->pb.x() - j5b.right()) < 1e-6 ||
+                       std::abs(l->pb.y() - j5b.top()) < 1e-6 ||
+                       std::abs(l->pb.y() - j5b.bottom()) < 1e-6),
+                  "al mover S, los codos se quedan donde estaban y el final la sigue hasta J5, "
+                  "en angulo recto");
+
+        // Guardado con lo demas
+        const QJsonObject d = il.disposicion();
+        const QJsonObject jl = d.value("lineas").toObject().value(clave).toObject();
+        comprueba(jl.value("eje").toString() == "h" && jl.value("codos").toArray().size() == 3,
+                  "la disposicion lleva la linea, con su eje y sus codos: " +
+                      QJsonDocument(jl).toJson(QJsonDocument::Compact).toStdString());
+        VistaIlustracion il2(s);
+        il2.resize(900, 500);
+        il2.show();
+        il2.pon_disposicion(d);
+        VistaPlaca* v2 = il2.vista("N");
+        const VistaPlaca::Linea* l2 = nullptr;
+        for (const VistaPlaca::Linea& x : v2->lineas())
+            if (x.clave == clave) l2 = &x;
+        bool iguales = l2 && l2->puntos.size() == linea()->puntos.size();
+        for (int k = 0; iguales && k < l2->puntos.size(); ++k)
+            iguales = QLineF(l2->puntos[k], linea()->puntos[k]).length() < 1e-6;
+        comprueba(iguales, "y en otra ilustracion, la misma linea por el mismo sitio");
+        QJsonObject mal = d;
+        QJsonObject ls = mal.value("lineas").toObject();
+        ls.insert("hilo N/X S/Y", QJsonObject{{"eje", "h"}, {"codos", QJsonArray{1}}});
+        QJsonObject o = ls.value(clave).toObject();
+        o.insert("eje", "z");
+        ls.insert(clave, o);
+        mal.insert("lineas", ls);
+        il2.pon_disposicion(mal);
+        comprueba(!v2->enrutada(clave) && !v2->enrutada("hilo N/X S/Y"),
+                  "una linea que no esta, o un eje que no es h ni v, se ignoran: en curva");
+
+        // El menu, y volver a la curva
+        const QPointF t = (linea()->puntos[1] + linea()->puntos[2]) / 2;
+        {
+            const QPoint p = v->mapFromScene(t);
+            QContextMenuEvent e(QContextMenuEvent::Mouse, p, v->viewport()->mapToGlobal(p));
+            QCoreApplication::sendEvent(v->viewport(), &e);
+        }
+        QMenu* menu = v->menu_abierto();
+        QAction* curva = menu ? menu->findChild<QAction*>("desenruta") : nullptr;
+        comprueba(menu && menu->objectName() == "linea:" + clave && curva &&
+                      menu->findChild<QAction*>("codo") && menu->findChild<QAction*>("enruta"),
+                  "el boton derecho en una linea: un codo aqui, uno solo a mitad de camino, y "
+                  "otra vez en curva");
+        if (curva) curva->trigger();
+        if (menu) menu->close();
+        comprueba(!v->enrutada(clave) && !linea()->recta, "otra vez en curva");
+        v->enruta(clave);
+        auto* rest = il.findChild<QToolButton*>("restablecer");
+        rest->click();
+        comprueba(!v->enrutada(clave), "y Restablecer las deja todas en curva");
     }
 
     return resultado();

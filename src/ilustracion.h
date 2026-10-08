@@ -133,6 +133,14 @@
 // líneas; las etiquetas, derechas y debajo de su pieza, y del mismo tamaño
 // aunque la placa crezca.
 //
+// LAS LÍNEAS, EN LA EDICIÓN (plan §37): cada hilo de su color -negro una
+// masa, rojo una alimentación, y los demás de una paleta-; y cualquier línea
+// se puede ENRUTAR en tramos horizontales y verticales con las esquinas
+// redondeadas: un doble clic en una curva la pasa a tramos rectos, uno en un
+// tramo le pone un codo ahí, arrastrar un tramo lo mueve, y el botón derecho
+// tiene todo eso y volver a la curva. Las líneas se tocan si se ven: las
+// enseña el botón de conexiones de su placa.
+//
 // LO QUE SE HA COLOCADO SE RECUERDA (plan §36): al soltar «Edición», si algo
 // ha cambiado, la ventana lo guarda en su configuración, por sistema -o por
 // placa-, y lo pone la próxima vez que se abra el mismo. «Restablecer», en la
@@ -220,6 +228,13 @@ public:
         bool    hilo = false;
         QPointF pa, pb;               // dónde empieza y dónde acaba, en la escena
         QGraphicsPathItem* item = nullptr;
+        // Plan §37: cómo se la conoce en la disposición -«hilo N/CN9.6
+        // S/P1.PWM», «acople N/CN5 S/J5»-, su color, y si va en tramos
+        // rectos, sus puntos de `pa` a `pb`, codos incluidos
+        QString clave;
+        QColor  color;
+        bool    recta = false;
+        QVector<QPointF> puntos;
     };
     const QVector<Linea>& lineas() const { return lineas_; }
     // Plan §33: enseñar o esconder las líneas de una placa. Una línea se ve
@@ -322,6 +337,37 @@ public:
     // Como al principio: una placa -vuelve a colocarse sola- o todas
     void restablece(const QString& placa_id);
     void restablece_todas();
+    // Plan §37: EL ENRUTADO de una línea en tramos horizontales y verticales.
+    // `horizontal` dice el primer tramo, el que sale de `a`; `codos`, en mm,
+    // la coordenada a la que llega cada tramo -una x si es horizontal, una y
+    // si es vertical-, alternando. Los dos últimos tramos, hasta `b`, salen
+    // solos. Sin ruta, la línea es la curva de siempre
+    struct Ruta {
+        bool horizontal = true;
+        QVector<double> codos;
+    };
+    bool enrutada(const QString& clave) const { return rutas_.contains(clave); }
+    Ruta ruta(const QString& clave) const { return rutas_.value(clave); }
+    void pon_ruta(const QString& clave, const Ruta& r);
+    // En tramos rectos, con un codo a mitad de camino
+    void enruta(const QString& clave);
+    // Otra vez la curva
+    void desenruta(const QString& clave);
+    // Un codo en el tramo más cercano a ese punto de la escena: el tramo se
+    // parte en dos, que luego se separan arrastrando
+    void anade_codo(const QString& clave, const QPointF& escena);
+    // Mueve un tramo -1 el que sale de `a`, ... -: a esa coordenada en mm,
+    // la y si es horizontal y la x si es vertical. El primero y el último
+    // van pegados a sus extremos y no se mueven
+    void mueve_tramo(const QString& clave, int tramo, double mm);
+    void restablece_lineas();
+    // La línea visible bajo ese punto de la vista, y el tramo -si va en
+    // tramos rectos-: -1 si no hay
+    int linea_en(const QPoint& p, int* tramo = nullptr) const;
+    // El color de un hilo entre `a` y `b`, el `k`-ésimo: negro si alguno de
+    // sus dos extremos es una masa, rojo si es una alimentación, y si no, de
+    // una paleta que no repite en diez
+    static QColor color_de_hilo(const QString& a, const QString& b, int k);
     // La placa que hay bajo ese punto de la vista -la de encima-, y si hay
     // alguna: en una placa suelta el id es vacío
     bool placa_en(const QPoint& p, QString& placa_id) const;
@@ -423,6 +469,12 @@ private:
     // Plan §34: la edición, lo cambiado de cada placa y el arrastre
     bool                          edicion_ = false;
     QHash<QString, Ajuste>        ajustes_;
+    QHash<QString, Ruta>          rutas_;        // plan §37
+    bool                          arr_linea_ = false;
+    QString                       arr_clave_;
+    int                           arr_tramo_ = -1;
+    QStringList claves_lineas() const;
+    void menu_linea(int i, const QPointF& escena, const QPoint& donde);
     bool                          hay_sel_ = false;
     QString                       sel_;          // la placa elegida
     bool                          arrastre_ = false;

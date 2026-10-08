@@ -2560,3 +2560,66 @@ vez que se abre el mismo sistema, sin tocar `mcu-sim` ni el protocolo.
 * y la ventana entera, con un modelo falso: colocar, cerrar en plena
   edición, abrir otra ventana con la misma configuración y encontrar la
   placa donde se dejó.
+
+## 37. Los hilos de colores, y las líneas en tramos rectos
+
+Pedido por el uso: con varios hilos entre placas —el servo, el encoder y la
+pantalla de `placas/nucleo_f446re_servo.xml`— todos grises y en curva no hay
+quien los siga. Dos cosas, las dos en `VistaPlaca`
+([`doc/analisis_disposicion_ilustracion.md`](analisis_disposicion_ilustracion.md)):
+
+1. **Cada hilo de su color** (`color_de_hilo`), como los cables de una placa
+   de prototipos:
+   * negro si alguno de sus extremos es una masa —lo que va detrás del
+     último punto: `GND`, `VSS`, `MASA`, `AGND`—;
+   * rojo si es una alimentación: `VCC`, `VDD`, `+...`, `5V`, `3V3`, `U5V`,
+     `E5V`, `VIN` o `IOREF`;
+   * los demás, uno de una paleta de diez colores sin rojo ni negro, por su
+     orden en el sistema.
+
+   El hilo es ahora una línea continua, algo más gruesa, no de trazos. Los
+   acoples siguen como estaban.
+2. **El enrutado** de cualquier línea, en tramos horizontales y verticales
+   con las esquinas redondeadas (`Ruta`). Una ruta es el eje del primer
+   tramo —el que sale de `a`— y la coordenada en mm a la que llega cada
+   tramo, alternando x e y. Los dos últimos tramos llegan solos a `b`, y cada
+   extremo engancha por el lado que mira a su codo. Por eso, al mover una
+   placa, los codos se quedan donde estaban y solo se rehacen los tramos de
+   los extremos, siempre en ángulo recto.
+
+   En la edición, y solo con las líneas que se ven:
+   * un doble clic en una curva la pasa a tramos rectos (`enruta`), con un
+     codo a mitad de camino, saliendo por donde salía;
+   * un doble clic en un tramo le pone un codo ahí (`anade_codo`): parte el
+     tramo en dos, con uno de largo cero en medio, que se separa arrastrando
+     una de las mitades;
+   * arrastrar un tramo lo mueve: uno horizontal en vertical y uno vertical
+     en horizontal (`mueve_tramo`). Al soltarlo se queda en milímetros
+     enteros. El primero y el último, pegados a sus extremos, no se mueven;
+   * el botón derecho en una línea (`linea:<clave>`) tiene «En tramos
+     rectos» o, si ya lo está, «Un codo aqui», «Solo un codo, a mitad de
+     camino» y «Otra vez en curva»;
+   * el cursor lo dice: flechas sobre un tramo que se mueve, una cruz sobre
+     el resto de la línea.
+
+   Las líneas van por encima de las placas, y en la edición se tocan antes
+   que ellas.
+3. **Se guarda con lo demás**: `disposicion()` lleva `lineas`, con la clave
+   de cada línea —`hilo S/P1.PWM N/CN9.6`, `acople N/CN5 S/J5`—, su `eje`
+   (`h` o `v`) y sus `codos`. `pon_disposicion()` ignora una línea que no
+   está, un eje que no es `h` ni `v` o un codo que no es un número.
+   «Restablecer» las deja todas en curva.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 241 → **255** (I18):
+
+* los colores de los hilos;
+* una línea que pasa a tramos rectos con un doble clic, por los lados
+  buenos y con las esquinas redondeadas;
+* un tramo arrastrado a otra x en milímetros enteros, sin mover ninguna
+  placa;
+* un codo más y el escalón que sale al separarlo;
+* una placa movida, con los codos en su sitio y el final siguiéndola;
+* la disposición de ida y vuelta, y lo que no vale;
+* el menú, volver a la curva y «Restablecer».
+
+La prueba del hilo de I11 dice ahora que es una línea continua de su color.

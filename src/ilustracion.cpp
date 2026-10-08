@@ -69,6 +69,86 @@ QColor color_de(QSvgRenderer* r, const QString& id)
     return QColor(int(R / A + 0.5), int(G / A + 0.5), int(B / A + 0.5));
 }
 
+// Plan §37: los puntos de una línea en tramos rectos, de la caja de `a` a la
+// de `b`, con los codos ya en unidades de la escena. El primer tramo sale de
+// `a` por el lado que mira a su primer codo; los dos últimos llegan solos a
+// `b`, por el lado que mira al último.
+QVector<QPointF> puntos_ruta(const QRectF& ra, const QRectF& rb, bool horizontal,
+                             const QVector<double>& codos)
+{
+    const QPointF ca = ra.center(), cb = rb.center();
+    QPointF pa;
+    if (horizontal) {
+        const double hacia = codos.isEmpty() ? cb.x() : codos[0];
+        pa = QPointF(hacia > ca.x() ? ra.right() : ra.left(), ca.y());
+    } else {
+        const double hacia = codos.isEmpty() ? cb.y() : codos[0];
+        pa = QPointF(ca.x(), hacia > ca.y() ? ra.bottom() : ra.top());
+    }
+    QVector<QPointF> p{pa};
+    bool h = horizontal;                         // el tramo que toca
+    for (const double v : codos) {
+        const QPointF q = p.back();
+        p.push_back(h ? QPointF(v, q.y()) : QPointF(q.x(), v));
+        h = !h;
+    }
+    const QPointF ult = p.back();
+    if (!h) {                                    // uno vertical y otro horizontal
+        const QPointF pb(ult.x() > cb.x() ? rb.right() : rb.left(), cb.y());
+        p << QPointF(ult.x(), pb.y()) << pb;
+    } else {                                     // uno horizontal y otro vertical
+        const QPointF pb(cb.x(), ult.y() > cb.y() ? rb.bottom() : rb.top());
+        p << QPointF(pb.x(), ult.y()) << pb;
+    }
+    return p;
+}
+
+// Y de vuelta: los codos de unos puntos que alternan horizontal y vertical,
+// sin los dos últimos tramos, que salen solos
+QVector<double> codos_de(const QVector<QPointF>& p, bool horizontal)
+{
+    QVector<double> c;
+    for (int j = 0; j + 3 < p.size(); ++j) {
+        const bool h = (j % 2 == 0) == horizontal;
+        c.push_back(h ? p[j + 1].x() : p[j + 1].y());
+    }
+    return c;
+}
+
+// Una polilínea con las esquinas redondeadas, de radio `r` como mucho: en
+// cada esquina, la mitad del tramo más corto. Los tramos de largo cero y los
+// puntos en línea no hacen esquina
+QPainterPath redondeada(const QVector<QPointF>& puntos, double r)
+{
+    QVector<QPointF> p;
+    for (const QPointF& x : puntos)
+        if (p.isEmpty() || QLineF(p.back(), x).length() > 1e-9) p.push_back(x);
+    QPainterPath c(p.isEmpty() ? QPointF() : p.front());
+    for (int i = 1; i + 1 < p.size(); ++i) {
+        const QPointF a = p[i - 1], b = p[i], d = p[i + 1];
+        const double l1 = QLineF(a, b).length(), l2 = QLineF(b, d).length();
+        const QPointF u1 = (b - a) / l1, u2 = (d - b) / l2;
+        if (std::abs(u1.x() * u2.y() - u1.y() * u2.x()) < 1e-9) {
+            c.lineTo(b);
+            continue;
+        }
+        const double rr = std::min({r, l1 / 2, l2 / 2});
+        c.lineTo(b - u1 * rr);
+        c.quadTo(b, b + u2 * rr);
+    }
+    if (p.size() > 1) c.lineTo(p.back());
+    return c;
+}
+
+double distancia(const QPointF& s, const QPointF& a, const QPointF& b)
+{
+    const QPointF d = b - a;
+    const double l2 = d.x() * d.x() + d.y() * d.y();
+    double t = l2 > 0 ? ((s - a).x() * d.x() + (s - a).y() * d.y()) / l2 : 0;
+    t = std::clamp(t, 0.0, 1.0);
+    return QLineF(s, a + d * t).length();
+}
+
 QColor mezcla(const QColor& a, const QColor& b, double t, int alfa)
 {
     return QColor(int(a.red() + (b.red() - a.red()) * t),
@@ -479,23 +559,43 @@ void VistaPlaca::traza_lineas()
     static const QColor colores[] = {QColor(0xd9, 0x48, 0x1c), QColor(0x1f, 0x77, 0xb4),
                                      QColor(0x8e, 0x44, 0xad), QColor(0x16, 0xa0, 0x85),
                                      QColor(0xc0, 0x39, 0x2b), QColor(0x2c, 0x3e, 0x50)};
+    auto caja = [&](const QString& ref) {
+        QRectF r = caja_de(ref);
+        if (r.isNull()) r = en_escena(placa_de(ref));
+        return r;
+    };
     auto traza = [&](const QString& a, const QString& b, bool hilo, const QColor& col,
                      const QString& ayuda) {
         if (placa_de(a) == placa_de(b) || !capa(placa_de(a), false) || !capa(placa_de(b), false))
             return;
         const Enganche ea = punto(a, centro(b)), eb = punto(b, centro(a));
-        const QPointF pa = ea.p, pb = eb.p;
+        QPointF pa = ea.p, pb = eb.p;
         if (ea.dir.isNull() || eb.dir.isNull()) return;
-        // Una curva que sale y entra por su lado -en horizontal de una tira
-        // puesta de pie, en vertical de una tumbada-: se ve de dónde a dónde
-        // va aunque cruce por encima de una placa
+        const QString clave = (hilo ? QStringLiteral("hilo %1 %2") : QStringLiteral("acople %1 %2"))
+                                  .arg(a, b);
         QPainterPath camino(pa);
-        const double lado = std::max(std::max(std::abs(pb.x() - pa.x()), std::abs(pb.y() - pa.y())) *
-                                         0.45, 10.0 / mm);
-        camino.cubicTo(pa + ea.dir * lado, pb + eb.dir * lado, pb);
+        QVector<QPointF> puntos;
+        const auto ruta = rutas_.constFind(clave);
+        if (ruta != rutas_.constEnd()) {
+            // Plan §37: en tramos rectos, con las esquinas redondeadas
+            QVector<double> c;
+            for (const double v : ruta->codos) c.push_back(v / mm);
+            puntos = puntos_ruta(caja(a), caja(b), ruta->horizontal, c);
+            pa = puntos.front();
+            pb = puntos.back();
+            camino = redondeada(puntos, 2.5 / mm);
+        } else {
+            // Una curva que sale y entra por su lado -en horizontal de una
+            // tira puesta de pie, en vertical de una tumbada-: se ve de dónde
+            // a dónde va aunque cruce por encima de una placa
+            const double lado = std::max(std::max(std::abs(pb.x() - pa.x()),
+                                                  std::abs(pb.y() - pa.y())) * 0.45, 10.0 / mm);
+            camino.cubicTo(pa + ea.dir * lado, pb + eb.dir * lado, pb);
+        }
         auto* it = new QGraphicsPathItem(camino);
-        QPen lapiz(col, 0.8 / mm);
-        if (hilo) lapiz.setStyle(Qt::DashLine);
+        // Un hilo es un cable, de su color; un acople, del de su acople
+        QPen lapiz(col, (hilo ? 0.9 : 0.8) / mm);
+        lapiz.setJoinStyle(Qt::RoundJoin);
         lapiz.setCapStyle(Qt::RoundCap);
         it->setPen(lapiz);
         it->setOpacity(0.85);
@@ -512,7 +612,12 @@ void VistaPlaca::traza_lineas()
             d->setAcceptedMouseButtons(Qt::NoButton);
         }
         scene()->addItem(it);
-        lineas_.push_back({a, b, hilo, pa, pb, it});
+        Linea l{a, b, hilo, pa, pb, it};
+        l.clave = clave;
+        l.color = col;
+        l.recta = !puntos.isEmpty();
+        l.puntos = puntos;
+        lineas_.push_back(l);
     };
     for (int k = 0; k < placa_.acoples.size(); ++k) {
         const AcopleGui& ac = placa_.acoples[k];
@@ -523,10 +628,186 @@ void VistaPlaca::traza_lineas()
             traza(ac.conectores[i], ac.conectores[i + 1], false, col,
                   QStringLiteral("%1 ⇄ %2").arg(ac.conectores[i], ac.conectores[i + 1]) + como);
     }
-    for (const HiloGui& h : placa_.hilos)
-        traza(h.a, h.b, true, QColor(0x55, 0x55, 0x55),
-              tr("hilo %1 - %2").arg(h.a, h.b));
+    for (int k = 0; k < placa_.hilos.size(); ++k) {
+        const HiloGui& h = placa_.hilos[k];
+        traza(h.a, h.b, true, color_de_hilo(h.a, h.b, k), tr("hilo %1 - %2").arg(h.a, h.b));
+    }
     aplica_lineas();
+}
+
+// -----------------------------------------------------------------------------
+// Plan §37: los colores de los hilos y el enrutado
+// -----------------------------------------------------------------------------
+QColor VistaPlaca::color_de_hilo(const QString& a, const QString& b, int k)
+{
+    // Lo que hay detrás de la placa y del conector: «S/P1.GND» -> «GND»
+    auto nombre = [](const QString& r) {
+        QString n = r.mid(r.indexOf(QLatin1Char('/')) + 1).toUpper();
+        const int p = n.lastIndexOf(QLatin1Char('.'));
+        return p >= 0 ? n.mid(p + 1) : n;
+    };
+    auto es = [&](const QStringList& l) {
+        for (const QString& n : {nombre(a), nombre(b)})
+            for (const QString& x : l)
+                if (n == x || n.startsWith(x)) return true;
+        return false;
+    };
+    if (es({QStringLiteral("GND"), QStringLiteral("VSS"), QStringLiteral("MASA"),
+            QStringLiteral("AGND")}))
+        return QColor(0x26, 0x26, 0x26);
+    if (es({QStringLiteral("VCC"), QStringLiteral("VDD"), QStringLiteral("+"),
+            QStringLiteral("5V"), QStringLiteral("3V3"), QStringLiteral("U5V"),
+            QStringLiteral("E5V"), QStringLiteral("VIN"), QStringLiteral("IOREF")}))
+        return QColor(0xd3, 0x2f, 0x2f);
+    // Ni rojo ni negro: que no se confundan con las de arriba
+    static const QColor paleta[] = {
+        QColor(0x1f, 0x77, 0xb4), QColor(0xf5, 0x7c, 0x00), QColor(0x2c, 0xa0, 0x2c),
+        QColor(0x8e, 0x44, 0xad), QColor(0x17, 0xbe, 0xcf), QColor(0x8c, 0x56, 0x4b),
+        QColor(0xe3, 0x77, 0xc2), QColor(0xb5, 0xa3, 0x00), QColor(0x16, 0xa0, 0x85),
+        QColor(0x34, 0x49, 0x5e)};
+    return paleta[k % 10];
+}
+
+QStringList VistaPlaca::claves_lineas() const
+{
+    QStringList l;
+    for (const AcopleGui& ac : placa_.acoples)
+        for (int i = 0; i + 1 < ac.conectores.size(); ++i)
+            l << QStringLiteral("acople %1 %2").arg(ac.conectores[i], ac.conectores[i + 1]);
+    for (const HiloGui& h : placa_.hilos) l << QStringLiteral("hilo %1 %2").arg(h.a, h.b);
+    return l;
+}
+
+void VistaPlaca::pon_ruta(const QString& clave, const Ruta& r)
+{
+    rutas_.insert(clave, r);
+    traza_lineas();
+    emit disposicion_cambiada();
+}
+
+void VistaPlaca::enruta(const QString& clave)
+{
+    for (const Linea& l : std::as_const(lineas_)) {
+        if (l.clave != clave) continue;
+        // Desde la curva: sale por donde salía, y el codo a mitad de camino
+        Ruta r;
+        const double mm = mm_escena();
+        if (l.recta) {
+            r.horizontal = rutas_.value(clave).horizontal;
+        } else {
+            const QPainterPath& c = l.item->path();
+            const QPointF d = c.elementCount() > 1 ? QPointF(c.elementAt(1)) - l.pa : QPointF(1, 0);
+            r.horizontal = std::abs(d.x()) >= std::abs(d.y());
+        }
+        r.codos = {std::round((r.horizontal ? (l.pa.x() + l.pb.x()) : (l.pa.y() + l.pb.y())) / 2 *
+                              mm)};
+        pon_ruta(clave, r);
+        return;
+    }
+}
+
+void VistaPlaca::desenruta(const QString& clave)
+{
+    if (!rutas_.remove(clave)) return;
+    traza_lineas();
+    emit disposicion_cambiada();
+}
+
+void VistaPlaca::anade_codo(const QString& clave, const QPointF& s)
+{
+    for (const Linea& l : std::as_const(lineas_)) {
+        if (l.clave != clave || !l.recta || l.puntos.size() < 2) continue;
+        // El tramo más cercano, y el punto de él más cercano
+        int k = 0;
+        double mejor = 1e300;
+        for (int j = 0; j + 1 < l.puntos.size(); ++j) {
+            const double d = distancia(s, l.puntos[j], l.puntos[j + 1]);
+            if (d < mejor) { mejor = d; k = j; }
+        }
+        const QPointF a = l.puntos[k], b = l.puntos[k + 1];
+        const QPointF c = QPointF(a.x() == b.x() ? a.x() : std::clamp(s.x(), std::min(a.x(), b.x()),
+                                                                      std::max(a.x(), b.x())),
+                                  a.y() == b.y() ? a.y() : std::clamp(s.y(), std::min(a.y(), b.y()),
+                                                                      std::max(a.y(), b.y())));
+        // Dos puntos iguales en medio: un tramo de largo cero entre las dos
+        // mitades, que siguen alternando
+        QVector<QPointF> p = l.puntos;
+        p.insert(k + 1, c);
+        p.insert(k + 1, c);
+        Ruta r = rutas_.value(clave);
+        const double mm = mm_escena();
+        r.codos.clear();
+        for (const double v : codos_de(p, r.horizontal)) r.codos.push_back(std::round(v * mm * 10) / 10);
+        pon_ruta(clave, r);
+        return;
+    }
+}
+
+void VistaPlaca::mueve_tramo(const QString& clave, int tramo, double mm)
+{
+    auto it = rutas_.find(clave);
+    if (it == rutas_.end() || tramo < 1 || tramo > it->codos.size()) return;
+    it->codos[tramo - 1] = mm;
+    traza_lineas();
+    emit disposicion_cambiada();
+}
+
+void VistaPlaca::restablece_lineas()
+{
+    if (rutas_.isEmpty()) return;
+    rutas_.clear();
+    traza_lineas();
+    emit disposicion_cambiada();
+}
+
+int VistaPlaca::linea_en(const QPoint& p, int* tramo) const
+{
+    const QPointF s = mapToScene(p);
+    const double tol = 5.0 / std::max(transform().m11(), 1e-9);     // 5 píxeles
+    for (int i = lineas_.size() - 1; i >= 0; --i) {
+        const Linea& l = lineas_[i];
+        if (!l.item->isVisible()) continue;
+        if (l.recta) {
+            for (int k = 0; k + 1 < l.puntos.size(); ++k)
+                if (distancia(s, l.puntos[k], l.puntos[k + 1]) <= tol) {
+                    if (tramo) *tramo = k;
+                    return i;
+                }
+            continue;
+        }
+        QPainterPathStroker borde;
+        borde.setWidth(2 * tol);
+        if (borde.createStroke(l.item->path()).contains(s)) {
+            if (tramo) *tramo = -1;
+            return i;
+        }
+    }
+    return -1;
+}
+
+void VistaPlaca::menu_linea(int i, const QPointF& s, const QPoint& donde)
+{
+    const Linea l = lineas_[i];
+    auto* menu = new QMenu(this);
+    menu->setObjectName(QStringLiteral("linea:%1").arg(l.clave));
+    menu->addSection(l.item->toolTip());
+    const QString clave = l.clave;
+    if (!l.recta) {
+        QAction* a = menu->addAction(tr("En tramos rectos"));
+        a->setObjectName(QStringLiteral("enruta"));
+        connect(a, &QAction::triggered, this, [this, clave] { enruta(clave); });
+    } else {
+        QAction* c = menu->addAction(tr("Un codo aqui"));
+        c->setObjectName(QStringLiteral("codo"));
+        connect(c, &QAction::triggered, this, [this, clave, s] { anade_codo(clave, s); });
+        QAction* r = menu->addAction(tr("Solo un codo, a mitad de camino"));
+        r->setObjectName(QStringLiteral("enruta"));
+        connect(r, &QAction::triggered, this, [this, clave] { enruta(clave); });
+        QAction* d = menu->addAction(tr("Otra vez en curva"));
+        d->setObjectName(QStringLiteral("desenruta"));
+        connect(d, &QAction::triggered, this, [this, clave] { desenruta(clave); });
+    }
+    abre_menu(menu, donde);
 }
 
 // Plan §33: cada línea, visible si se ven las de alguna de sus dos placas
@@ -1046,6 +1327,17 @@ QJsonObject VistaPlaca::disposicion() const
         if (!o.isEmpty()) placas.insert(it.key(), o);
     }
     if (!placas.isEmpty()) d.insert(QStringLiteral("placas"), placas);
+    // Plan §37: las líneas en tramos rectos
+    QJsonObject lineas;
+    for (auto it = rutas_.constBegin(); it != rutas_.constEnd(); ++it) {
+        QJsonArray c;
+        for (const double v : it->codos) c.append(v);
+        lineas.insert(it.key(), QJsonObject{{QStringLiteral("eje"), it->horizontal
+                                                                        ? QStringLiteral("h")
+                                                                        : QStringLiteral("v")},
+                                            {QStringLiteral("codos"), c}});
+    }
+    if (!lineas.isEmpty()) d.insert(QStringLiteral("lineas"), lineas);
     return d;
 }
 
@@ -1070,6 +1362,25 @@ void VistaPlaca::pon_disposicion(const QJsonObject& d)
         const double k = o.value(QStringLiteral("escala")).toDouble(1.0);
         if (k > 0) a.escala = std::clamp(k, escalas().front(), escalas().back());
         ajustes_.insert(it.key(), a);
+    }
+    // Plan §37: las rutas de las líneas que hay; un eje que no es h ni v, o un
+    // codo que no es un número, y esa línea se queda en curva
+    rutas_.clear();
+    const QStringList hay = claves_lineas();
+    const QJsonObject lineas = d.value(QStringLiteral("lineas")).toObject();
+    for (auto it = lineas.constBegin(); it != lineas.constEnd(); ++it) {
+        if (!hay.contains(it.key())) continue;
+        const QJsonObject o = it.value().toObject();
+        const QString eje = o.value(QStringLiteral("eje")).toString();
+        if (eje != QLatin1String("h") && eje != QLatin1String("v")) continue;
+        Ruta r;
+        r.horizontal = eje == QLatin1String("h");
+        bool bien = true;
+        for (const QJsonValue& v : o.value(QStringLiteral("codos")).toArray()) {
+            if (!v.isDouble()) bien = false;
+            r.codos.push_back(v.toDouble());
+        }
+        if (bien) rutas_.insert(it.key(), r);
     }
     const QJsonArray l = d.value(QStringLiteral("lienzo")).toArray();
     lienzo_fijo_ = l.size() == 4 && l[2].toDouble() > 0 && l[3].toDouble() > 0;
@@ -1235,6 +1546,22 @@ void VistaPlaca::mousePressEvent(QMouseEvent* e)
     // Plan §34: en la edición, el botón izquierdo coge una placa
     if (edicion_) {
         QString id;
+        // Plan §37: un tramo de una línea en tramos rectos se arrastra; las
+        // líneas van por encima de las placas
+        int tramo = -1;
+        const int li = e->button() == Qt::LeftButton ? linea_en(e->pos(), &tramo) : -1;
+        if (li >= 0 && lineas_[li].recta && tramo >= 1 &&
+            tramo <= rutas_.value(lineas_[li].clave).codos.size()) {
+            arr_linea_ = true;
+            arr_clave_ = lineas_[li].clave;
+            arr_tramo_ = tramo;
+            e->accept();
+            return;
+        }
+        if (li >= 0) {                  // una curva, o un tramo pegado a su extremo
+            e->accept();
+            return;
+        }
         if (e->button() == Qt::LeftButton && placa_en(e->pos(), id)) {
             congela();
             hay_sel_ = true;
@@ -1282,6 +1609,19 @@ void VistaPlaca::mousePressEvent(QMouseEvent* e)
 void VistaPlaca::mouseReleaseEvent(QMouseEvent* e)
 {
     if (edicion_) {
+        if (e->button() == Qt::LeftButton && arr_linea_) {
+            arr_linea_ = false;
+            // A milímetros enteros, como las placas
+            auto it = rutas_.find(arr_clave_);
+            if (it != rutas_.end() && arr_tramo_ >= 1 && arr_tramo_ <= it->codos.size()) {
+                double& v = it->codos[arr_tramo_ - 1];
+                v = std::round(v);
+            }
+            traza_lineas();
+            emit disposicion_cambiada();
+            e->accept();
+            return;
+        }
         if (e->button() == Qt::LeftButton && arrastre_) {
             arrastre_ = false;
             // A milímetros enteros: lo que se guarda se lee
@@ -1314,7 +1654,15 @@ void VistaPlaca::mouseDoubleClickEvent(QMouseEvent* e)
     // Plan §34: en la edición, un doble clic gira la placa un cuarto de vuelta
     if (edicion_) {
         QString id;
-        if (e->button() == Qt::LeftButton && placa_en(e->pos(), id)) gira_placa(id, 90);
+        // Plan §37: en una línea, a tramos rectos; en uno de sus tramos, un codo
+        const int li = e->button() == Qt::LeftButton ? linea_en(e->pos()) : -1;
+        if (li >= 0) {
+            const QString clave = lineas_[li].clave;
+            if (lineas_[li].recta) anade_codo(clave, mapToScene(e->pos()));
+            else enruta(clave);
+        } else if (e->button() == Qt::LeftButton && placa_en(e->pos(), id)) {
+            gira_placa(id, 90);
+        }
         e->accept();
         return;
     }
@@ -1324,13 +1672,35 @@ void VistaPlaca::mouseDoubleClickEvent(QMouseEvent* e)
 void VistaPlaca::mouseMoveEvent(QMouseEvent* e)
 {
     if (edicion_) {
-        if (arrastre_) {
+        if (arr_linea_) {
+            // El tramo sigue al ratón: la y si es horizontal, la x si es vertical
+            const Ruta r = rutas_.value(arr_clave_);
+            const bool h = (arr_tramo_ % 2 == 0) == r.horizontal;
+            const QPointF s = mapToScene(e->pos()) * mm_escena();
+            auto it = rutas_.find(arr_clave_);
+            if (it != rutas_.end() && arr_tramo_ <= it->codos.size()) {
+                it->codos[arr_tramo_ - 1] = h ? s.y() : s.x();
+                traza_lineas();
+            }
+        } else if (arrastre_) {
             const QPointF d = (mapToScene(e->pos()) - arr_ini_) * mm_escena();
             ajustes_[sel_].pos_mm = arr_mm_ + d;
             coloca(false);              // sin reencajar la vista: no da saltos
         } else {
             QString id;
-            viewport()->setCursor(placa_en(e->pos(), id) ? Qt::OpenHandCursor : Qt::ArrowCursor);
+            int tramo = -1;
+            const int li = linea_en(e->pos(), &tramo);
+            Qt::CursorShape c = Qt::ArrowCursor;
+            if (li >= 0) {
+                const Linea& l = lineas_[li];
+                const bool movible = l.recta && tramo >= 1 &&
+                                     tramo <= rutas_.value(l.clave).codos.size();
+                const bool h = movible && (tramo % 2 == 0) == rutas_.value(l.clave).horizontal;
+                c = !movible ? Qt::CrossCursor : h ? Qt::SizeVerCursor : Qt::SizeHorCursor;
+            } else if (placa_en(e->pos(), id)) {
+                c = Qt::OpenHandCursor;
+            }
+            viewport()->setCursor(c);
         }
         e->accept();
         return;
@@ -1389,7 +1759,9 @@ void VistaPlaca::contextMenuEvent(QContextMenuEvent* e)
 {
     if (edicion_) {
         QString id;
-        if (placa_en(e->pos(), id)) menu_placa(id, e->globalPos());
+        const int li = linea_en(e->pos());
+        if (li >= 0) menu_linea(li, mapToScene(e->pos()), e->globalPos());
+        else if (placa_en(e->pos(), id)) menu_placa(id, e->globalPos());
         e->accept();
         return;
     }
@@ -1458,6 +1830,7 @@ void VistaPlaca::pon_edicion(bool si)
     suelta_mandos();
     edicion_ = si;
     arrastre_ = false;
+    arr_linea_ = false;
     if (!marco_sel_) {
         marco_sel_ = new QGraphicsRectItem;
         QPen lapiz(QColor(0x1f, 0x77, 0xb4), 2);
@@ -1675,8 +2048,10 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
                                 "cambiarles el tamano. Mientras esta pulsado, los mandos del "
                                 "dibujo no hacen nada."));
         ayuda_edicion_ = new QLabel(tr("Arrastra una placa para moverla · rueda: tamaño · doble "
-                                       "clic o Mayús+rueda: girarla · boton derecho: mas"),
+                                       "clic o Mayús+rueda: girarla · doble clic en una linea: "
+                                       "tramos rectos y codos · boton derecho: mas"),
                                     this);
+        ayuda_edicion_->setWordWrap(true);
         ayuda_edicion_->setObjectName(QStringLiteral("ayuda_edicion"));
         ayuda_edicion_->setEnabled(false);
         ayuda_edicion_->setVisible(false);
@@ -1700,11 +2075,12 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
         restablecer_ = new QToolButton(this);
         restablecer_->setObjectName(QStringLiteral("restablecer"));
         restablecer_->setText(tr("Restablecer"));
-        restablecer_->setToolTip(tr("Todas las placas como al principio, el lienzo a su medida, "
-                                    "y olvidar lo que se habia guardado"));
+        restablecer_->setToolTip(tr("Todas las placas como al principio, las lineas en curva, el "
+                                    "lienzo a su medida, y olvidar lo que se habia guardado"));
         restablecer_->setEnabled(false);
         connect(restablecer_, &QToolButton::clicked, this, [this] {
             vista_->restablece_todas();
+            vista_->restablece_lineas();
             vista_->lienzo_automatico();
             vista_->ajusta();
             cambiada_ = true;
