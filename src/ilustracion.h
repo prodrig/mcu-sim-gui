@@ -126,15 +126,24 @@
 // COLOCAR las placas en vez de tocar sus piezas. Mientras está pulsado los
 // mandos no hacen nada; al soltarlo vuelven como estuvieran. Arrastrar una
 // placa la mueve; un doble clic o Mayús+rueda la gira de 90 en 90 grados; el
-// botón derecho tiene los dos giros y «colocar como al principio». La primera
+// botón derecho tiene los dos giros, los tamaños y «colocar como al
+// principio»; la rueda sola la ESCALA (plan §35). La primera
 // vez que se toca una, las demás se quedan donde están. Lo que se mueve va con
 // la placa: sus piezas, sus halos, la imagen de su pantalla, su bandeja y las
-// líneas; las etiquetas, derechas y debajo de su pieza.
+// líneas; las etiquetas, derechas y debajo de su pieza, y del mismo tamaño
+// aunque la placa crezca.
+//
+// EL LIENZO Y EL ZOOM (plan §35): sin decir nada, la vista enseña todas las
+// placas, justas, como siempre. Ctrl+rueda acerca o aleja -en la edición y
+// fuera de ella- y entonces hay barras para moverse; «Ajustar» vuelve a
+// enseñarlo todo. El lienzo puede tener un tamaño en milímetros -«Lienzo...»,
+// en la edición-: un rectángulo blanco sobre gris donde colocar las placas,
+// que es lo que «Ajustar» enseña.
 //
 // Como el panel, cada widget lleva un `objectName` para las pruebas:
 // `dibujo:<placa>` la fila de cada placa, `abrir:<placa>` su botón,
 // `conexiones:<placa>` el de sus líneas, `edicion` el botón del modo de
-// edición,
+// edición, `lienzo` y `ajustar` los del lienzo y el zoom,
 // `informe:<placa>` lo encontrado, `vista:` el dibujo -uno para todas-, y en
 // la escena `vivo:<pieza>`. En una placa suelta, <placa> es vacío: `dibujo:`.
 // =============================================================================
@@ -268,13 +277,33 @@ public:
         bool    fija = false;
         QPointF pos_mm;
         int     giro = 0;             // 0, 90, 180 o 270, a la derecha
+        double  escala = 1.0;         // sobre su tamaño real (plan §35)
     };
+    // Los tamaños que da la rueda, de menos a más; 1 es el tamaño real
+    static const QVector<double>& escalas();
     Ajuste ajuste(const QString& placa_id) const { return ajustes_.value(placa_id); }
     // Cambian una placa y la recolocan. Girar es de 90 en 90 grados, sobre su
     // centro; mover deja la placa con esa esquina. La primera vez que se toca
     // una, las demás se quedan donde están
     void gira_placa(const QString& placa_id, int grados);
     void mueve_placa(const QString& placa_id, const QPointF& pos_mm);
+    // Plan §35: la escala, sobre su centro; `pasos` sube o baja por `escalas()`
+    void escala_placa(const QString& placa_id, double escala);
+    void escala_pasos(const QString& placa_id, int pasos);
+    // EL LIENZO, en mm de la escena. Automático -lo de siempre: las placas
+    // justas- o fijo; `lienzo()` es el que hay ahora, sea cual sea
+    void pon_lienzo(const QRectF& mm);
+    void lienzo_automatico();
+    bool lienzo_fijo() const { return lienzo_fijo_; }
+    QRectF lienzo() const;
+    // Lo que ocupan las placas, en mm de la escena
+    QRectF caja_placas() const;
+    // EL ZOOM: `factor` sobre lo que hay, alrededor de ese punto de la vista;
+    // `ajusta()` vuelve a enseñarlo todo. Ajustada, la vista sigue al tamaño
+    // de la ventana
+    void zoom(double factor, const QPoint& centro);
+    void ajusta();
+    bool ajustada() const { return ajustada_; }
     // Como al principio: una placa -vuelve a colocarse sola- o todas
     void restablece(const QString& placa_id);
     void restablece_todas();
@@ -286,8 +315,10 @@ public:
 
 signals:
     void orden(quint16 pieza, quint16 mando, float valor);
-    // Plan §34: alguien ha cambiado dónde está una placa, o cómo
+    // Plan §34: alguien ha cambiado dónde está una placa, o cómo; o el lienzo
     void disposicion_cambiada();
+    // Plan §35: la vista deja de estar ajustada, o vuelve a estarlo
+    void ajuste_vista(bool ajustada);
 
 protected:
     void mousePressEvent(QMouseEvent* e) override;
@@ -383,6 +414,11 @@ private:
     QPointF                       arr_ini_;      // dónde empezó, en la escena
     QPointF                       arr_mm_;       // la esquina de la placa entonces
     QGraphicsRectItem*            marco_sel_ = nullptr;
+    // Plan §35: el lienzo fijo y el zoom
+    bool                          lienzo_fijo_ = false;
+    QRectF                        lienzo_mm_;
+    QGraphicsRectItem*            hoja_ = nullptr;   // el lienzo fijo, en blanco
+    bool                          ajustada_ = true;
     void congela();
     void suelta_mandos();
     void coloca_etiqueta(QGraphicsSimpleTextItem* t) const;
@@ -441,6 +477,9 @@ public:
     // Plan §34: el modo de edición, como el botón «Edición»
     void pon_edicion(bool si);
     bool edicion() const;
+    // Plan §35: el diálogo del lienzo (`dialogo_lienzo`), sin esperar a que se
+    // cierre: lo que se acepte se aplica
+    void abre_lienzo();
 
     // Plan §33: el botón de las líneas de esa placa; nulo en una placa suelta
     QToolButton* boton_conexiones(const QString& placa_id) const
@@ -467,6 +506,8 @@ private:
     VistaPlaca*                  vista_ = nullptr;
     bool                         activos_ = false;
     QToolButton*                 edicion_ = nullptr;
+    QToolButton*                 boton_lienzo_ = nullptr;
+    QToolButton*                 ajustar_ = nullptr;
     QLabel*                      ayuda_edicion_ = nullptr;
 };
 

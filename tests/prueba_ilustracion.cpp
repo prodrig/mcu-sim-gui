@@ -67,6 +67,10 @@
 //       y con el menú, sobre su centro; las líneas, por el lado bueno; las
 //       etiquetas, derechas bajo su pieza; colocar todas como al principio; y
 //       al soltar el botón, los mandos otra vez.
+//   I16 (plan §35) la ESCALA de cada placa con la rueda y el menú, sobre su
+//       centro, sin que crezcan sus etiquetas; el LIENZO fijo con su diálogo,
+//       centrado en las placas, y otra vez automático; y el ZOOM con
+//       Ctrl+rueda -también sobre un mando, sin moverlo- y «Ajustar».
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -87,6 +91,9 @@
 #include <QAction>
 #include <QPushButton>
 #include <QToolButton>
+#include <QCheckBox>
+#include <QDialog>
+#include <QDoubleSpinBox>
 #include <QScrollArea>
 #include <QStatusBar>
 #include <QTabWidget>
@@ -1687,7 +1694,7 @@ int main(int argc, char** argv)
         if (izq) izq->trigger();
         comprueba(v->ajuste("S").giro == 270, "girar a la izquierda: 270");
 
-        // Una rueda sin Mayus y un clic no hacen nada mas: no hay mandos
+        // La rueda sola no la gira: la escala (plan §35)
         rueda(v, v->mapFromScene(c1), 2);
         comprueba(v->ajuste("S").giro == 270, "la rueda sola no gira la placa");
 
@@ -1759,6 +1766,175 @@ int main(int argc, char** argv)
                       std::abs(et.width() - antes.width()) < 1e-6,
                   "una placa suelta tambien se gira: la pieza queda de pie, y su etiqueta, "
                   "derecha, del mismo tamano y centrada bajo ella");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I16 La escala de las placas, el lienzo y el zoom\n");
+    {
+        QByteArray sx(SISTEMA_XML);
+        const PlacaGui s = placa_de(sx.constData(), CATALOGO_SISTEMA_XML);
+        VistaIlustracion il(s);
+        il.resize(900, 500);
+        il.show();
+        espera([] { return false; }, 50);
+        VistaPlaca* v = il.vista("N");
+        auto* lienzo = il.findChild<QToolButton*>("lienzo");
+        auto* ajustar = il.findChild<QToolButton*>("ajustar");
+        comprueba(v && lienzo && ajustar && !lienzo->isEnabled() && !ajustar->isEnabled() &&
+                      v->ajustada() && !v->lienzo_fijo(),
+                  "los botones Lienzo y Ajustar, apagados: fuera de la edicion, y con la vista "
+                  "ajustada");
+        if (!v || !lienzo || !ajustar) return resultado();
+        il.pon_edicion(true);
+        comprueba(lienzo->isEnabled(), "en la edicion, Lienzo se enciende");
+        int cambios = 0;
+        QObject::connect(v, &VistaPlaca::disposicion_cambiada, [&] { ++cambios; });
+
+        // La escala
+        const QRectF s0 = v->en_escena("S");
+        rueda(v, v->mapFromScene(s0.center()), 1);
+        const QRectF s1 = v->en_escena("S");
+        comprueba(v->ajuste("S").escala == 1.25 && std::abs(s1.width() - s0.width() * 1.25) < 1e-6 &&
+                      std::abs(s1.center().x() - s0.center().x()) < 1e-6 &&
+                      std::abs(s1.center().y() - s0.center().y()) < 1e-6 && cambios == 1,
+                  "la rueda sobre S la agranda un paso, al 125 %, sobre su centro");
+        rueda(v, v->mapFromScene(s1.center()), -2);
+        comprueba(v->ajuste("S").escala == 0.75 &&
+                      std::abs(v->en_escena("S").width() - s0.width() * 0.75) < 1e-6,
+                  "dos hacia abajo: 75 %");
+        {
+            const QPoint p = v->mapFromScene(s0.center());
+            QContextMenuEvent e(QContextMenuEvent::Mouse, p, v->viewport()->mapToGlobal(p));
+            QCoreApplication::sendEvent(v->viewport(), &e);
+        }
+        QMenu* menu = v->menu_abierto();
+        QAction* real = menu ? menu->findChild<QAction*>("tamano_real") : nullptr;
+        comprueba(real && real->isEnabled() && real->text().contains("75 %") &&
+                      menu->findChild<QAction*>("mas_grande") &&
+                      menu->findChild<QAction*>("mas_pequena"),
+                  "el menu de la placa tiene mas grande, mas pequena y el tamano real, que dice "
+                  "el de ahora");
+        if (real) real->trigger();
+        if (menu) menu->close();
+        comprueba(v->ajuste("S").escala == 1.0 && std::abs(v->en_escena("S").width() - s0.width()) < 1e-6,
+                  "tamano real: otra vez al 100 %");
+
+        // El lienzo
+        const QRectF placas = v->caja_placas();
+        il.abre_lienzo();
+        auto* d = il.findChild<QDialog*>("dialogo_lienzo");
+        auto* aut = d ? d->findChild<QCheckBox*>("automatico") : nullptr;
+        auto* an = d ? d->findChild<QDoubleSpinBox*>("ancho") : nullptr;
+        auto* al = d ? d->findChild<QDoubleSpinBox*>("alto") : nullptr;
+        comprueba(d && aut && an && al && aut->isChecked() && !an->isEnabled(),
+                  "el dialogo del lienzo: automatico, y los milimetros apagados");
+        if (!d || !aut || !an || !al) return resultado();
+        aut->setChecked(false);
+        an->setValue(400);
+        al->setValue(250);
+        d->accept();
+        espera([] { return false; }, 20);
+        const QRectF l = v->lienzo();
+        comprueba(v->lienzo_fijo() && l.size() == QSizeF(400, 250) &&
+                      std::abs(l.center().x() - placas.center().x()) <= 0.5 &&
+                      std::abs(l.center().y() - placas.center().y()) <= 0.5 && cambios >= 4,
+                  "un lienzo fijo de 400 x 250 mm, centrado en las placas");
+        const QRectF esc = v->scene()->sceneRect();
+        const double mm = v->mm_escena();
+        comprueba(std::abs(esc.width() * mm - 400) < 1e-6 && std::abs(esc.height() * mm - 250) < 1e-6,
+                  "la escena es el lienzo: las placas caben en el");
+        const QImage img = v->imagen(800);
+        const QPointF hueco = (l.topLeft() + QPointF(5, 5)) / mm;
+        comprueba(en(img, *v, hueco.x(), hueco.y()) == qRgb(255, 255, 255),
+                  "y es una hoja blanca: en su esquina no hay nada");
+        il.abre_lienzo();
+        d = il.findChild<QDialog*>("dialogo_lienzo");
+        if (d) {
+            an = d->findChild<QDoubleSpinBox*>("ancho");
+            comprueba(an && an->value() == 400 && !d->findChild<QCheckBox*>("automatico")->isChecked(),
+                      "el dialogo vuelve con lo que hay");
+            d->findChild<QCheckBox*>("automatico")->setChecked(true);
+            d->accept();
+        }
+        espera([] { return false; }, 20);
+        comprueba(!v->lienzo_fijo(), "y automatico otra vez");
+
+        // El zoom
+        const double k0 = v->transform().m11();
+        const QPoint p = v->mapFromScene(v->en_escena("N").center()) + QPoint(13, 7);
+        {
+            QWheelEvent e(QPointF(p), QPointF(v->viewport()->mapToGlobal(p)), QPoint(), QPoint(0, 120),
+                          Qt::NoButton, Qt::ControlModifier, Qt::NoScrollPhase, false);
+            QCoreApplication::sendEvent(v->viewport(), &e);
+        }
+        comprueba(!v->ajustada() && ajustar->isEnabled() &&
+                      std::abs(v->transform().m11() - k0 * 1.25) < 1e-9 &&
+                      v->ajuste("N").escala == 1.0 &&
+                      v->horizontalScrollBarPolicy() == Qt::ScrollBarAsNeeded,
+                  "Ctrl+rueda acerca un 25 %, sin escalar la placa: hay barras para moverse, y "
+                  "Ajustar se enciende");
+        ajustar->click();
+        comprueba(v->ajustada() && !ajustar->isEnabled() &&
+                      std::abs(v->transform().m11() - k0) < 1e-9,
+                  "Ajustar vuelve a enseñarlo todo");
+        il.pon_edicion(false);
+        comprueba(!lienzo->isEnabled(), "fuera de la edicion, Lienzo se apaga");
+    }
+    {
+        // Ctrl+rueda sobre un mando, fuera de la edicion: zoom, y el mando quieto
+        const PlacaGui p = placa_de(PLACA_MANDOS, CATALOGO_MANDOS);
+        QString e;
+        std::unique_ptr<VistaPlaca> v(VistaPlaca::crea(p, QString(), DIBUJO_MANDOS, {}, e));
+        v->resize(800, 200);
+        v->show();
+        espera([] { return false; }, 50);
+        std::vector<OrdenVista> o;
+        QObject::connect(v.get(), &VistaPlaca::orden,
+                         [&](quint16 pz, quint16 m, float x) { o.push_back({pz, m, x}); });
+        v->activa_mandos(true);
+        const QPoint pot = v->donde(2);
+        QWheelEvent ev(QPointF(pot), QPointF(v->viewport()->mapToGlobal(pot)), QPoint(),
+                       QPoint(0, -120), Qt::NoButton, Qt::ControlModifier, Qt::NoScrollPhase,
+                       false);
+        QCoreApplication::sendEvent(v->viewport(), &ev);
+        comprueba(o.empty() && !v->ajustada(),
+                  "Ctrl+rueda sobre un potenciometro aleja la vista y no lo mueve");
+        rueda(v.get(), v->donde(2), 1);
+        comprueba(o.size() == 1, "la rueda sola, si");
+    }
+    {
+        // Una placa al doble: sus etiquetas, del mismo tamano
+        const char* PLACA_ET =
+            "<placa nombre=\"et\">\n"
+            "  <componente tipo=\"Fuente\" id=\"F\"><pin nombre=\"pin\" nodo=\"PA0\"/></componente>\n"
+            "</placa>\n";
+        const char* CAT_ET =
+            "<catalogo>\n"
+            "  <pieza idx=\"0\" id=\"F\" tipo=\"Fuente\">\n"
+            "    <observable idx=\"0\" id_obs=\"0\" nombre=\"corriente\" unidad=\"mA\" min=\"0\" max=\"100\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "</catalogo>\n";
+        const char* DIBUJO_ET =
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 140 60\">\n"
+            "  <rect x=\"0\" y=\"0\" width=\"140\" height=\"60\" fill=\"#1e5631\"/>\n"
+            "  <rect id=\"F\" x=\"20\" y=\"10\" width=\"30\" height=\"20\" fill=\"#c0c0c0\"/>\n"
+            "</svg>\n";
+        const PlacaGui p = placa_de(PLACA_ET, CAT_ET);
+        QString e;
+        std::unique_ptr<VistaPlaca> v(VistaPlaca::crea(p, QString(), DIBUJO_ET, {}, e));
+        v->pon_valor(0, 12.5f);
+        QGraphicsSimpleTextItem* t = v->etiqueta(0);
+        const QRectF et0 = t->sceneBoundingRect(), pz0 = v->vivo(0)->sceneBoundingRect();
+        v->escala_placa(QString(), 2.0);
+        const QRectF et1 = t->sceneBoundingRect(), pz1 = v->vivo(0)->sceneBoundingRect();
+        comprueba(std::abs(pz1.width() - 2 * pz0.width()) < 1e-6 &&
+                      std::abs(et1.width() - et0.width()) < 1e-6 &&
+                      std::abs(et1.center().x() - pz1.center().x()) < 1e-6 &&
+                      et1.top() >= pz1.bottom() - 1e-6,
+                  "una placa al doble: la pieza al doble, y su etiqueta del mismo tamano, "
+                  "centrada bajo ella");
+        v->escala_placa(QString(), 9.0);
+        comprueba(v->ajuste(QString()).escala == 4.0, "y nunca mas de 4 veces");
     }
 
     return resultado();

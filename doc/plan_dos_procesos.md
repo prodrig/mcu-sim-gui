@@ -2471,3 +2471,49 @@ un sistema con dos placas:
 Después, en una placa de mandos, que un clic y la rueda no ordenan nada en la
 edición y fuera de ella sí. Y en una placa suelta girada, que su etiqueta
 queda derecha, del mismo tamaño y centrada bajo la pieza.
+
+## 35. Colocar las placas: la escala, el lienzo y el zoom
+
+La fase 2 de [`doc/analisis_disposicion_ilustracion.md`](analisis_disposicion_ilustracion.md).
+
+1. **La escala de cada placa**, sobre su tamaño real (`Ajuste::escala`), y
+   sobre su centro, como el giro.
+   * **En la edición:** la rueda sola la cambia un paso de `escalas()` —25 %
+     a 400 %—, y Mayús+rueda sigue girando. El botón derecho de la placa
+     tiene «Mas grande», «Mas pequena» y «Tamano real», con la de ahora en el
+     texto.
+   * **Desde el código:** `escala_placa` y `escala_pasos`.
+   * **Las etiquetas** se quedan del mismo tamaño: se les quita la escala de
+     la persona, que la placa lleva en su raíz (`data(2)`), igual que se les
+     quita el giro.
+   * **Las líneas** no son de ninguna placa, y no engordan.
+2. **El lienzo**: automático —las placas justas, lo de siempre— o fijo, en
+   mm de la escena (`pon_lienzo`, `lienzo_automatico`, `lienzo`).
+   * **Cómo se pide:** «Lienzo...», que se enciende en la edición, abre su
+     diálogo (`dialogo_lienzo`). En él, «A la medida de las placas» o un
+     ancho y un alto, y un botón que los pone a la medida de las placas más
+     10 mm por lado.
+   * **Dónde queda:** uno nuevo se centra en las placas; uno que ya era fijo
+     conserva su esquina.
+   * **Cómo se ve:** una hoja blanca sobre gris. La escena es el lienzo y lo
+     que se salga de él, y `imagen()` la pinta.
+3. **El zoom**: Ctrl+rueda, un 25 % por muesca, en la edición y fuera de
+   ella. Va antes que los mandos: sobre un potenciómetro, aleja la vista y no
+   lo mueve.
+   * **Al hacer zoom:** la vista deja de estar ajustada (`ajustada()`), salen
+     las barras y deja de reencajarse al cambiar de tamaño. Mira de dejar
+     bajo el ratón lo que había, hasta donde lo permite la escena.
+   * **«Ajustar»** (`ajustar`), que solo se enciende entonces, vuelve a
+     enseñar todo el lienzo.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 210 → **229** (I16):
+
+* los botones apagados y encendidos;
+* la rueda sobre una placa, al 125 % y al 75 % sobre su centro, y el menú
+  con el tamaño real;
+* el diálogo del lienzo: uno de 400 x 250 mm centrado en las placas, que es
+  la escena y una hoja blanca, vuelta a lo que había y otra vez automático;
+* Ctrl+rueda, que acerca un 25 % sin escalar ninguna placa, y «Ajustar»;
+* Ctrl+rueda sobre un potenciómetro, que no lo mueve;
+* una placa al doble con su etiqueta del mismo tamaño, y nunca más de 4
+  veces.

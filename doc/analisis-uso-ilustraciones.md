@@ -314,8 +314,8 @@ la misma escala, como en la mesa. Si no lo da, se iguala la altura y se avisa.
   de conector a conector (los conectores tienen id: §5) o de pin a pin si el
   dibujo marca los pines. Las líneas nacen escondidas, y cada placa enseña
   las suyas con un botón (plan §33). Con el botón «Edición» las placas se
-  mueven y se giran con el ratón (plan §34,
-  `doc/analisis_disposicion_ilustracion.md`);
+  mueven, se giran y se escalan con el ratón, y el lienzo tiene el tamaño
+  que se le dé (plan §34 y §35, `doc/analisis_disposicion_ilustracion.md`);
 * **apiladas**: un shield encima de su Nucleo, o una pila PC/104 en cascada.
   Si el dibujo de cada placa marca dónde están sus conectores, **dos conectores
   acoplados en cada placa** dan la posición y el giro de la de arriba sobre la

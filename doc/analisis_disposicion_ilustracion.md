@@ -289,3 +289,28 @@ ahora, y se puede usar sin las siguientes.
 * **Sin tocar nada, todo es como antes**: la colocación automática y la
   escena de una placa suelta son exactamente las de siempre.
 * **Cómo se comprueba**: `prueba_ilustracion` I15 (195 → 210).
+
+### Fase 2, hecha (plan §35 de `mcu-sim-gui`)
+
+* **La escala de cada placa** (`Ajuste::escala`), sobre su tamaño real y
+  sobre su centro.
+  * **Cómo se cambia, en la edición:** la rueda sola sube o baja un paso;
+    Mayús+rueda sigue siendo girar. El botón derecho tiene «Mas grande»,
+    «Mas pequena» y «Tamano real», que dice la de ahora.
+  * **Los pasos:** 25, 33, 50, 67, 75, 100, 125, 150, 200, 300 y 400 %.
+  * **Lo que no crece:** las etiquetas de la placa, ni el grosor de las
+    líneas.
+* **El lienzo.** «Lienzo...», en la edición, abre un diálogo:
+  * por omisión es «A la medida de las placas», como siempre;
+  * si no, se le da un ancho y un alto en milímetros, con un botón que los
+    pone a la medida de las placas más 10 mm por lado;
+  * un lienzo nuevo se centra en las placas, y uno que ya era fijo conserva
+    su esquina.
+
+  En la vista, el lienzo fijo es una hoja blanca sobre fondo gris, y la
+  escena es el lienzo más lo que se salga de él.
+* **El zoom.** Ctrl+rueda acerca o aleja un 25 % cada muesca, en la edición y
+  fuera de ella, también sobre un mando, que no se mueve. Con el zoom salen
+  las barras de desplazamiento y la vista deja de seguir el tamaño de la
+  ventana. «Ajustar» vuelve a enseñar todo el lienzo.
+* **Cómo se comprueba**: `prueba_ilustracion` I16 (210 → 229).
