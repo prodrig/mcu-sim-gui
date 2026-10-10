@@ -2719,3 +2719,28 @@ cada placa; entrar y salir de la edición sin ninguna a la vista, tocándolas
 en medio, y con alguna ya a la vista; la ayuda; y una placa suelta, sin
 botón de todas. La prueba del menú de I18 esconde otra vez el hilo antes de
 abrirlo: con la fila más ancha cae en otro sitio.
+
+## 40. Un solo «Abrir dibujo...», con un desplegable
+
+Pedido por el uso: en un sistema, cada fila de placa llevaba su botón «Abrir
+dibujo...», y con varias placas eran otros tantos botones iguales ocupando
+sitio. Ahora:
+
+1. **Un solo «Abrir dibujo...»**, arriba a la derecha, en la barra de la
+   ilustración (`abrir`). En un sistema lleva **a su izquierda un
+   desplegable** (`dibujo_de`) con las placas —`N · nucleo-f446re`—, la
+   primera de entrada; el botón pide el dibujo de la elegida
+   (`pide_dibujo`, como antes). En una placa suelta no hay desplegable.
+2. **Las filas de las placas** se quedan con «Conexiones», el nombre y lo
+   encontrado en su dibujo.
+3. **La ayuda de la edición** baja a su propia línea, a todo lo ancho,
+   debajo de la barra: con tantos botones no cabía.
+
+El menú «Abrir dibujo de la placa…» (Ctrl+D) sigue igual, con su lista de
+placas.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 284 → **289** (I21): un solo
+botón y ninguno en las filas; el desplegable a su izquierda con las placas;
+elegir otra, y una que no está; el botón pide la elegida; y una placa
+suelta, sin desplegable. Las pruebas que buscaban `abrir:<placa>` buscan
+ahora `abrir`.

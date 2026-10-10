@@ -28,6 +28,7 @@
 #include <QClipboard>
 #include <QGuiApplication>
 #include <QToolButton>
+#include <QComboBox>
 #include <QSignalBlocker>
 #include <QSvgRenderer>
 #include <QVBoxLayout>
@@ -2156,9 +2157,32 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
         barra->addWidget(restablecer_);
         barra->addWidget(copiar_xml_);
         barra->addWidget(guardar_xml_);
-        barra->addWidget(ayuda_edicion_, 1);
+        barra->addStretch(1);
         barra->addWidget(ajustar_);
+        // Plan §40: UN «Abrir dibujo...», con las placas en un desplegable a su
+        // izquierda, en vez de uno en la fila de cada placa
+        if (placa.es_sistema()) {
+            dibujo_de_ = new QComboBox(this);
+            dibujo_de_->setObjectName(QStringLiteral("dibujo_de"));
+            dibujo_de_->setToolTip(tr("La placa a la que se le abre otro dibujo"));
+            dibujo_de_->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+            for (const Cual& c : cuales) dibujo_de_->addItem(c.titulo, c.id);
+            barra->addWidget(dibujo_de_);
+        }
+        abrir_ = new QPushButton(tr("Abrir dibujo..."), this);
+        abrir_->setObjectName(QStringLiteral("abrir"));
+        abrir_->setToolTip(placa.es_sistema()
+                               ? tr("Elegir otro SVG para la placa del desplegable. El suyo, "
+                                    "si lo tiene, lo manda mcu-sim.")
+                               : tr("Elegir otro SVG para esta placa. El suyo, si lo tiene, "
+                                    "lo manda mcu-sim."));
+        connect(abrir_, &QPushButton::clicked, this, [this] { emit pide_dibujo(placa_elegida()); });
+        barra->addWidget(abrir_);
         v->insertLayout(0, barra);
+        // La ayuda de la edición, debajo, a todo lo ancho: en la barra, con
+        // tantos botones, no cabía (plan §40)
+        ayuda_edicion_->setContentsMargins(8, 0, 8, 0);
+        v->insertWidget(1, ayuda_edicion_);
     }
     for (const Cual& c : cuales) {
         // Un QFrame, no un QGroupBox: los recuadros del panel son QGroupBox,
@@ -2176,12 +2200,7 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
         inf->setObjectName(QStringLiteral("informe:%1").arg(c.id));
         inf->setWordWrap(true);
         inf->setEnabled(false);
-        auto* abrir = new QPushButton(tr("Abrir dibujo..."), marco);
-        abrir->setObjectName(QStringLiteral("abrir:%1").arg(c.id));
-        abrir->setToolTip(tr("Elegir otro SVG para esta placa. El suyo, si lo tiene, lo "
-                             "manda mcu-sim."));
         const QString id = c.id;
-        connect(abrir, &QPushButton::clicked, this, [this, id] { emit pide_dibujo(id); });
         // Plan §33: el botón de SUS líneas, junto al nombre; nace apagado
         QToolButton* con = nullptr;
         if (placa.es_sistema()) {
@@ -2209,7 +2228,6 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
         if (con) fila->addWidget(con);
         fila->addWidget(titulo);
         fila->addWidget(inf, 1);
-        fila->addWidget(abrir);
         v->addWidget(marco);
         recuadros_.insert(c.id, {marco, inf, con});
         QString e;
@@ -2322,6 +2340,21 @@ void VistaIlustracion::pon_edicion(bool si)
 bool VistaIlustracion::edicion() const
 {
     return edicion_->isChecked();
+}
+
+// Plan §40: la del desplegable; en una placa suelta, ella
+QString VistaIlustracion::placa_elegida() const
+{
+    return dibujo_de_ ? dibujo_de_->currentData().toString() : QString();
+}
+
+bool VistaIlustracion::elige_placa(const QString& placa_id)
+{
+    if (!dibujo_de_) return placa_id.isEmpty();
+    const int i = dibujo_de_->findData(placa_id);
+    if (i < 0) return false;
+    dibujo_de_->setCurrentIndex(i);
+    return true;
 }
 
 // Plan §39: las líneas de todas las placas que las tienen

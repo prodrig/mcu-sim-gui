@@ -92,6 +92,8 @@
 //       nombre, «Todas las conexiones» y cómo sigue a los de cada placa, y la
 //       edición, que las enseña al entrar si no se veía ninguna y las vuelve
 //       a esconder al salir si nadie las ha tocado.
+//   I21 (plan §40) UN SOLO «ABRIR DIBUJO...», arriba, con las placas del
+//       sistema en un desplegable a su izquierda; en una placa suelta, sin él.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -111,6 +113,7 @@
 #include <QContextMenuEvent>
 #include <QAction>
 #include <QPushButton>
+#include <QComboBox>
 #include <QToolButton>
 #include <QSet>
 #include <QJsonArray>
@@ -538,7 +541,8 @@ int main(int argc, char** argv)
         comprueba(ilus && ilus->findChild<QWidget*>("dibujo:") &&
                       ilus->findChild<VistaPlaca*>("vista:") &&
                       ilus->origen(QString()) == "generado" &&
-                      ilus->findChild<QPushButton*>("abrir:") && !ilus->hay_dibujo(),
+                      ilus->findChild<QPushButton*>("abrir") &&
+                      !ilus->findChild<QComboBox*>("dibujo_de") && !ilus->hay_dibujo(),
                   "la ilustracion: un recuadro, con el dibujo GENERADO (fase 5) y su boton "
                   "para abrir otro; un generado no cuenta como dibujo de la placa");
 
@@ -592,8 +596,10 @@ int main(int argc, char** argv)
         comprueba(ilus && ilus->placas() == QStringList({"N", "S"}) &&
                       ilus->findChild<QWidget*>("dibujo:N") &&
                       ilus->findChild<QWidget*>("dibujo:S") &&
-                      ilus->findChild<QPushButton*>("abrir:S"),
-                  "en un sistema, un recuadro por placa, cada uno con su boton");
+                      ilus->findChildren<QPushButton*>("abrir").size() == 1 &&
+                      ilus->findChild<QComboBox*>("dibujo_de"),
+                  "en un sistema, un recuadro por placa, y un solo boton de abrir dibujo con "
+                  "su desplegable");
         QString e;
         comprueba(v.abre_dibujo("N", DIBUJO_NUCLEO, &e) && ilus->origen("N") == "svg" &&
                       ilus->origen("S") == "generado",
@@ -1159,7 +1165,7 @@ int main(int argc, char** argv)
         espera([] { return false; }, 50);
         VistaPlaca* v = il.vista("N");
         comprueba(v && v == il.vista("S") && !il.vista("Z") && il.findChild<QWidget*>("dibujo:N") &&
-                      il.findChild<QWidget*>("dibujo:S") && il.findChild<QPushButton*>("abrir:S") &&
+                      il.findChild<QWidget*>("dibujo:S") && il.findChild<QPushButton*>("abrir") &&
                       il.findChildren<VistaPlaca*>().size() == 1,
                   "un solo dibujo para las dos placas, y encima una fila por placa con su boton");
         if (!v) return resultado();
@@ -2628,6 +2634,47 @@ int main(int argc, char** argv)
         VistaIlustracion is(suelta);
         comprueba(!is.findChild<QToolButton*>("conexiones_todas"),
                   "una placa suelta no tiene lineas, ni el boton de todas");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I21 Un solo Abrir dibujo, con las placas en un desplegable\n");
+    {
+        const PlacaGui s = placa_de(SISTEMA_XML, CATALOGO_SISTEMA_XML);
+        VistaIlustracion il(s);
+        il.resize(1200, 500);
+        il.show();
+        espera([] { return false; }, 30);
+        auto* combo = il.findChild<QComboBox*>("dibujo_de");
+        auto* abrir = il.findChild<QPushButton*>("abrir");
+        QWidget* fila = il.findChild<QWidget*>("dibujo:N");
+        comprueba(combo && abrir && il.findChildren<QPushButton*>("abrir").size() == 1 &&
+                      fila && fila->findChildren<QPushButton*>().isEmpty(),
+                  "un solo boton de abrir dibujo, arriba, y ninguno en las filas de las placas");
+        if (!combo || !abrir) return resultado();
+        comprueba(combo->count() == 2 && combo->itemText(0) == QString::fromUtf8("N · nucleo-f446re") &&
+                      combo->itemData(1).toString() == "S" && il.placa_elegida() == "N" &&
+                      abrir->x() > combo->x(),
+                  "el desplegable, a su izquierda, con las placas del sistema por su id y su "
+                  "nombre; de entrada, la primera");
+        QStringList pedidas;
+        QObject::connect(&il, &VistaIlustracion::pide_dibujo,
+                         [&](const QString& id) { pedidas << id; });
+        abrir->click();
+        comprueba(il.elige_placa("S") && il.placa_elegida() == "S" && !il.elige_placa("Z"),
+                  "se elige otra placa; una que no esta, no");
+        abrir->click();
+        comprueba(pedidas == QStringList({"N", "S"}),
+                  "y el boton pide el dibujo de la que este elegida");
+        const PlacaGui suelta = placa_de(PLACA_XML, CATALOGO_XML);
+        VistaIlustracion is(suelta);
+        QStringList p2;
+        QObject::connect(&is, &VistaIlustracion::pide_dibujo,
+                         [&](const QString& id) { p2 << id; });
+        auto* a2 = is.findChild<QPushButton*>("abrir");
+        if (a2) a2->click();
+        comprueba(a2 && !is.findChild<QComboBox*>("dibujo_de") && p2.size() == 1 &&
+                      p2[0].isEmpty(),
+                  "una placa suelta, sin desplegable: el boton pide el de ella");
     }
 
     return resultado();

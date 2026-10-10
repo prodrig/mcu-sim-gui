@@ -95,8 +95,9 @@
 // Ctrl+clic del dibujo no se ven el uno al otro. Lo que de verdad hay en el
 // modelo lo dicen las muestras -la tapa hundida es `pulsado`-.
 //
-// La pestaña tiene un recuadro por placa -uno, si no es un sistema-, con su
-// dibujo y su botón «Abrir dibujo…». El dibujo de una placa lo manda `mcu-sim`
+// La pestaña tiene un recuadro por placa -uno, si no es un sistema-, con lo
+// encontrado en su dibujo, y arriba UN botón «Abrir dibujo…» con, en un
+// sistema, un desplegable de las placas a su izquierda (plan §40). El dibujo de una placa lo manda `mcu-sim`
 // en el saludo (T_ILUSTRACION, fase 4), con la tabla de enlaces de la placa; a
 // mano se abre otro, para probar uno nuevo. Y si no tiene ninguno, la ventana
 // le GENERA uno con lo que sabe de ella (fase 5, `generado.h`): ninguna placa
@@ -167,7 +168,8 @@
 // que es lo que «Ajustar» enseña.
 //
 // Como el panel, cada widget lleva un `objectName` para las pruebas:
-// `dibujo:<placa>` la fila de cada placa, `abrir:<placa>` su botón,
+// `dibujo:<placa>` la fila de cada placa, `abrir` el botón de abrir otro
+// dibujo y `dibujo_de` el desplegable de su izquierda,
 // `conexiones:<placa>` el de sus líneas, `conexiones_todas` el de todas,
 // `edicion` el botón del modo de
 // edición, `lienzo` y `ajustar` los del lienzo y el zoom, `restablecer` el
@@ -202,6 +204,8 @@ class QGraphicsSimpleTextItem;
 class QGraphicsSvgItem;
 class QLabel;
 class QToolButton;
+class QPushButton;
+class QComboBox;
 class QSvgRenderer;
 class QVBoxLayout;
 
@@ -599,9 +603,13 @@ public:
     // se ve alguna
     void muestra_conexiones(bool si);
     bool hay_conexiones_a_la_vista() const;
+    // Plan §40: la placa del desplegable de «Abrir dibujo...» -vacía en una
+    // placa suelta-, y elegir otra. false si no está
+    QString placa_elegida() const;
+    bool elige_placa(const QString& placa_id);
 
 signals:
-    // Se ha pulsado «Abrir dibujo…» en el recuadro de esa placa
+    // Se ha pulsado «Abrir dibujo…», con esa placa en el desplegable
     void pide_dibujo(const QString& placa_id);
     // Una orden de cualquiera de sus dibujos
     void orden(quint16 pieza, quint16 mando, float valor);
@@ -615,7 +623,7 @@ signals:
 
 private:
     // La fila de cada placa, encima del dibujo: su nombre, lo que se ha
-    // encontrado en su dibujo y el botón para abrir otro
+    // encontrado en su dibujo y el botón de sus líneas
     struct Recuadro {
         QWidget*     marco = nullptr;
         QLabel*      informe = nullptr;
@@ -638,6 +646,9 @@ private:
     // Plan §39: «Todas las conexiones»; si las enseñó la edición y nadie las
     // ha tocado desde entonces; y si las está cambiando ella misma
     QToolButton*                 todas_ = nullptr;
+    // Plan §40: «Abrir dibujo...» y, en un sistema, el desplegable de placas
+    QPushButton*                 abrir_ = nullptr;
+    QComboBox*                   dibujo_de_ = nullptr;
     bool                         conexiones_de_edicion_ = false;
     bool                         cambiando_conexiones_ = false;
     void sincroniza_conexiones();
