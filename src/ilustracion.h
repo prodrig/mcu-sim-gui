@@ -22,9 +22,13 @@
 //
 //   * un 0/1 sin unidad que no es alarma -`encendido`- da BRILLO: un halo del
 //     color del elemento, encima de él. Su intensidad la da el primer
-//     observable CON unidad de la pieza -la `corriente` de un LED-, con una
-//     curva que se parezca a lo que ve el ojo: 0,3 + 0,7·√(I/Imax). Sin uno
-//     así, encendido es encendido del todo;
+//     observable CON unidad de la pieza -la `corriente` de un LED-, en
+//     ESCALA LOGARÍTMICA, que es como ve el ojo (plan §43): de Imax/2500
+//     -0,01 mA de los 25 de un LED- a Imax/12,5 -2 mA-, la opacidad va de 0,3
+//     a 1 con el logaritmo de la corriente (`opacidad_brillo`). Un LED azul a
+//     0,15 mA se ve claramente, y a 1 mA, casi del todo: un LED de hoy, con
+//     1 mA, ya se ve bien. Sin un
+//     observable así, encendido es encendido del todo;
 //   * si la pieza tiene además un mando `boton`, ese 0/1 -`pulsado`- es la
 //     tapa HUNDIDA: el elemento, un poco más pequeño y más apagado;
 //   * un observable `alarma` a 1 -la sobrecorriente de una Fuente- es un
@@ -271,6 +275,10 @@ public:
     const DibujoPlaca&   dibujo() const;
     // El elemento vivo de una pieza (su `idx`), o nullptr si no está dibujada
     QGraphicsSvgItem* vivo(int pieza) const { return vivos_.value(pieza, nullptr); }
+    // Plan §43: la opacidad del halo de algo encendido con `i` de `i_max`:
+    // 0,3 hasta i_max/2500, 1 desde i_max/12,5, y entre medias con el
+    // logaritmo
+    static double opacidad_brillo(double i, double i_max);
     QGraphicsSvgItem* fondo() const;
     // La escena entera en una imagen de ese ancho, con el alto que le toque.
     // Para las pruebas, y para quien quiera guardar lo que se ve.

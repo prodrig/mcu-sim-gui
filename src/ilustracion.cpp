@@ -1065,6 +1065,19 @@ void VistaPlaca::pon_valor(quint16 id_obs, float valor)
     repinta(w);
 }
 
+// Plan §43: el ojo ve el brillo de un LED en escala logarítmica -cada vez
+// que la corriente se multiplica por diez, un escalón parecido-, y un LED
+// moderno a 1 mA se ve bien. Con una escala lineal o de raíz hasta los 25 mA
+// de un pin, la barra azul a 3,3 V -0,15 mA- parecía apagada
+double VistaPlaca::opacidad_brillo(double i, double i_max)
+{
+    if (!(i_max > 0) || !std::isfinite(i)) return 1.0;
+    const double lo = i_max / 2500.0, hi = i_max / 12.5;
+    if (i <= lo) return 0.3;
+    if (i >= hi) return 1.0;
+    return 0.3 + 0.7 * std::log(i / lo) / std::log(hi / lo);
+}
+
 void VistaPlaca::repinta(Viva& w)
 {
     const float sin_valor = 0.f;
@@ -1075,7 +1088,7 @@ void VistaPlaca::repinta(Viva& w)
             op = 1;
             if (w.intensidad >= 0 && w.valores.contains(quint16(w.intensidad))) {
                 const double i = std::abs(double(w.valores.value(quint16(w.intensidad))));
-                op = std::clamp(0.3 + 0.7 * std::sqrt(std::min(i / w.i_max, 1.0)), 0.0, 1.0);
+                op = opacidad_brillo(i, w.i_max);
             }
         }
         if (w.halo->opacity() != op) w.halo->setOpacity(op);

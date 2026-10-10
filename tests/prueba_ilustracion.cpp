@@ -97,6 +97,8 @@
 //   I22 (plan §41) VISIBLE="NO": la pieza no va al dibujo generado ni a la
 //       bandeja, y el informe la cuenta como oculta; sin el atributo, como
 //       siempre.
+//   I23 (plan §43) EL BRILLO, EN ESCALA LOGARÍTMICA: los extremos, la barra
+//       azul a 3,3 V, el mismo escalón por cada década, y que siempre sube.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -660,8 +662,9 @@ int main(int argc, char** argv)
         v->pon_valor(2, 1.f);
         const double op_poca = v->halo(1)->opacity();
         const QImage poco = v->imagen(400);
-        comprueba(std::abs(op_poca - (0.3 + 0.7 * std::sqrt(1.0 / 25.0))) < 1e-6,
-                  "con 1 mA de 25, 0,3 + 0,7·raiz(1/25) = 0,44");
+        comprueba(std::abs(op_poca - (0.3 + 0.7 * std::log(100.0) / std::log(200.0))) < 1e-6,
+                  "con 1 mA de 25, en escala logaritmica de 0,01 a 2 mA: 0,3 + "
+                  "0,7·ln(100)/ln(200) = 0,91 (plan §43)");
         const QRgb c_ap = en(apagado, *v, 40, 30), c_ll = en(lleno, *v, 40, 30);
         const QRgb f_ap = en(apagado, *v, 51, 30), f_ll = en(lleno, *v, 51, 30),
                    f_po = en(poco, *v, 51, 30);
@@ -2710,6 +2713,26 @@ int main(int argc, char** argv)
         il2.pon_dibujo(QString(), DIBUJO, {}, e);
         comprueba(il2.vista(QString())->tiene(QString(), true) && il2.informe(QString()).ocultas.isEmpty(),
                   "sin el atributo, como siempre: X3 a la bandeja");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I23 El brillo de un LED, en escala logaritmica\n");
+    {
+        auto op = [](double i) { return VistaPlaca::opacidad_brillo(i, 25.0); };
+        comprueba(op(0.0) == 0.3 && op(0.01) == 0.3 && op(2.0) == 1.0 && op(25.0) == 1.0,
+                  "de 0,01 mA para abajo, lo minimo de algo encendido (0,3); de 2 mA para "
+                  "arriba, todo");
+        comprueba(std::abs(op(0.15) - 0.657) < 0.005 && std::abs(op(1.0) - 0.910) < 0.005,
+                  "la barra azul a 3,3 V (0,15 mA) a 0,66, que antes era 0,35; y con el comun a "
+                  "5 V (1 mA), 0,91, que antes era 0,44: " + std::to_string(op(0.15)) + " / " +
+                      std::to_string(op(1.0)));
+        comprueba(std::abs((op(0.1) - op(0.01)) - (op(1.0) - op(0.1))) < 1e-9,
+                  "cada vez que la corriente se multiplica por diez, el mismo escalon: como lo "
+                  "ve el ojo");
+        bool sube = true;
+        for (double i = 0.01; i < 2.0 / 1.3; i *= 1.3) sube = sube && op(i * 1.3) > op(i);
+        comprueba(sube && VistaPlaca::opacidad_brillo(1.0, 0.0) == 1.0,
+                  "y siempre sube; sin escala que valga, encendido del todo");
     }
 
     return resultado();

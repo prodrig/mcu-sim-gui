@@ -1996,7 +1996,7 @@ la pieza.
 | Lo que declara la pieza | En el dibujo |
 | :--- | :--- |
 | Un 0/1 sin unidad que no es alarma (`encendido`) | **Brillo**: un halo del color del elemento, encima, más claro en el centro |
-| … y un observable con unidad (`corriente`, mA) | La **intensidad** del brillo: 0,3 + 0,7·√(I/Imax). El LED azul de la Discovery, que apenas conduce, se ve más tenue que el verde sin que la ventana sepa por qué |
+| … y un observable con unidad (`corriente`, mA) | La **intensidad** del brillo: 0,3 + 0,7·√(I/Imax) —desde el §43, en escala logarítmica—. El LED azul de la Discovery, que apenas conduce, se ve más tenue que el verde sin que la ventana sepa por qué |
 | Un 0/1 y un mando `boton` (`pulsado`) | La tapa **hundida**: el elemento al 88 % y un poco apagado |
 | Un observable `alarma` a 1 (`sobrecorriente`) | Un **contorno rojo** alrededor, al momento, que parpadea cada 500 ms |
 | Otro numérico que la pieza sugiere | Una **etiqueta** debajo, con su valor y su unidad |
@@ -2812,3 +2812,28 @@ uno, con lo que se recuerda. Y `prueba_lanzamiento` 17 → **23** (L7), con el
 placa que no está, el diálogo que se los pide al abrirse y al cambiar de
 placa, y lanzar el sistema del servo sin su firmware: `mcu-sim` dice «sin
 firmware».
+
+## 43. El brillo de un LED, en escala logarítmica
+
+Pedido por el uso: las barras de LEDs azules con el común a 3,3 V
+(`barra8_anodo_comun_azul.xml`, `barra8_catodo_comun_azul.xml`) parecían
+apagadas. No es el modelo —con `vf` = 3,0 y 2 kΩ pasan 0,15 mA, como en la
+barra de verdad—, es la curva del halo: 0,3 + 0,7·√(I/Imax) hasta los 25 mA de
+un pin deja 0,15 mA en 0,35, casi lo mínimo de algo encendido. Pero el ojo ve
+el brillo en escala logarítmica, y un LED de hoy con 1 mA ya se ve bien.
+
+1. **`VistaPlaca::opacidad_brillo(I, Imax)`**: 0,3 hasta Imax/2500, 1 desde
+   Imax/12,5, y entre medias con el logaritmo de la corriente. Con los 25 mA
+   de escala de la `corriente` de un `Led`, de **0,01 a 2 mA**.
+2. **Lo que cambia**: la barra azul a 3,3 V (0,15 mA) pasa de 0,35 a **0,66**;
+   con el común a 5 V (1 mA), de 0,44 a **0,91**; un LED de la Discovery
+   (unos 2 mA), de 0,49 a **0,99**. Cada vez que la corriente se multiplica
+   por diez, el mismo escalón.
+3. **Lo que no cambia**: el modelo eléctrico, el panel —que dice la corriente
+   con su número— y un LED apagado, sin halo.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 294 → **298** (I23): los
+extremos, la barra azul y el común a 5 V, el mismo escalón por década, y que
+siempre sube; la prueba del halo de I5 espera ahora 0,91 con 1 mA. Y la barra
+azul del sistema de los morpho, capturada antes y después: el LED encendido
+se distingue de sus vecinos.
