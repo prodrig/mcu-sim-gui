@@ -88,6 +88,11 @@ QString InformeDibujo::resumen() const
         if (sin_elemento.size() > 6) a << QStringLiteral("…");
         t += QObject::tr("; sin dibujar: %1").arg(a.join(QStringLiteral(", ")));
     }
+    if (!ocultas.isEmpty()) {
+        QStringList a = ocultas.mid(0, 6);
+        if (ocultas.size() > 6) a << QStringLiteral("…");
+        t += QObject::tr("; ocultas: %1").arg(a.join(QStringLiteral(", ")));
+    }
     const int problemas = int(tabla_rota.size() + repetidos.size() + avisos.size());
     if (problemas > 0) t += QObject::tr("; %n aviso(s)", nullptr, problemas);
     return t;
@@ -99,6 +104,9 @@ QStringList InformeDibujo::detalle() const
     if (!sin_elemento.isEmpty())
         d << QObject::tr("piezas sin elemento en el dibujo: %1")
                  .arg(sin_elemento.join(QStringLiteral(", ")));
+    if (!ocultas.isEmpty())
+        d << QObject::tr("piezas ocultas (visible=\"no\"), que no van a la bandeja: %1")
+                 .arg(ocultas.join(QStringLiteral(", ")));
     for (const QString& s : tabla_rota) d << QObject::tr("tabla de enlaces: %1").arg(s);
     if (!repetidos.isEmpty())
         d << QObject::tr("ids repetidos en el dibujo (se usa el primero): %1")
@@ -312,6 +320,8 @@ InformeDibujo DibujoPlaca::enlaza(const PlacaGui& placa, const QString& placa_id
                 inf.avisos << QObject::tr("%1 está girado: sus efectos van a la caja que "
                                           "lo contiene, sin girar")
                                   .arg(pz.id_local);
+        } else if (!pz.visible) {
+            inf.ocultas << pz.id_local;      // plan §41: no se echa de menos
         } else {
             inf.sin_elemento << pz.id_local;
         }

@@ -81,6 +81,9 @@ struct PiezaGui {
     QVector<PatillaGui>    patillas;
     bool    conectada = true;
     bool    en_placa  = false;
+    // Plan §41: `visible="no"` en la placa, una pieza que no interesa ver: ni
+    // en la bandeja ni en el dibujo generado. El panel la enseña igual
+    bool    visible   = true;
 };
 
 // Una línea de la TABLA DE ENLACES del dibujo de una placa: qué elemento del

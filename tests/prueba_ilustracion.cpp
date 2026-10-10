@@ -94,6 +94,9 @@
 //       a esconder al salir si nadie las ha tocado.
 //   I21 (plan §40) UN SOLO «ABRIR DIBUJO...», arriba, con las placas del
 //       sistema en un desplegable a su izquierda; en una placa suelta, sin él.
+//   I22 (plan §41) VISIBLE="NO": la pieza no va al dibujo generado ni a la
+//       bandeja, y el informe la cuenta como oculta; sin el atributo, como
+//       siempre.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -2675,6 +2678,38 @@ int main(int argc, char** argv)
         comprueba(a2 && !is.findChild<QComboBox*>("dibujo_de") && p2.size() == 1 &&
                       p2[0].isEmpty(),
                   "una placa suelta, sin desplegable: el boton pide el de ella");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I22 visible=\"no\": lo que no interesa ver, fuera de la bandeja\n");
+    {
+        QByteArray x(PLACA_XML);
+        x.replace("<componente tipo=\"Crystal\" id=\"X3\" vdd=\"3.3\" conectada=\"no\">",
+                  "<componente tipo=\"Crystal\" id=\"X3\" vdd=\"3.3\" conectada=\"no\" visible=\"no\">");
+        const PlacaGui p = placa_de(x.constData(), CATALOGO_XML);
+        comprueba(!p.piezas[0].visible && p.piezas[1].visible && p.piezas[3].visible,
+                  "T_PLACA dice que X3 no se quiere ver; las demas, si");
+        VistaIlustracion il(p);
+        VistaPlaca* vp = il.vista(QString());
+        comprueba(vp && vp->origen(QString()) == "generado" && !vp->vivo(0) && vp->vivo(1) &&
+                      vp->vivo(2),
+                  "sin dibujo, el generado no la lleva: LD4 y B1 si, X3 no");
+        QString e;
+        const bool puesto = il.pon_dibujo(QString(), DIBUJO, {}, e);
+        const InformeDibujo inf = il.informe(QString());
+        const QString texto = il.findChild<QLabel*>("informe:")->text();
+        comprueba(puesto && vp && !vp->tiene(QString(), true) && !vp->vivo(0) &&
+                      inf.ocultas == QStringList({"X3"}) && !inf.sin_elemento.contains("X3") &&
+                      texto.contains("ocultas: X3") && !texto.contains("bandeja"),
+                  "con el dibujo de prueba, que no la trae, X3 no va a la bandeja, y el informe "
+                  "la cuenta como oculta: \"" + texto.toStdString() + "\"");
+        comprueba(inf.detalle().join("\n").contains("visible=\"no\""),
+                  "el detalle dice por que no esta");
+        const PlacaGui p2 = placa_de(PLACA_XML, CATALOGO_XML);
+        VistaIlustracion il2(p2);
+        il2.pon_dibujo(QString(), DIBUJO, {}, e);
+        comprueba(il2.vista(QString())->tiene(QString(), true) && il2.informe(QString()).ocultas.isEmpty(),
+                  "sin el atributo, como siempre: X3 a la bandeja");
     }
 
     return resultado();

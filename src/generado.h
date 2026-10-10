@@ -28,7 +28,9 @@
 //
 // LA BANDEJA (§7): si el dibujo de una placa no tiene todas sus piezas, las
 // que faltan -las que dejan ver o tocar algo- van a una bandeja al lado, que
-// es otro dibujo generado, solo con ellas (`OpcionesGenerado::solo`).
+// es otro dibujo generado, solo con ellas (`OpcionesGenerado::solo`). Una pieza
+// con `visible="no"` en su placa (plan §41) no va ni a la bandeja ni al dibujo
+// generado: no interesa verla.
 // =============================================================================
 #ifndef MCU_SIM_GUI_GENERADO_H
 #define MCU_SIM_GUI_GENERADO_H

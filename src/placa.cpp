@@ -282,6 +282,7 @@ bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
             PiezaGui& p = placa.piezas[actual];
             p.en_placa  = true;
             p.conectada = a.value(QLatin1String("conectada")) != QLatin1String("no");
+            p.visible   = a.value(QLatin1String("visible")) != QLatin1String("no");
         } else if (r.name() == QLatin1String("pin") && actual >= 0) {
             placa.piezas[actual].patillas.push_back({texto(a, "nombre"), texto(a, "nodo")});
         }

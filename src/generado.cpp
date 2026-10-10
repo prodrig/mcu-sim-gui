@@ -114,6 +114,7 @@ QVector<int> para_bandeja(const PlacaGui& placa, const QString& placa_id,
     for (const PiezaGui& p : placa.piezas) {
         if (!placa_id.isEmpty() && p.placa != placa_id) continue;
         if (!sin_elemento.contains(p.id_local)) continue;
+        if (!p.visible) continue;            // plan §41
         if (p.observables.isEmpty() && p.mandos.isEmpty() && p.imagenes.isEmpty()) continue;
         l.push_back(p.idx);
     }
@@ -141,6 +142,7 @@ QByteArray dibujo_generado(const PlacaGui& placa, const QString& placa_id,
                     : (!placa_id.isEmpty() && p.placa != placa_id))
             continue;
         if (son_conector.contains(p.id)) continue;
+        if (!p.visible) continue;            // plan §41: no interesa verla
         piezas.push_back(&p);
     }
 

@@ -57,10 +57,12 @@ struct EnlaceDibujo {
 struct InformeDibujo {
     QVector<EnlaceDibujo> enlaces;
     QStringList sin_elemento;  // piezas de la placa que el dibujo no trae
+    QStringList ocultas;       // y las que no trae y no se quieren ver (plan §41)
     QStringList tabla_rota;    // entradas de la tabla que no casan, y por qué
     QStringList repetidos;     // ids que aparecen más de una vez
     QStringList avisos;        // lo demás: imágenes quitadas, elementos girados
-    // "4 piezas en el dibujo; sin dibujar: R35", en una línea
+    // "4 de 5 piezas en el dibujo; sin dibujar: R35; ocultas: MASA", en una
+    // línea
     QString resumen() const;
     // Todo, una cosa por línea, para la lista de avisos y la ayuda
     QStringList detalle() const;

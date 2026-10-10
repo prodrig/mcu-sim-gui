@@ -2744,3 +2744,30 @@ botón y ninguno en las filas; el desplegable a su izquierda con las placas;
 elegir otra, y una que no está; el botón pide la elegida; y una placa
 suelta, sin desplegable. Las pruebas que buscaban `abrir:<placa>` buscan
 ahora `abrir`.
+
+## 41. Lo que no interesa ver: `visible="no"`
+
+Pedido por el uso: la bandeja «sin dibujar» (§25) enseña las piezas que el
+dibujo no trae y dejan ver algo, y a veces son piezas que no interesan —la
+`Fuente` `REG_3V3` y la `Gnd` `MASA` del FT232RL—. `mcu-sim` acepta ahora
+**`visible="no"` en un `<componente>`** y lo manda en `T_PLACA` con la pieza
+(su `doc/parts.md` §2.6 y §3.1); la simulación no lo mira. En la ventana:
+
+1. `PiezaGui::visible`, leído de `T_PLACA`.
+2. **No va a la bandeja** (`para_bandeja`) **ni al dibujo generado** de una
+   placa sin SVG (`dibujo_generado`).
+3. **El informe la cuenta aparte**: `DibujoPlaca::enlaza` la pone en
+   `InformeDibujo::ocultas` en vez de en `sin_elemento`, y la fila de la
+   placa dice «4 de 4 piezas en el dibujo; ocultas: REG_3V3, MASA».
+4. **Lo que el SVG dibuje se queda**: si el dibujo trae un elemento para esa
+   pieza, se enlaza como siempre. El dibujo es de quien lo hace.
+5. **El panel no cambia**: sigue enseñándolas todas, con sus alarmas.
+
+Sin el atributo, todo es como antes: la bandeja sigue ahí para lo que no se
+ha dicho.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 289 → **294** (I22): T_PLACA
+leído; el generado sin la pieza; con el dibujo de prueba, sin bandeja y con
+la pieza contada como oculta; el detalle; y sin el atributo, la bandeja de
+siempre. Y de punta a punta, con `mcu-sim`: el sistema de la barra con un
+FT232RL con `REG_3V3` y `MASA` ocultas queda sin bandeja.
