@@ -2694,3 +2694,28 @@ Y de punta a punta, con la ventana de verdad: las placas de
 `placas/nucleo_f446re_servo.xml` colocadas a mano y escritas con «Guardar en
 el XML»; `mcu-sim --valida` lo lee sin avisos, y la ventana, lanzada otra
 vez, las pone donde estaban. Así está ese fichero en `mcu-sim`.
+
+## 39. Las conexiones, a la vista
+
+Pedido por el uso: las líneas entre placas no se encontraban —el botón de
+cada placa era solo un icono gris, a trazos, que parecía apagado—, y sin
+verlas no se pueden editar (§37). Tres cambios, solo en la ventana:
+
+1. **El botón de cada placa dice «Conexiones»** al lado del icono y tiene
+   aspecto de botón, no de icono suelto. Hace lo mismo que antes (§33).
+2. **«Todas las conexiones»**, arriba, junto a «Edición», en un sistema: las
+   enseña o las esconde todas a la vez. Sigue a los de cada placa: está
+   pulsado si lo están todos los que se pueden pulsar, y apagado si ninguna
+   placa está unida a otra.
+3. **En la edición se ven**: al pulsar «Edición» sin ninguna línea a la
+   vista, se enseñan todas, que es como se editan; al soltarlo se vuelven a
+   esconder, salvo que se haya tocado alguno de esos botones mientras tanto,
+   y entonces se quedan como estén. Si ya se veía alguna, la edición no
+   cambia nada. La ayuda de la edición lo dice.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 273 → **284** (I20): el
+texto y el aspecto del botón; «Todas las conexiones» y cómo sigue a los de
+cada placa; entrar y salir de la edición sin ninguna a la vista, tocándolas
+en medio, y con alguna ya a la vista; la ayuda; y una placa suelta, sin
+botón de todas. La prueba del menú de I18 esconde otra vez el hilo antes de
+abrirlo: con la fila más ancha cae en otro sitio.

@@ -28,6 +28,7 @@
 #include <QClipboard>
 #include <QGuiApplication>
 #include <QToolButton>
+#include <QSignalBlocker>
 #include <QSvgRenderer>
 #include <QVBoxLayout>
 
@@ -2050,8 +2051,9 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
                                 "cambiarles el tamano. Mientras esta pulsado, los mandos del "
                                 "dibujo no hacen nada."));
         ayuda_edicion_ = new QLabel(tr("Arrastra una placa para moverla · rueda: tamaño · doble "
-                                       "clic o Mayús+rueda: girarla · doble clic en una linea: "
-                                       "tramos rectos y codos · boton derecho: mas"),
+                                       "clic o Mayús+rueda: girarla · doble clic en una linea "
+                                       "-se ven con «Conexiones»-: tramos rectos y codos · "
+                                       "arrastrar un tramo: moverlo · boton derecho: mas"),
                                     this);
         ayuda_edicion_->setWordWrap(true);
         ayuda_edicion_->setObjectName(QStringLiteral("ayuda_edicion"));
@@ -2101,9 +2103,38 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
         guardar_xml_->setToolTip(tr("Solo si esta ventana lanzo mcu-sim: entonces sabe donde "
                                     "esta el XML"));
         connect(guardar_xml_, &QToolButton::clicked, this, &VistaIlustracion::pide_guardar_xml);
+        // Plan §39: todas las líneas a la vez, y a la vista en la edición
+        if (placa.es_sistema()) {
+            todas_ = new QToolButton(this);
+            todas_->setObjectName(QStringLiteral("conexiones_todas"));
+            todas_->setCheckable(true);
+            todas_->setText(tr("Todas las conexiones"));
+            todas_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+            todas_->setIcon(icono_conexiones());
+            todas_->setIconSize(QSize(28, 18));
+            todas_->setToolTip(tr("Ver u ocultar las lineas de todas las placas. En la "
+                                  "edicion, una linea que se ve se puede llevar en tramos "
+                                  "rectos: doble clic en ella"));
+            connect(todas_, &QToolButton::clicked, this,
+                    [this](bool si) {
+                        muestra_conexiones(si);
+                        // A mano: al salir de la edición se queda como esté
+                        conexiones_de_edicion_ = false;
+                    });
+        }
         connect(vista_, &VistaPlaca::disposicion_cambiada, this, [this] { cambiada_ = true; });
         connect(edicion_, &QToolButton::toggled, this, [this](bool si) {
             vista_->pon_edicion(si);
+            // Plan §39: las líneas solo se editan si se ven. Al entrar sin
+            // ninguna a la vista, se enseñan todas; al salir, si nadie las
+            // ha tocado, se vuelven a esconder
+            if (si && !hay_conexiones_a_la_vista()) {
+                muestra_conexiones(true);
+                conexiones_de_edicion_ = true;
+            } else if (!si && conexiones_de_edicion_) {
+                muestra_conexiones(false);
+                conexiones_de_edicion_ = false;
+            }
             ayuda_edicion_->setVisible(si);
             boton_lienzo_->setEnabled(si);
             restablecer_->setEnabled(si);
@@ -2120,6 +2151,7 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
             cambiada_ = false;
         });
         barra->addWidget(edicion_);
+        if (todas_) barra->addWidget(todas_);
         barra->addWidget(boton_lienzo_);
         barra->addWidget(restablecer_);
         barra->addWidget(copiar_xml_);
@@ -2157,15 +2189,22 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
             con->setObjectName(QStringLiteral("conexiones:%1").arg(c.id));
             con->setCheckable(true);
             con->setChecked(false);
-            con->setAutoRaise(true);
+            // Plan §39: con su nombre al lado y con aspecto de botón; solo el
+            // icono, gris y a trazos, parecía apagado
+            con->setText(tr("Conexiones"));
+            con->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
             con->setIcon(icono_conexiones());
             con->setIconSize(QSize(28, 18));
             con->setEnabled(c.unida);
             con->setToolTip(c.unida ? tr("Ver u ocultar las conexiones de %1 con las demas "
                                          "placas").arg(c.id)
                                     : tr("%1 no esta unida a ninguna otra placa").arg(c.id));
-            connect(con, &QToolButton::toggled, this,
-                    [this, id](bool si) { vista_->muestra_lineas(id, si); });
+            connect(con, &QToolButton::toggled, this, [this, id](bool si) {
+                vista_->muestra_lineas(id, si);
+                // Tocado a mano: al salir de la edición se queda como esté
+                if (!cambiando_conexiones_) conexiones_de_edicion_ = false;
+                sincroniza_conexiones();
+            });
         }
         if (con) fila->addWidget(con);
         fila->addWidget(titulo);
@@ -2178,6 +2217,7 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
                          QStringLiteral("generado"), e);
     }
     v->addWidget(vista_, 1);
+    sincroniza_conexiones();
     // Plan §38: lo que dice el XML, si dice algo, es lo de partida
     const QJsonObject dx = disposicion_xml();
     if (!dx.isEmpty()) vista_->pon_disposicion(dx);
@@ -2282,6 +2322,39 @@ void VistaIlustracion::pon_edicion(bool si)
 bool VistaIlustracion::edicion() const
 {
     return edicion_->isChecked();
+}
+
+// Plan §39: las líneas de todas las placas que las tienen
+void VistaIlustracion::muestra_conexiones(bool si)
+{
+    cambiando_conexiones_ = true;
+    for (const Recuadro& r : std::as_const(recuadros_))
+        if (r.conexiones && r.conexiones->isEnabled()) r.conexiones->setChecked(si);
+    cambiando_conexiones_ = false;
+    sincroniza_conexiones();
+}
+
+bool VistaIlustracion::hay_conexiones_a_la_vista() const
+{
+    for (const Recuadro& r : recuadros_)
+        if (r.conexiones && r.conexiones->isChecked()) return true;
+    return false;
+}
+
+// El de todas, pulsado si lo están todos los que se pueden pulsar; apagado si
+// no hay ninguno
+void VistaIlustracion::sincroniza_conexiones()
+{
+    if (!todas_) return;
+    int hay = 0, pulsados = 0;
+    for (const Recuadro& r : std::as_const(recuadros_))
+        if (r.conexiones && r.conexiones->isEnabled()) {
+            ++hay;
+            if (r.conexiones->isChecked()) ++pulsados;
+        }
+    todas_->setEnabled(hay > 0);
+    const QSignalBlocker b(todas_);
+    todas_->setChecked(hay > 0 && pulsados == hay);
 }
 
 // Plan §35: el tamaño del lienzo. Un lienzo nuevo se centra en las placas;

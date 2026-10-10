@@ -121,6 +121,12 @@
 // se ven las de cualquiera de sus dos placas. Una placa que no está unida a
 // ninguna otra lo tiene apagado.
 //
+// Y SE VEN A LA PRIMERA (plan §39): ese botón dice «Conexiones» al lado del
+// icono y tiene aspecto de botón -solo, el icono gris parecía apagado-;
+// arriba, «Todas las conexiones» las enseña o las esconde todas a la vez; y
+// al entrar en la edición sin ninguna a la vista se enseñan todas, que es
+// como se editan, y al salir se vuelven a esconder si nadie las ha tocado.
+//
 // EL MODO DE EDICIÓN (plan §34, `doc/analisis_disposicion_ilustracion.md`):
 // el botón «Edición» de la ventana, que se queda pulsado, pone el ratón a
 // COLOCAR las placas en vez de tocar sus piezas. Mientras está pulsado los
@@ -162,7 +168,8 @@
 //
 // Como el panel, cada widget lleva un `objectName` para las pruebas:
 // `dibujo:<placa>` la fila de cada placa, `abrir:<placa>` su botón,
-// `conexiones:<placa>` el de sus líneas, `edicion` el botón del modo de
+// `conexiones:<placa>` el de sus líneas, `conexiones_todas` el de todas,
+// `edicion` el botón del modo de
 // edición, `lienzo` y `ajustar` los del lienzo y el zoom, `restablecer` el
 // de volver al principio, `copiar_xml` y `guardar_xml` los del XML,
 // `informe:<placa>` lo encontrado, `vista:` el dibujo -uno para todas-, y en
@@ -588,6 +595,10 @@ public:
     {
         return recuadros_.value(placa_id).conexiones;
     }
+    // Plan §39: las de todas las placas, como «Todas las conexiones»; y si
+    // se ve alguna
+    void muestra_conexiones(bool si);
+    bool hay_conexiones_a_la_vista() const;
 
 signals:
     // Se ha pulsado «Abrir dibujo…» en el recuadro de esa placa
@@ -624,6 +635,12 @@ private:
     bool                         xml_escrito_ = false;
     bool                         cambiada_ = false;   // algo nuevo desde que se entró
     QLabel*                      ayuda_edicion_ = nullptr;
+    // Plan §39: «Todas las conexiones»; si las enseñó la edición y nadie las
+    // ha tocado desde entonces; y si las está cambiando ella misma
+    QToolButton*                 todas_ = nullptr;
+    bool                         conexiones_de_edicion_ = false;
+    bool                         cambiando_conexiones_ = false;
+    void sincroniza_conexiones();
 };
 
 } // namespace mcusim

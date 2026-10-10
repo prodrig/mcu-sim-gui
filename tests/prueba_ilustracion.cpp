@@ -88,6 +88,10 @@
 //       escritas dentro y CRLF intactos- y lo que no se deja; y la ventana:
 //       sin haber lanzado ella mcu-sim no sabe dónde está el XML, y después
 //       de escribirlo olvida lo de la configuración.
+//   I20 (plan §39) LAS CONEXIONES, A LA VISTA: el botón de cada placa con su
+//       nombre, «Todas las conexiones» y cómo sigue a los de cada placa, y la
+//       edición, que las enseña al entrar si no se veía ninguna y las vuelve
+//       a esconder al salir si nadie las ha tocado.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -2305,7 +2309,10 @@ int main(int argc, char** argv)
         comprueba(!v2->enrutada(clave) && !v2->enrutada("hilo N/X S/Y"),
                   "una linea que no esta, o un eje que no es h ni v, se ignoran: en curva");
 
-        // El menu, y volver a la curva
+        // El menu, y volver a la curva. Al mover S se han vuelto a trazar: el
+        // hilo, otra vez fuera de la vista
+        for (const VistaPlaca::Linea& x : v->lineas())
+            if (x.hilo) x.item->setVisible(false);
         const QPointF t = (linea()->puntos[1] + linea()->puntos[2]) / 2;
         {
             const QPoint p = v->mapFromScene(t);
@@ -2563,6 +2570,64 @@ int main(int argc, char** argv)
         comprueba(no_esta && e.contains("no se puede leer"),
                   "un fichero que no esta: " + e.toStdString());
         m.s.disconnectFromHost();
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I20 Las conexiones, a la vista: su nombre, todas a la vez y en la edicion\n");
+    {
+        const PlacaGui s = placa_de(SISTEMA_XML, CATALOGO_SISTEMA_XML);
+        VistaIlustracion il(s);
+        il.resize(900, 500);
+        il.show();
+        espera([] { return false; }, 30);
+        QToolButton* bn = il.boton_conexiones("N");
+        QToolButton* bs = il.boton_conexiones("S");
+        QToolButton* todas = il.findChild<QToolButton*>("conexiones_todas");
+        VistaPlaca* v = il.vista("N");
+        comprueba(bn && bs && todas && v && bn->text() == "Conexiones" &&
+                      bn->toolButtonStyle() == Qt::ToolButtonTextBesideIcon && !bn->autoRaise() &&
+                      todas->isEnabled() && !todas->isChecked() && !il.hay_conexiones_a_la_vista(),
+                  "el boton de cada placa dice Conexiones al lado del icono, con aspecto de "
+                  "boton; arriba, Todas las conexiones, sin pulsar: nacen escondidas");
+        if (!bn || !bs || !todas || !v) return resultado();
+        todas->click();
+        bool todas_vistas = !v->lineas().isEmpty();
+        for (const auto& l : v->lineas()) todas_vistas = todas_vistas && l.item->isVisible();
+        comprueba(bn->isChecked() && bs->isChecked() && todas->isChecked() && todas_vistas,
+                  "Todas las conexiones pulsa el de cada placa, y se ven todas");
+        bs->click();
+        comprueba(!todas->isChecked() && bn->isChecked() && il.hay_conexiones_a_la_vista(),
+                  "con una sin pulsar, el de todas se suelta solo");
+        bs->click();
+        comprueba(todas->isChecked(), "y se vuelve a pulsar cuando lo estan todas");
+        todas->click();
+        comprueba(!bn->isChecked() && !bs->isChecked() && !il.hay_conexiones_a_la_vista(),
+                  "otra vez, las esconde todas");
+        il.pon_edicion(true);
+        comprueba(bn->isChecked() && bs->isChecked() && todas->isChecked(),
+                  "al entrar en la edicion sin ninguna a la vista, se enseñan todas: es como "
+                  "se editan");
+        il.pon_edicion(false);
+        comprueba(!bn->isChecked() && !bs->isChecked() && !todas->isChecked(),
+                  "y al salir, si nadie las ha tocado, se vuelven a esconder");
+        il.pon_edicion(true);
+        bs->click();
+        il.pon_edicion(false);
+        comprueba(bn->isChecked() && !bs->isChecked(),
+                  "tocadas en la edicion, al salir se quedan como esten");
+        bn->click();
+        bs->click();
+        il.pon_edicion(true);
+        il.pon_edicion(false);
+        comprueba(bs->isChecked() && !bn->isChecked(),
+                  "y con alguna ya a la vista, entrar y salir no cambia nada");
+        const QLabel* ayuda = il.findChild<QLabel*>("ayuda_edicion");
+        comprueba(ayuda && ayuda->text().contains(QString::fromUtf8("«Conexiones»")),
+                  "la ayuda de la edicion dice como se ven las lineas");
+        const PlacaGui suelta = placa_de(PLACA_XML, CATALOGO_XML);
+        VistaIlustracion is(suelta);
+        comprueba(!is.findChild<QToolButton*>("conexiones_todas"),
+                  "una placa suelta no tiene lineas, ni el boton de todas");
     }
 
     return resultado();
