@@ -2771,3 +2771,44 @@ leído; el generado sin la pieza; con el dibujo de prueba, sin bandeja y con
 la pieza contada como oculta; el detalle; y sin el atributo, la bandeja de
 siempre. Y de punta a punta, con `mcu-sim`: el sistema de la barra con un
 FT232RL con `REG_3V3` y `MASA` ocultas queda sin bandeja.
+
+## 42. El firmware de cada MCU, o ninguno
+
+Pedido por el uso: un sistema que dice su firmware en el XML no se podía
+lanzar sin él desde la ventana, y con varios chips el firmware no se podía
+cambiar en absoluto —el posicional, con dos o más, lo rechaza `mcu-sim`—.
+`mcu-sim` tiene ahora `--firmware ID=FICHERO`, `--sin-firmware[=ID]` y
+`placa --mcus`, que lista los chips en XML (su `doc/parts.md` §2.0). En la
+ventana:
+
+1. **`Lanzador::mcus_de`** ejecuta `mcu-sim placa --mcus` —con el `--mcu`
+   elegido— y `lee_mcus` lo lee (`McuCli`: id, tipo y el firmware del XML).
+   Un `mcu-sim` anterior no sabe, y entonces todo es como antes.
+2. **El diálogo** se los pide al abrirse, al acabar de escribir otra placa y
+   al cambiar el directorio:
+   * con **un chip**, la fila del firmware dice de cuál es —«firmware de
+     N/u0 (STM32F446RE)»—, enseña de muestra el del XML —o que no dice
+     ninguno— y lleva al lado la casilla **«sin firmware»**, que apaga el
+     fichero. Sigue siendo el posicional `firmware`, y la casilla es
+     `sin-firmware`;
+   * con **dos o más**, en vez de esa fila, **una por chip** con lo mismo, en
+     `firmware:<id>` y `sin-firmware:<id>`.
+
+   `--firmware` y `--sin-firmware` no salen como opciones sueltas: las
+   escriben esas filas. Lo de los chips que ahora no están se sigue
+   recordando en la configuración, para cuando se vuelva a su placa.
+3. **La línea de órdenes** (`linea_de_ordenes`, con los chips): con uno, el
+   posicional, o `--sin-firmware` en su lugar; con varios,
+   `--sin-firmware=ID` o `--firmware=ID=FICHERO` por chip, y el posicional
+   no. Un campo vacío no escribe nada: el del XML.
+4. **Al lanzar**, la ventana pregunta otra vez por los chips: la línea se
+   hace con los de la placa de ahora, también sin pasar por el diálogo.
+
+**Cómo se ha comprobado**: `prueba_argumentos` 38 → **51** (G6): leer
+`--mcus`, y uno anterior; la línea con uno y con dos chips, sin firmware y
+con el de un chip que ya no está; y el diálogo con uno, con dos y de vuelta a
+uno, con lo que se recuerda. Y `prueba_lanzamiento` 17 → **23** (L7), con el
+`mcu-sim` de verdad: los chips del sistema del servo y de `dos_mcu.xml`, una
+placa que no está, el diálogo que se los pide al abrirse y al cambiar de
+placa, y lanzar el sistema del servo sin su firmware: `mcu-sim` dice «sin
+firmware».

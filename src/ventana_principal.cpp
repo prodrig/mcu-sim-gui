@@ -332,8 +332,20 @@ bool VentanaPrincipal::lanza()
             consola(tr("sin lista de opciones (%1): se lanza con la placa, el firmware y lo "
                        "escrito a mano").arg(e), QStringLiteral("gray"));
     }
+    // Plan §42: los MCUs de la placa, para el firmware de cada uno. Un
+    // mcu-sim que no sabe decirlos se lanza como siempre
+    QVector<McuCli> mcus;
+    const QString placa = cfg_.argumentos.value(QStringLiteral("placa")).trimmed();
+    if (!args_.vacio() && !placa.isEmpty()) {
+        QString e;
+        QStringList extra;
+        const QString mcu = cfg_.argumentos.value(QStringLiteral("--mcu"));
+        if (!mcu.isEmpty()) extra << QStringLiteral("--mcu=") + mcu;
+        const QByteArray s = Lanzador::mcus_de(exe, dir, placa, extra, e);
+        if (s.isEmpty() || !lee_mcus(s, mcus, e)) mcus.clear();
+    }
     QString error;
-    QStringList a = linea_de_ordenes(args_, cfg_.argumentos, cfg_.a_mano, &error);
+    QStringList a = linea_de_ordenes(args_, cfg_.argumentos, cfg_.a_mano, &error, mcus);
     if (!error.isEmpty()) {
         statusBar()->showMessage(tr("no se puede lanzar: %1").arg(error));
         return false;

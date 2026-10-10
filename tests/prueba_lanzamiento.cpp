@@ -22,13 +22,18 @@
 //       a ese;
 //   L6  una placa que no existe: el hijo termina sin conectarse, y la ventana
 //       lo dice y enseña su salida de error. Una ruta de ejecutable mala está en
-//       `prueba_argumentos` G5.
+//       `prueba_argumentos` G5;
+//   L7  el firmware de cada MCU (plan §42): `mcu-sim placa --mcus` de un
+//       sistema y de una placa con dos, el diálogo que se los pide al abrirse y
+//       al cambiar de placa, y lanzar el sistema del servo sin su firmware.
 //
 // Como `cruzada`, necesita MCU_SIM (el ejecutable) y MCU_SIM_SRC (su src/).
 // Sin ellas, código 77: saltada.
 // =============================================================================
 #include <QApplication>
 #include <QComboBox>
+#include <QLineEdit>
+#include <QCheckBox>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QLabel>
@@ -272,6 +277,57 @@ int main(int argc, char** argv)
                       consola(v).contains("no-existe.xml"),
                   "y la ventana dice que no llego a conectarse, con su salida de error en la "
                   "consola");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("L7 El firmware de cada MCU, con el mcu-sim de verdad\n");
+    {
+        QString e;
+        QVector<McuCli> m, d2;
+        const QByteArray s = Lanzador::mcus_de(g_sim, g_src, "placas/nucleo_f446re_servo.xml",
+                                               {}, e);
+        comprueba(!s.isEmpty() && lee_mcus(s, m, e) && m.size() == 1 && m[0].id == "N/u0" &&
+                      m[0].firmware == "verif/fw/servo_demo/servo_demo.bin",
+                  "mcu-sim placa --mcus: el chip del sistema del servo, con su firmware: " +
+                      e.toStdString());
+        const QByteArray s2 = Lanzador::mcus_de(g_sim, g_src, "placas/dos_mcu.xml", {}, e);
+        comprueba(lee_mcus(s2, d2, e) && d2.size() == 2 && d2[1].id == "u1",
+                  "y los dos de dos_mcu.xml");
+        QVector<McuCli> m3;
+        const QByteArray s3 = Lanzador::mcus_de(g_sim, g_src, "placas/no-existe.xml", {}, e);
+        comprueba(s3.isEmpty() && e.contains("--mcus"),
+                  "una placa que no esta: se dice (" + e.toStdString() + ")");
+
+        Configuracion c = configuracion();
+        c.argumentos = {{"placa", "placas/nucleo_f446re_servo.xml"}, {"sin-firmware", "si"}};
+        DialogoLanzamiento d(c, "127.0.0.1:1");
+        auto* fw = d.findChild<QLineEdit*>("arg:firmware");
+        auto* sin = d.findChild<QCheckBox*>("arg:sin-firmware");
+        comprueba(d.mcus().size() == 1 && fw && sin && sin->isChecked() && !fw->isEnabled() &&
+                      fw->placeholderText().contains("servo_demo.bin") &&
+                      d.linea().contains("--sin-firmware"),
+                  "el dialogo se los pide al abrirse: la fila del chip, con la casilla marcada");
+        auto* placa = d.findChild<QLineEdit*>("arg:placa");
+        if (placa) {
+            placa->setText("placas/dos_mcu.xml");
+            emit placa->editingFinished();
+        }
+        espera([&] { return d.mcus().size() == 2; }, 10000);
+        comprueba(d.mcus().size() == 2 && d.findChild<QLineEdit*>("arg:firmware:u0") &&
+                      d.findChild<QCheckBox*>("arg:sin-firmware:u1") &&
+                      !d.findChild<QLineEdit*>("arg:firmware"),
+                  "otra placa, otros chips: una fila por cada uno");
+
+        // Lanzar sin el firmware que dice el XML
+        VentanaPrincipal v(c);
+        v.show();
+        auto* arrancar = v.findChild<QPushButton*>("arrancar");
+        comprueba(v.lanza() && espera([&] { return arrancar->isEnabled(); }, 20000) &&
+                      consola(v).contains("--sin-firmware") &&
+                      espera([&] { return consola(v).contains("mcu N/u0: sin firmware"); }, 5000),
+                  "y la ventana lanza el sistema del servo sin su firmware: --sin-firmware, y "
+                  "mcu-sim lo dice");
+        v.close();
     }
 
     return resultado();

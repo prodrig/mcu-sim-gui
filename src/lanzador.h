@@ -20,7 +20,9 @@
 //   * `detiene()`: pide terminar y, si no lo hace en un plazo, lo mata.
 //
 // Y `argumentos_de()`, que ejecuta `mcu-sim --argumentos` y espera: es lo que
-// usa el diálogo de lanzamiento para saber qué opciones ofrecer.
+// usa el diálogo de lanzamiento para saber qué opciones ofrecer. `mcus_de()`,
+// lo mismo con `mcu-sim placa --mcus`: qué chips lleva la placa, para una fila
+// de firmware por chip (plan §42).
 //
 // QtCore solo: se prueba sin pantalla.
 // =============================================================================
@@ -58,6 +60,11 @@ public:
     // salida estándar, o vacío con el porqué en `error`.
     static QByteArray argumentos_de(const QString& ejecutable, const QString& directorio,
                                     QString& error, int plazo_ms = 10000);
+    // Plan §42: `ejecutable placa --mcus [extra]`, igual: la lista de los MCUs
+    // de la placa, en XML (`lee_mcus`)
+    static QByteArray mcus_de(const QString& ejecutable, const QString& directorio,
+                              const QString& placa, const QStringList& extra,
+                              QString& error, int plazo_ms = 10000);
 
 signals:
     void linea(const QString& texto, bool de_error);

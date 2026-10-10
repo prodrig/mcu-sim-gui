@@ -19,8 +19,16 @@
 // que se leyó o, si no había ninguno —y entonces el diálogo sale vacío—, en qué
 // sitios se buscó y dónde se guardará al lanzar.
 //
-// Cada campo lleva de `objectName` `arg:<nombre>` («arg:placa», «arg:--ms»...):
-// así lo encuentran las pruebas.
+// EL FIRMWARE DE CADA MCU (plan §42): con la placa escrita, se le pregunta a
+// `mcu-sim placa --mcus` qué chips lleva. Con uno, la fila del firmware dice
+// de cuál es y lleva al lado una casilla «sin firmware»; con varios, en vez
+// de esa fila, una por chip, cada una con su fichero y su casilla. Un campo
+// vacío es el firmware que diga el XML, y el campo lo enseña de muestra. Si
+// `mcu-sim` no sabe contestar -uno anterior-, la fila de siempre.
+//
+// Cada campo lleva de `objectName` `arg:<nombre>` («arg:placa», «arg:--ms»,
+// «arg:firmware:N/u0», «arg:sin-firmware:N/u0»...): así lo encuentran las
+// pruebas.
 // =============================================================================
 #ifndef MCU_SIM_GUI_DIALOGO_LANZAMIENTO_H
 #define MCU_SIM_GUI_DIALOGO_LANZAMIENTO_H
@@ -57,9 +65,18 @@ public:
 
     // Pide otra vez las opciones al ejecutable de los campos.
     void relee();
+    // Plan §42: los MCUs de la placa. `pon_mcus` los pone sin preguntar a
+    // nadie (pruebas); `relee_mcus` se los pide a `mcu-sim` con la placa de
+    // los campos. Los dos rehacen el diálogo sin perder lo escrito
+    void pon_mcus(const QVector<McuCli>& m);
+    void relee_mcus();
+    const QVector<McuCli>& mcus() const { return mcus_; }
 
 private:
     void construye();
+    bool pide_mcus();
+    QWidget* fila_firmware(const QString& clave, const QString& clave_sin,
+                           const QString& del_xml);
     QString valor(const QString& nombre) const;
     void actualiza();
 
@@ -67,6 +84,8 @@ private:
     QString             destino_;
     ArgumentosCli       args_;
     QString             aviso_;
+    QVector<McuCli>     mcus_;
+    QString             aviso_mcus_;
     QLineEdit*          exe_ = nullptr;
     QLineEdit*          dir_ = nullptr;
     QLineEdit*          a_mano_ = nullptr;

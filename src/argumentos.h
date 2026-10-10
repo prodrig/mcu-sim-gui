@@ -16,6 +16,18 @@
 // "si"; una opción vacía no se escribe —ojo: no es lo mismo que su valor por
 // omisión, porque con `--gui` un `--ms` ausente quiere decir «sin fin»—; y las
 // repetibles llevan sus valores separados por «;».
+//
+// EL FIRMWARE DE CADA MCU (plan §42). `mcu-sim placa.xml --mcus` dice qué
+// chips lleva la placa o el sistema (`McuCli`), y con eso el firmware ya no es
+// solo el posicional:
+//
+//   * con UN chip, sigue siendo el posicional "firmware", y "sin-firmware"
+//     ("si") escribe `--sin-firmware` en su lugar;
+//   * con DOS O MÁS, "firmware:<id>" y "sin-firmware:<id>" -«firmware:N/u0»-
+//     escriben `--firmware=ID=FICHERO` y `--sin-firmware=ID`, y el
+//     posicional no se usa: con varios chips, `mcu-sim` lo rechaza.
+//
+// Un chip sin nada dicho lleva el firmware que diga su <mcu> en el XML.
 // =============================================================================
 #ifndef MCU_SIM_GUI_ARGUMENTOS_H
 #define MCU_SIM_GUI_ARGUMENTOS_H
@@ -55,6 +67,16 @@ struct ArgumentosCli {
 
 using ValoresCli = QMap<QString, QString>;
 
+// Un MCU de la placa, como lo cuenta `mcu-sim --mcus`: su id -«u0», «N/u0»; vacío
+// si lo pone `--mcu`-, su tipo y el firmware que le da el XML
+struct McuCli {
+    QString id, tipo, firmware;
+};
+
+// Lee la salida de `mcu-sim placa.xml --mcus`. false, con el porqué, si no se
+// puede: un mcu-sim anterior no sabe hacerlo
+bool lee_mcus(const QByteArray& salida, QVector<McuCli>& mcus, QString& error);
+
 // Lee la salida de `mcu-sim --argumentos`. Lo que haya antes de <argumentos>
 // —la cabecera de copyright de SystemC, que sale antes de que empiece el
 // programa— se salta. false, con el porqué, si no se puede leer.
@@ -65,8 +87,12 @@ bool lee_argumentos(const QByteArray& salida, ArgumentosCli& a, QString& error);
 // mano, troceado como lo trocearía una consola. Si falta un posicional
 // obligatorio, `error` lo dice y la lista sale vacía. Sin lista de opciones
 // —si no se pudo leer— solo van los posicionales y lo escrito a mano.
+//
+// Con `mcus`, el firmware de cada chip como dice arriba; sin ellos, el
+// posicional de siempre.
 QStringList linea_de_ordenes(const ArgumentosCli& a, const ValoresCli& v,
-                             const QString& a_mano, QString* error = nullptr);
+                             const QString& a_mano, QString* error = nullptr,
+                             const QVector<McuCli>& mcus = {});
 
 // Trocea como una consola: por espacios, con comillas simples o dobles para
 // lo que lleva espacios dentro.

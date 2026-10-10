@@ -22,7 +22,10 @@
         "el resto, opciones de mcu-sim tal y como las vuelca 'mcu-sim --argumentos'.",
         "Una bandera puesta vale true; una opcion que no esta, no se escribe. Ojo con",
         "--ms: con la ventana, si no esta, la simulacion no tiene fin y se para desde",
-        "ella. Las repetibles (--serie) llevan sus valores separados por ';'."
+        "ella. Las repetibles (--serie) llevan sus valores separados por ';'.",
+        "El firmware va por chip: con uno, 'firmware' y 'sin-firmware' (true: sin",
+        "ninguno, aunque el XML lo diga); con varios, 'firmware:N/u0' y",
+        "'sin-firmware:N/u0', con el id de cada MCU. Sin decir nada, el del XML."
       ],
       "placa": "placas/discovery_min.xml",
       "firmware": "verif/fw/blinky/blinky.bin",

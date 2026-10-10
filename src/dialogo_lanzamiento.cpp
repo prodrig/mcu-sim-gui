@@ -14,6 +14,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <functional>
@@ -132,7 +133,8 @@ DialogoLanzamiento::DialogoLanzamiento(const Configuracion& c, const QString& de
     caja->addWidget(bb);
 
     connect(exe_, &QLineEdit::editingFinished, this, &DialogoLanzamiento::relee);
-    connect(dir_, &QLineEdit::editingFinished, this, &DialogoLanzamiento::actualiza);
+    // El directorio cambia de dónde se lee la placa: sus MCUs, otra vez
+    connect(dir_, &QLineEdit::editingFinished, this, &DialogoLanzamiento::relee_mcus);
     connect(a_mano_, &QLineEdit::textChanged, this, &DialogoLanzamiento::actualiza);
 
     if (ya) {
@@ -141,6 +143,78 @@ DialogoLanzamiento::DialogoLanzamiento(const Configuracion& c, const QString& de
     } else {
         relee();
     }
+}
+
+// Plan §42: una fila de firmware -el fichero, «…» y la casilla «sin
+// firmware»-. Con la casilla, el fichero no cuenta y se apaga
+QWidget* DialogoLanzamiento::fila_firmware(const QString& clave, const QString& clave_sin,
+                                           const QString& del_xml)
+{
+    auto* e = new QLineEdit(cfg_.argumentos.value(clave), campos_);
+    e->setObjectName(QStringLiteral("arg:") + clave);
+    e->setPlaceholderText(del_xml.isEmpty() ? tr("el XML no dice ninguno: sin firmware")
+                                            : tr("el del XML: %1").arg(del_xml));
+    e->setToolTip(tr("La imagen binaria para la Flash. Vacio, la que diga el XML"));
+    connect(e, &QLineEdit::textChanged, this, &DialogoLanzamiento::actualiza);
+    auto* c = new QCheckBox(tr("sin firmware"), campos_);
+    c->setObjectName(QStringLiteral("arg:") + clave_sin);
+    c->setToolTip(tr("Lanzar este MCU sin firmware, aunque el XML diga uno: el nucleo se "
+                     "aparca en wfe"));
+    c->setChecked(cfg_.argumentos.value(clave_sin) == QLatin1String("si"));
+    auto* w = new QWidget(campos_);
+    auto* h = new QHBoxLayout(w);
+    h->setContentsMargins(0, 0, 0, 0);
+    h->addWidget(con_examinar(e, w, tr("firmware (*.bin *.hex);;* (*)"),
+                              [this] { return cfg_.absoluta(dir_->text().trimmed()); }),
+                 1);
+    h->addWidget(c);
+    e->setEnabled(!c->isChecked());
+    connect(c, &QCheckBox::toggled, this, [this, e](bool si) {
+        e->setEnabled(!si);
+        actualiza();
+    });
+    w_.insert(clave, e);
+    w_.insert(clave_sin, c);
+    return w;
+}
+
+// `mcu-sim placa --mcus`, con el --mcu que se haya elegido. Sin ejecutable o
+// sin placa no hay a quién preguntar; si no sabe contestar, se dice y se
+// queda la fila de siempre
+bool DialogoLanzamiento::pide_mcus()
+{
+    mcus_.clear();
+    aviso_mcus_.clear();
+    const QString exe = exe_->text().trimmed();
+    const QString placa = cfg_.argumentos.value(QStringLiteral("placa")).trimmed();
+    if (exe.isEmpty() || placa.isEmpty()) return false;
+    QStringList extra;
+    const QString mcu = cfg_.argumentos.value(QStringLiteral("--mcu"));
+    if (!mcu.isEmpty()) extra << QStringLiteral("--mcu=") + mcu;
+    QString e;
+    const QByteArray s = Lanzador::mcus_de(cfg_.absoluta(exe), cfg_.absoluta(dir_->text().trimmed()),
+                                           placa, extra, e);
+    if (s.isEmpty() || !lee_mcus(s, mcus_, e)) {
+        mcus_.clear();
+        aviso_mcus_ = e;
+        return false;
+    }
+    return true;
+}
+
+void DialogoLanzamiento::pon_mcus(const QVector<McuCli>& m)
+{
+    if (!w_.isEmpty()) cfg_.argumentos = configuracion().argumentos;
+    mcus_ = m;
+    aviso_mcus_.clear();
+    construye();
+}
+
+void DialogoLanzamiento::relee_mcus()
+{
+    if (!w_.isEmpty()) cfg_.argumentos = configuracion().argumentos;
+    pide_mcus();
+    construye();
 }
 
 void DialogoLanzamiento::relee()
@@ -157,6 +231,7 @@ void DialogoLanzamiento::relee()
         args_ = ArgumentosCli();
         aviso_ = e;
     }
+    pide_mcus();
     construye();
 }
 
@@ -175,11 +250,38 @@ void DialogoLanzamiento::construye()
                              QStringLiteral("*.bin"), tr("el firmware"), false}};
     }
     for (const PosicionalCli& p : pos) {
+        // Plan §42: el firmware, según los chips de la placa
+        if (p.nombre == QLatin1String("firmware") && mcus_.size() == 1) {
+            const McuCli& m = mcus_.front();
+            const QString quien = m.id.isEmpty() ? m.tipo : QStringLiteral("%1 (%2)").arg(m.id, m.tipo);
+            QWidget* f = fila_firmware(p.nombre, QStringLiteral("sin-firmware"), m.firmware);
+            forma_->addRow(tr("firmware de %1").arg(quien), f);
+            continue;
+        }
+        if (p.nombre == QLatin1String("firmware") && mcus_.size() > 1) {
+            auto* t = new QLabel(tr("<b>El firmware de cada MCU</b>: vacio, el que diga el XML"),
+                                 campos_);
+            t->setObjectName(QStringLiteral("firmwares"));
+            forma_->addRow(t);
+            for (const McuCli& m : mcus_)
+                forma_->addRow(QStringLiteral("%1 (%2)").arg(m.id, m.tipo),
+                               fila_firmware(QStringLiteral("firmware:") + m.id,
+                                             QStringLiteral("sin-firmware:") + m.id, m.firmware));
+            continue;
+        }
         auto* e = new QLineEdit(cfg_.argumentos.value(p.nombre), campos_);
         e->setObjectName(QStringLiteral("arg:") + p.nombre);
         e->setToolTip(p.ayuda);
         e->setPlaceholderText(p.obligatorio ? tr("obligatorio") : tr("opcional"));
         connect(e, &QLineEdit::textChanged, this, &DialogoLanzamiento::actualiza);
+        // Otra placa puede llevar otros chips: se le preguntan al acabar de
+        // escribirla, o al elegirla con «…»
+        if (p.nombre == QLatin1String("placa"))
+            connect(e, &QLineEdit::editingFinished, this, [this, e] {
+                // En diferido: rehacer el diálogo borra este mismo campo
+                if (e->text().trimmed() != cfg_.argumentos.value(QStringLiteral("placa")))
+                    QTimer::singleShot(0, this, &DialogoLanzamiento::relee_mcus);
+            });
         w_.insert(p.nombre, e);
         const QString filtro = p.filtro.isEmpty() ? QString()
                                                   : QStringLiteral("%1 (%2);;* (*)").arg(p.nombre, p.filtro);
@@ -190,6 +292,9 @@ void DialogoLanzamiento::construye()
 
     for (const OpcionCli& o : args_.opciones) {
         if (!o.se_ofrece()) continue;
+        // Plan §42: esas dos las escriben las filas del firmware
+        if (o.nombre == QLatin1String("--firmware") || o.nombre == QLatin1String("--sin-firmware"))
+            continue;
         const QString val = cfg_.argumentos.value(o.nombre);
         QWidget* w = nullptr;
         QString etiqueta = o.nombre;
@@ -255,9 +360,14 @@ void DialogoLanzamiento::construye()
         estado_->setText(tr("<b>No se pueden leer las opciones de mcu-sim</b>: %1. Se puede "
                             "lanzar igual con la placa, el firmware y lo que se escriba a mano.")
                              .arg(aviso_.toHtmlEscaped()));
-    else
-        estado_->setText(tr("Opciones leidas del propio %1 (version %2) con --argumentos.")
-                             .arg(args_.programa, args_.version));
+    else {
+        QString t = tr("Opciones leidas del propio %1 (version %2) con --argumentos.")
+                        .arg(args_.programa, args_.version);
+        if (!aviso_mcus_.isEmpty())
+            t += QLatin1Char(' ') + tr("No se sabe que MCUs lleva la placa (%1): el firmware, "
+                                       "como siempre.").arg(aviso_mcus_.toHtmlEscaped());
+        estado_->setText(t);
+    }
     actualiza();
 }
 
@@ -281,13 +391,24 @@ Configuracion DialogoLanzamiento::configuracion() const
         const QString v = valor(it.key());
         if (!v.isEmpty()) c.argumentos.insert(it.key(), v);
     }
+    // Plan §42: el firmware de los chips que ahora no están -el posicional con
+    // varios, o los de otro sistema- se recuerda: la configuración es de quien
+    // la usa, y volverá a la placa de antes
+    for (auto it = cfg_.argumentos.begin(); it != cfg_.argumentos.end(); ++it) {
+        const bool de_firmware = it.key() == QLatin1String("firmware") ||
+                                 it.key() == QLatin1String("sin-firmware") ||
+                                 it.key().startsWith(QLatin1String("firmware:")) ||
+                                 it.key().startsWith(QLatin1String("sin-firmware:"));
+        if (de_firmware && !w_.contains(it.key()) && !it.value().isEmpty())
+            c.argumentos.insert(it.key(), it.value());
+    }
     return c;
 }
 
 QStringList DialogoLanzamiento::linea(QString* error) const
 {
     const Configuracion c = configuracion();
-    return linea_de_ordenes(args_, c.argumentos, c.a_mano, error);
+    return linea_de_ordenes(args_, c.argumentos, c.a_mano, error, mcus_);
 }
 
 QString DialogoLanzamiento::aviso() const { return aviso_; }

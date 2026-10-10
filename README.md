@@ -328,7 +328,11 @@ diálogo de lanzamiento**, que la guarda al lanzar —respetando los comentarios
 que tuviera—. `mcu-sim-gui` la busca en el directorio actual y, si no está, en
 el de configuración del usuario; `--config FICHERO` dice otra. Si no
 encuentra ninguna, el diálogo sale vacío y lo dice arriba: en qué sitios ha
-buscado y dónde la guardará al lanzar. Si la encontró, de qué fichero la leyó. El puerto es una
+buscado y dónde la guardará al lanzar. Si la encontró, de qué fichero la leyó.
+El firmware va **por chip**: el diálogo le pregunta a `mcu-sim placa --mcus`
+qué MCUs lleva la placa y pone una fila por cada uno, con su fichero —vacío, el
+del XML— y una casilla «sin firmware» (plan §42; en la configuración,
+`firmware:N/u0` y `sin-firmware:N/u0`). El puerto es una
 preferencia: si está cogido, la ventana escucha en otro y se lo pasa al hijo,
 sin decir nada.
 

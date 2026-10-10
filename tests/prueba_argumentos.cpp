@@ -18,7 +18,10 @@
 //       valores —o, si no había configuración, dónde se buscó y dónde se
 //       guardará—;
 //   G5  la ventana con el puerto cogido: escucha en otro sin decir nada, y una
-//       ruta de ejecutable mala se dice.
+//       ruta de ejecutable mala se dice;
+//   G6  el firmware de cada MCU (plan §42): leer `mcu-sim --mcus`, la línea con
+//       uno y con dos chips, y el diálogo: la fila de uno con su casilla «sin
+//       firmware», una fila por chip con varios, y lo que se recuerda.
 // =============================================================================
 #include <QApplication>
 #include <QCheckBox>
@@ -323,6 +326,108 @@ int main(int argc, char** argv)
                       !v.lanzador().corriendo(),
                   "una ruta de ejecutable mala: no se lanza, y se dice en la consola y en la "
                   "barra de estado");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("G6 El firmware de cada MCU\n");
+    {
+        QVector<McuCli> m;
+        QString e;
+        const QByteArray salida =
+            "\n        SystemC 2.3.4-Accellera\n"
+            "<mcus placa=\"placas/x.xml\">\n"
+            "  <mcu id=\"N/u0\" tipo=\"STM32F446RE\" firmware=\"verif/fw/a/a.bin\"/>\n"
+            "  <mcu id=\"M/u0\" tipo=\"STM32F407VG\" firmware=\"\"/>\n"
+            "</mcus>\n";
+        comprueba(lee_mcus(salida, m, e) && m.size() == 2 && m[0].id == "N/u0" &&
+                      m[0].tipo == "STM32F446RE" && m[0].firmware == "verif/fw/a/a.bin" &&
+                      m[1].firmware.isEmpty(),
+                  "mcu-sim --mcus se lee, con la cabecera de SystemC delante: " + e.toStdString());
+        QVector<McuCli> m2;
+        comprueba(!lee_mcus("uso: sim placa.xml", m2, e) && m2.isEmpty() && e.contains("--mcus"),
+                  "y uno anterior, que no sabe, se dice: " + e.toStdString());
+
+        const ArgumentosCli a = lista();
+        const QVector<McuCli> uno{{"u0", "STM32F407VG", ""}};
+        ValoresCli v{{"placa", "p.xml"}, {"firmware", "fw.bin"}};
+        comprueba(linea_de_ordenes(a, v, {}, nullptr, uno) == QStringList({"p.xml", "fw.bin"}),
+                  "con un MCU, el firmware es el posicional de siempre");
+        v.insert("sin-firmware", "si");
+        comprueba(linea_de_ordenes(a, v, {}, nullptr, uno) ==
+                      QStringList({"p.xml", "--sin-firmware"}),
+                  "y sin firmware, --sin-firmware en su lugar");
+        ValoresCli v2{{"placa", "s.xml"}, {"firmware", "fw.bin"},
+                      {"firmware:M/u0", "b.bin"}, {"sin-firmware:N/u0", "si"},
+                      {"firmware:N/u0", "no_cuenta.bin"}, {"firmware:Z/u0", "otro_sistema.bin"}};
+        comprueba(linea_de_ordenes(a, v2, {}, nullptr, m) ==
+                      QStringList({"s.xml", "--sin-firmware=N/u0", "--firmware=M/u0=b.bin"}),
+                  "con dos, el de cada uno con su id; el posicional no va, el fichero de uno "
+                  "sin firmware tampoco, y el de un chip que no esta, menos");
+
+        // El dialogo
+        ArgumentosCli con = a;
+        OpcionCli f;
+        f.nombre = "--firmware";
+        f.forma = "valor";
+        f.tipo = "texto";
+        f.repetible = true;
+        OpcionCli sf = f;
+        sf.nombre = "--sin-firmware";
+        sf.forma = "valor_opcional";
+        con.opciones << f << sf;
+        Configuracion c;
+        c.ejecutable = "mcu-sim";
+        c.argumentos = {{"placa", "p.xml"}, {"firmware", "fw.bin"}};
+        DialogoLanzamiento d(c, "127.0.0.1:5555", &con);
+        comprueba(!d.findChild<QWidget*>("arg:--firmware") &&
+                      !d.findChild<QWidget*>("arg:--sin-firmware") &&
+                      d.findChild<QLineEdit*>("arg:firmware") &&
+                      !d.findChild<QCheckBox*>("arg:sin-firmware"),
+                  "sin saber sus MCUs, el firmware de siempre; --firmware y --sin-firmware "
+                  "no salen como opciones sueltas");
+        d.pon_mcus({{"u0", "STM32F407VG", "verif/fw/blinky/blinky.bin"}});
+        auto* fw = d.findChild<QLineEdit*>("arg:firmware");
+        auto* sin = d.findChild<QCheckBox*>("arg:sin-firmware");
+        auto* orden = d.findChild<QLabel*>("orden");
+        comprueba(fw && sin && fw->text() == "fw.bin" && !sin->isChecked() && fw->isEnabled() &&
+                      fw->placeholderText().contains("verif/fw/blinky/blinky.bin"),
+                  "con uno, su fila: el fichero de antes, de muestra el del XML, y la casilla "
+                  "sin firmware al lado");
+        if (!fw || !sin) return resultado();
+        sin->setChecked(true);
+        comprueba(!fw->isEnabled() && d.linea() == QStringList({"p.xml", "--sin-firmware"}) &&
+                      orden->text().contains("--sin-firmware"),
+                  "con la casilla, el fichero se apaga y sale --sin-firmware");
+        sin->setChecked(false);
+        fw->clear();
+        comprueba(d.linea() == QStringList({"p.xml"}),
+                  "vacio y sin casilla: el del XML, sin decir nada");
+        fw->setText("fw.bin");
+        d.pon_mcus(m);
+        auto* fn = d.findChild<QLineEdit*>("arg:firmware:N/u0");
+        auto* fm = d.findChild<QLineEdit*>("arg:firmware:M/u0");
+        auto* sn = d.findChild<QCheckBox*>("arg:sin-firmware:N/u0");
+        comprueba(fn && fm && sn && !d.findChild<QLineEdit*>("arg:firmware") &&
+                      d.findChild<QLabel*>("firmwares") &&
+                      fm->placeholderText().contains("sin firmware"),
+                  "con dos, una fila por MCU en vez de la del posicional; la del que el XML "
+                  "deja sin firmware lo dice");
+        if (!fn || !fm || !sn) return resultado();
+        fm->setText("b.bin");
+        sn->setChecked(true);
+        comprueba(d.linea() == QStringList({"p.xml", "--sin-firmware=N/u0", "--firmware=M/u0=b.bin"}),
+                  "y la linea lleva el de cada uno: \"" + d.linea().join(' ').toStdString() + "\"");
+        const Configuracion r = d.configuracion();
+        comprueba(r.argumentos.value("firmware:M/u0") == "b.bin" &&
+                      r.argumentos.value("sin-firmware:N/u0") == "si" &&
+                      r.argumentos.value("firmware") == "fw.bin",
+                  "la configuracion los guarda, y recuerda el de la placa de un solo chip");
+        d.pon_mcus(uno);
+        comprueba(d.findChild<QLineEdit*>("arg:firmware") &&
+                      d.findChild<QLineEdit*>("arg:firmware")->text() == "fw.bin" &&
+                      d.configuracion().argumentos.value("firmware:M/u0") == "b.bin",
+                  "y al volver a una placa con un chip, sale el de antes; lo del sistema se "
+                  "sigue recordando");
     }
 
     return resultado();

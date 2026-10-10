@@ -70,6 +70,32 @@ bool lee_argumentos(const QByteArray& salida, ArgumentosCli& a, QString& error)
     return true;
 }
 
+bool lee_mcus(const QByteArray& salida, QVector<McuCli>& mcus, QString& error)
+{
+    mcus.clear();
+    const int i = salida.indexOf("<mcus");
+    if (i < 0) {
+        error = QStringLiteral("no contesta con la lista de sus MCUs: es un mcu-sim anterior "
+                               "a --mcus");
+        return false;
+    }
+    QXmlStreamReader x(salida.mid(i));
+    while (!x.atEnd()) {
+        x.readNext();
+        if (x.isStartElement() && x.name() == QLatin1String("mcu")) {
+            const auto at = x.attributes();
+            mcus.push_back({at.value(QLatin1String("id")).toString(),
+                            at.value(QLatin1String("tipo")).toString(),
+                            at.value(QLatin1String("firmware")).toString()});
+        } else if (x.isEndElement() && x.name() == QLatin1String("mcus")) {
+            return true;
+        }
+    }
+    error = QStringLiteral("la lista de MCUs no es XML valido: %1").arg(x.errorString());
+    mcus.clear();
+    return false;
+}
+
 QStringList trocea(const QString& texto)
 {
     QStringList r;
@@ -97,8 +123,14 @@ QStringList trocea(const QString& texto)
 }
 
 QStringList linea_de_ordenes(const ArgumentosCli& a, const ValoresCli& v,
-                             const QString& a_mano, QString* error)
+                             const QString& a_mano, QString* error,
+                             const QVector<McuCli>& mcus)
 {
+    // Plan §42: con un chip, sin firmware quita el posicional; con varios, el
+    // posicional no se usa
+    const bool uno = mcus.size() == 1;
+    const bool varios = mcus.size() > 1;
+    const bool sin_uno = uno && v.value(QStringLiteral("sin-firmware")) == QLatin1String("si");
     QStringList r;
     QStringList pos;
     // Los posicionales, en su orden. Uno vacío corta: el siguiente ya no
@@ -111,7 +143,8 @@ QStringList linea_de_ordenes(const ArgumentosCli& a, const ValoresCli& v,
                                        return l;
                                    }();
     for (int i = 0; i < nombres_pos.size(); ++i) {
-        const QString val = v.value(nombres_pos[i]).trimmed();
+        QString val = v.value(nombres_pos[i]).trimmed();
+        if (nombres_pos[i] == QLatin1String("firmware") && (varios || sin_uno)) val.clear();
         const bool obligatorio =
             a.posicionales.isEmpty() ? i == 0 : a.posicionales[i].obligatorio;
         if (val.isEmpty()) {
@@ -124,6 +157,16 @@ QStringList linea_de_ordenes(const ArgumentosCli& a, const ValoresCli& v,
         pos << val;
     }
     r << pos;
+    if (sin_uno) r << QStringLiteral("--sin-firmware");
+    if (varios)
+        for (const McuCli& m : mcus) {
+            if (v.value(QStringLiteral("sin-firmware:") + m.id) == QLatin1String("si")) {
+                r << QStringLiteral("--sin-firmware=") + m.id;
+                continue;
+            }
+            const QString f = v.value(QStringLiteral("firmware:") + m.id).trimmed();
+            if (!f.isEmpty()) r << QStringLiteral("--firmware=%1=%2").arg(m.id, f);
+        }
     for (const OpcionCli& o : a.opciones) {
         if (o.forma == QLatin1String("accion")) continue;
         const QString val = v.value(o.nombre).trimmed();

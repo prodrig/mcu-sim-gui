@@ -104,6 +104,54 @@ void Lanzador::lee(QProcess::ProcessChannel canal, QByteArray& resto, bool vacia
     }
 }
 
+namespace {
+
+// `exe args`, esperando como mucho `plazo_ms`: su salida estándar, o vacío
+// con el porqué. `que` es cómo se cuenta lo que se ha pedido
+QByteArray ejecuta(const QString& exe, const QString& directorio, const QStringList& args,
+                   const QString& que, QString& error, int plazo_ms)
+{
+    QProcess p;
+    p.setProcessEnvironment(entorno());
+    if (!directorio.isEmpty() && QFileInfo(directorio).isDir()) p.setWorkingDirectory(directorio);
+    p.start(exe, args);
+    if (!p.waitForStarted(plazo_ms)) {
+        error = Lanzador::tr("no se puede ejecutar '%1': %2").arg(exe, p.errorString());
+        return {};
+    }
+    if (!p.waitForFinished(plazo_ms)) {
+        p.kill();
+        p.waitForFinished(1000);
+        error = Lanzador::tr("'%1' no ha terminado en %2 s").arg(que).arg(plazo_ms / 1000);
+        return {};
+    }
+    if (p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0) {
+        const QString err = QString::fromLocal8Bit(p.readAllStandardError()).trimmed();
+        error = Lanzador::tr("'%1' ha terminado con codigo %2%3")
+                    .arg(que)
+                    .arg(p.exitCode())
+                    .arg(err.isEmpty() ? QString() : QStringLiteral(": ") + err.section('\n', -1));
+        return {};
+    }
+    return p.readAllStandardOutput();
+}
+
+} // namespace
+
+QByteArray Lanzador::mcus_de(const QString& ejecutable, const QString& directorio,
+                             const QString& placa, const QStringList& extra,
+                             QString& error, int plazo_ms)
+{
+    const QString exe = resuelve(ejecutable);
+    if (exe.isEmpty()) {
+        error = tr("no hay ningun ejecutable en '%1'").arg(ejecutable);
+        return {};
+    }
+    return ejecuta(exe, directorio, QStringList{placa, QStringLiteral("--mcus")} + extra,
+                   QStringLiteral("%1 %2 --mcus").arg(QFileInfo(exe).fileName(), placa), error,
+                   plazo_ms);
+}
+
 QByteArray Lanzador::argumentos_de(const QString& ejecutable, const QString& directorio,
                                    QString& error, int plazo_ms)
 {
