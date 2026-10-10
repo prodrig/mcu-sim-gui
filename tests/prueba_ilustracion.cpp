@@ -81,6 +81,13 @@
 //       tramos horizontales y verticales con las esquinas redondeadas: doble
 //       clic, arrastrar un tramo, un codo más, mover una placa, volver a la
 //       curva, y guardarlo con lo demás.
+//   I19 (plan §38) LA DISPOSICIÓN EN EL XML: T_PLACA con el sitio y la escala
+//       de cada placa, el lienzo y las rutas; eso es lo de partida y lo de
+//       «Restablecer»; lo colocado, para el XML, con el giro sumado; «Copiar
+//       como XML»; escribirlo en el fichero como texto -comentarios, placas
+//       escritas dentro y CRLF intactos- y lo que no se deja; y la ventana:
+//       sin haber lanzado ella mcu-sim no sabe dónde está el XML, y después
+//       de escribirlo olvida lo de la configuración.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -108,6 +115,11 @@
 #include <QTemporaryDir>
 #include <QFile>
 #include "configuracion.h"
+#include "disposicion_xml.h"
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QRegularExpression>
+#include <QXmlStreamReader>
 #include <QCheckBox>
 #include <QDialog>
 #include <QDoubleSpinBox>
@@ -2313,6 +2325,244 @@ int main(int argc, char** argv)
         auto* rest = il.findChild<QToolButton*>("restablecer");
         rest->click();
         comprueba(!v->enrutada(clave), "y Restablecer las deja todas en curva");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I19 La disposicion en el XML: leerla, copiarla y escribirla\n");
+    {
+        // Lo que manda mcu-sim de un sistema con su disposicion (make gui-sistema C16)
+        const char* T_PLACA_DISP =
+            "<sistema nombre=\"disp\" lienzo=\"-20 -10 300 200\">\n"
+            "  <placa id=\"A\" nombre=\"modulo\" fichero=\"m.xml\" giro=\"90\" x=\"10\" y=\"-5.5\" escala=\"1.5\" piezas=\"2\">\n"
+            "    <conector ref=\"A/J\" filas=\"1\" columnas=\"2\" numeracion=\"zigzag\" acople=\"0\"/>\n"
+            "  </placa>\n"
+            "  <placa id=\"B\" nombre=\"modulo\" fichero=\"m.xml\" piezas=\"2\">\n"
+            "    <conector ref=\"B/J\" filas=\"1\" columnas=\"2\" numeracion=\"zigzag\"/>\n"
+            "  </placa>\n"
+            "  <placa id=\"C\" nombre=\"dentro\" x=\"200\" y=\"0\" escala=\"0.5\" piezas=\"1\">\n"
+            "    <conector ref=\"C/K\" filas=\"1\" columnas=\"2\" numeracion=\"zigzag\" acople=\"0\"/>\n"
+            "  </placa>\n"
+            "  <componente tipo=\"Conector\" id=\"A/J\" columnas=\"2\" filas=\"1\"/>\n"
+            "  <componente tipo=\"Led\" id=\"A/LD\" a_vss=\"si\"/>\n"
+            "  <componente tipo=\"Conector\" id=\"B/J\" columnas=\"2\" filas=\"1\"/>\n"
+            "  <componente tipo=\"Led\" id=\"B/LD\" a_vss=\"si\"/>\n"
+            "  <componente tipo=\"Conector\" id=\"C/K\" columnas=\"2\" filas=\"1\"/>\n"
+            "  <acopla n=\"0\" conectores=\"A/J C/K\" placas=\"A C\" a=\"A/J\" b=\"C/K\"/>\n"
+            "  <hilo a=\"A/J.2\" b=\"B/J.1\" placas=\"A B\"/>\n"
+            "  <ruta linea=\"hilo A/J.2 B/J.1\" eje=\"v\" codos=\"40 12.5\"/>\n"
+            "  <ruta linea=\"acople A/J C/K\" eje=\"h\" codos=\"100\"/>\n"
+            "</sistema>\n";
+        const char* CAT_DISP =
+            "<catalogo>\n"
+            "  <pieza idx=\"0\" id=\"A/J\" tipo=\"Conector\"/>\n"
+            "  <pieza idx=\"1\" id=\"A/LD\" tipo=\"Led\"/>\n"
+            "  <pieza idx=\"2\" id=\"B/J\" tipo=\"Conector\"/>\n"
+            "  <pieza idx=\"3\" id=\"B/LD\" tipo=\"Led\"/>\n"
+            "  <pieza idx=\"4\" id=\"C/K\" tipo=\"Conector\"/>\n"
+            "</catalogo>\n";
+        const PlacaGui p = placa_de(T_PLACA_DISP, CAT_DISP);
+        const SubPlacaGui* a = p.subplaca("A");
+        const SubPlacaGui* b = p.subplaca("B");
+        const SubPlacaGui* c = p.subplaca("C");
+        comprueba(a && b && c && a->giro == 90 && a->colocada && a->x == 10 && a->y == -5.5 &&
+                      a->escala == 1.5 && !b->colocada && b->escala == 1.0 && c->colocada &&
+                      c->x == 200 && c->escala == 0.5 && p.lienzo_fijo && p.lienzo[0] == -20 &&
+                      p.lienzo[3] == 200 && p.rutas.size() == 2 && !p.rutas[0].horizontal &&
+                      p.rutas[0].codos == QVector<double>({40, 12.5}) &&
+                      p.rutas[1].linea == "acople A/J C/K",
+                  "T_PLACA trae la disposicion: el sitio, la escala y el giro de cada placa, el "
+                  "lienzo y las rutas");
+
+        VistaIlustracion il(p);
+        il.resize(900, 500);
+        il.show();
+        espera([] { return false; }, 50);
+        VistaPlaca* v = il.vista("A");
+        const double mm = v->mm_escena();
+        auto esquina = [&](const QString& id) { return v->en_escena(id).topLeft() * mm; };
+        comprueba(v->ajuste("A").fija && std::abs(esquina("A").x() - 10) < 1e-6 &&
+                      std::abs(esquina("A").y() + 5.5) < 1e-6 && v->ajuste("A").escala == 1.5 &&
+                      std::abs(esquina("C").x() - 200) < 1e-6 && v->ajuste("C").escala == 0.5 &&
+                      !v->ajuste("B").fija && v->lienzo_fijo() &&
+                      v->lienzo() == QRectF(-20, -10, 300, 200) &&
+                      v->enrutada("acople A/J C/K") && !v->ruta("hilo A/J.2 B/J.1").horizontal,
+                  "la ilustracion empieza con lo que dice el XML: A y C en su sitio y a su "
+                  "escala, B colocada sola, el lienzo y las dos lineas en tramos rectos");
+        comprueba(il.disposicion() == il.disposicion_xml(),
+                  "y eso es su disposicion: la del XML, ni mas ni menos");
+        QVector<QJsonObject> guardadas;
+        QObject::connect(&il, &VistaIlustracion::guarda_disposicion,
+                         [&](const QString&, const QJsonObject& d) { guardadas.push_back(d); });
+        auto* copiar = il.findChild<QToolButton*>("copiar_xml");
+        auto* guardar = il.findChild<QToolButton*>("guardar_xml");
+        comprueba(copiar && guardar && !copiar->isEnabled() && !guardar->isEnabled(),
+                  "Copiar como XML y Guardar en el XML, apagados fuera de la edicion");
+        il.pon_edicion(true);
+        comprueba(copiar->isEnabled() && !guardar->isEnabled(),
+                  "en la edicion, Copiar si; Guardar no, que la ventana no sabe donde esta el "
+                  "XML");
+        v->gira_placa("A", 90);
+        v->escala_placa("C", 1.0);
+        il.findChild<QToolButton*>("restablecer")->click();
+        il.pon_edicion(false);
+        comprueba(il.disposicion() == il.disposicion_xml() && guardadas.size() == 1 &&
+                      guardadas[0].isEmpty() && v->ajuste("A").giro == 0,
+                  "Restablecer vuelve a lo del XML, y al salir no hay nada que recordar");
+
+        // Lo colocado, para el XML
+        il.pon_edicion(true);
+        v->gira_placa("A", 90);
+        v->escala_placa("C", 1.0);
+        v->mueve_placa("B", QPointF(60, 80));
+        const DisposicionXml d = il.para_xml();
+        auto de = [&](const QString& id) {
+            for (const DisposicionXml::Placa& x : d.placas)
+                if (x.id == id) return x;
+            return DisposicionXml::Placa();
+        };
+        comprueba(d.sistema && d.lienzo_fijo && de("A").giro == 180 && !de("A").escala &&
+                      de("A").fichero == "m.xml" && de("B").colocada && de("B").x == 60 &&
+                      de("B").y == 80 && !de("B").giro && !de("B").escala &&
+                      de("C").escala == 1.0 && d.rutas.size() == 2,
+                  "lo colocado, para el XML: el giro de A, el de la ventana mas el del XML -180-; "
+                  "B con su sitio; la escala de C, que cambia; y las rutas");
+        const QString texto = il.copia_xml();
+        comprueba(texto.contains("<sistema lienzo=\"-20 -10 300 200\">") &&
+                      texto.contains("<placa id=\"A\" fichero=\"m.xml\" x=\"") &&
+                      texto.contains("giro=\"180\"/>") &&
+                      texto.contains("<placa id=\"B\" fichero=\"m.xml\" x=\"60\" y=\"80\"/>") &&
+                      texto.contains("<ruta linea=\"hilo A/J.2 B/J.1\" eje=\"v\" codos=\"40 12.5\"/>") &&
+                      QGuiApplication::clipboard()->text() == texto,
+                  "Copiar como XML: las lineas para el fichero, al portapapeles:\n" +
+                      texto.toStdString());
+
+        // Escribirlo en el fichero, como texto
+        const QByteArray fuente =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            "<!-- Un sistema de prueba: <placa id=\"A\"> en un comentario no cuenta -->\n"
+            "<sistema nombre=\"disp\" lienzo=\"-20 -10 300 200\">\n"
+            "  <placa id=\"A\" fichero=\"m.xml\" x=\"10\" y=\"-5.5\" escala=\"1.5\" giro=\"90\"/>\n"
+            "  <placa id=\"B\"   fichero=\"m.xml\"/>   <!-- B, sin sitio -->\n"
+            "  <placa id=\"C\" nombre=\"dentro\" x=\"200\" y=\"0\" escala=\"0.5\">\n"
+            "    <componente tipo=\"Conector\" id=\"K\" filas=\"1\" columnas=\"2\"/>\n"
+            "  </placa>\n"
+            "  <acopla a=\"A/J\" b=\"C/K\"/>\n"
+            "  <hilo a=\"A/J.2\" b=\"B/J.1\"/>\n"
+            "  <ruta linea=\"hilo A/J.2 B/J.1\" eje=\"v\" codos=\"40 12.5\"/>\n"
+            "  <ruta linea=\"acople A/J C/K\" codos=\"100\"/>\n"
+            "</sistema>\n";
+        QByteArray x = fuente;
+        QString e;
+        const bool ok = escribe_disposicion(x, d, e);
+        const QString r = QString::fromUtf8(x);
+        QXmlStreamReader lx(x);
+        while (!lx.atEnd()) lx.readNext();
+        comprueba(ok && !lx.hasError() &&
+                      r.contains("<!-- Un sistema de prueba: <placa id=\"A\"> en un comentario no "
+                                 "cuenta -->") &&
+                      r.contains("<placa id=\"A\" fichero=\"m.xml\" x=\"") &&
+                      r.contains("escala=\"1.5\" giro=\"180\"/>") &&
+                      r.contains("<placa id=\"B\"   fichero=\"m.xml\" x=\"60\" y=\"80\"/>   <!-- B, sin sitio -->") &&
+                      r.contains(QStringLiteral("<placa id=\"C\" nombre=\"dentro\" x=\"%1\" y=\"%2\" "
+                                                "escala=\"1\">\n").arg(numero_xml(de("C").x), numero_xml(de("C").y)) +
+                                 "    <componente tipo=\"Conector\" id=\"K\" filas=\"1\" columnas=\"2\"/>\n"
+                                 "  </placa>") &&
+                      r.count("<ruta ") == 2 &&
+                      r.contains("  <hilo a=\"A/J.2\" b=\"B/J.1\"/>\n  <ruta linea=") &&
+                      r.contains("  <ruta linea=\"acople A/J C/K\" eje=\"h\" codos=\"100\"/>\n") &&
+                      r.endsWith("eje=\"v\" codos=\"40 12.5\"/>\n</sistema>\n"),
+                  "escrito en el fichero como texto: cada <placa id> con lo suyo, sin tocar "
+                  "comentarios, espacios ni la placa escrita dentro; y las rutas, al final:\n" +
+                      r.toStdString());
+        QByteArray crlf = fuente;
+        crlf.replace("\n", "\r\n");
+        comprueba(escribe_disposicion(crlf, d, e) && !QString::fromUtf8(crlf).contains(QRegularExpression("[^\r]\n")),
+                  "un fichero con CRLF sigue con CRLF");
+        QByteArray malo = "<placa nombre=\"x\"/>";
+        const bool mal1 = !escribe_disposicion(malo, d, e);
+        comprueba(mal1 && e.contains("no es un <sistema>") && malo == "<placa nombre=\"x\"/>",
+                  "lo que no se deja, no se toca: una placa donde se espera un sistema (" +
+                      e.toStdString() + ")");
+        QByteArray sin_b = fuente;
+        sin_b.replace("<placa id=\"B\"", "<placa id=\"Z\"");
+        const bool mal2 = !escribe_disposicion(sin_b, d, e);
+        comprueba(mal2 && e.contains("<placa id=\"B\">"),
+                  "un sistema sin una de las placas: " + e.toStdString());
+        QByteArray roto = "<sistema nombre=\"x\"><placa id=\"A\"></sistema>";
+        const bool mal3 = !escribe_disposicion(roto, d, e);
+        comprueba(mal3, "un XML roto: " + e.toStdString());
+
+        // Una placa suelta: la raiz
+        DisposicionXml ds;
+        ds.placas.push_back({});
+        ds.placas[0].giro = 90;
+        ds.placas[0].escala = 1.0;
+        ds.lienzo_fijo = true;
+        ds.lienzo[2] = 50;
+        ds.lienzo[3] = 40;
+        QByteArray suelta = "<placa nombre=\"m\" escala=\"2\">\n  <nodo id=\"a\"/>\n</placa>\n";
+        const bool bien_suelta = escribe_disposicion(suelta, ds, e);
+        comprueba(bien_suelta &&
+                      suelta == "<placa nombre=\"m\" lienzo=\"0 0 50 40\" giro=\"90\">\n  <nodo id=\"a\"/>\n</placa>\n",
+                  "en una placa suelta, en su raiz: el giro, el lienzo, y la escala de siempre "
+                  "fuera: " + suelta.toStdString());
+    }
+    {
+        // La ventana: sin lanzar ella mcu-sim, no sabe donde esta el XML; y
+        // despues de escribirlo, olvida lo de la configuracion
+        QTemporaryDir dir;
+        Configuracion c;
+        QString e;
+        Configuracion::lee(dir.filePath("config.json"), c, e);
+        c.puerto = 0;
+        c.disposiciones.insert("nucleo-y-shield [N=nucleo-f446re S=shield-leds]",
+                               QJsonObject{{"placas", QJsonObject{{"S", QJsonObject{{"x", 1}, {"y", 2}}}}}});
+        c.guarda(e);
+        VentanaPrincipal v(c);
+        v.show();
+        ModeloFalso m;
+        m.conecta(v.sesion().puerto());
+        m.manda(T_HOLA, "protocolo_max=2\nplaca=placas/nucleo_y_shield.xml\n");
+        m.espera_leidos(1);
+        m.version(2);
+        m.manda(T_PLACA, SISTEMA_XML);
+        m.manda(T_CATALOGO, CATALOGO_SISTEMA_XML);
+        m.manda(T_LISTO);
+        espera([&] { return v.findChild<VistaIlustracion*>("ilustracion"); });
+        auto* ilus = v.findChild<VistaIlustracion*>("ilustracion");
+        if (!ilus) return resultado();
+        ilus->pon_edicion(true);
+        comprueba(v.ruta_xml().isEmpty() && ilus->ruta_xml().isEmpty() &&
+                      !ilus->findChild<QToolButton*>("guardar_xml")->isEnabled(),
+                  "con un mcu-sim que no ha lanzado ella, la ventana no sabe donde esta el XML: "
+                  "Guardar en el XML, apagado");
+        const QString ruta = dir.filePath("sistema.xml");
+        {
+            QFile f(ruta);
+            f.open(QIODevice::WriteOnly);
+            f.write("<sistema nombre=\"nucleo-y-shield\">\n"
+                    "  <placa id=\"N\" fichero=\"nucleo_f446re.xml\"/>\n"
+                    "  <placa id=\"S\" fichero=\"shield_leds.xml\"/>\n"
+                    "</sistema>\n");
+        }
+        ilus->vista("S")->mueve_placa("S", QPointF(150, 30));
+        const bool escrito = v.escribe_xml(ruta, &e);
+        comprueba(escrito && ilus->xml_escrito() &&
+                      !v.configuracion().disposiciones.contains(ilus->clave_disposicion()),
+                  "escrito en el XML " + e.toStdString() +
+                      ": lo de la configuracion para ese sistema se olvida");
+        QFile f(ruta);
+        f.open(QIODevice::ReadOnly);
+        const QString t = QString::fromUtf8(f.readAll());
+        ilus->pon_edicion(false);
+        comprueba(t.contains("<placa id=\"S\" fichero=\"shield_leds.xml\" x=\"150\" y=\"30\"/>") &&
+                      !v.configuracion().disposiciones.contains(ilus->clave_disposicion()),
+                  "el fichero lleva el sitio de S; y al salir de la edicion no se vuelve a "
+                  "guardar en la configuracion");
+        const bool no_esta = !v.escribe_xml(dir.filePath("no_esta.xml"), &e);
+        comprueba(no_esta && e.contains("no se puede leer"),
+                  "un fichero que no esta: " + e.toStdString());
+        m.s.disconnectFromHost();
     }
 
     return resultado();

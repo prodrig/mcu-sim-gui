@@ -111,6 +111,18 @@ struct SubPlacaGui {
     // llega aparte, en T_ILUSTRACION.
     QString              ilustracion;
     QVector<EnlaceTabla> tabla;
+    // Plan §38: cómo la monta el XML en la ventana. El giro ya viene en el
+    // SVG -lo aplica mcu-sim-; dónde va, en mm, y su escala, no
+    int     giro = 0;
+    bool    colocada = false;
+    double  x = 0, y = 0;
+    double  escala = 1.0;
+};
+// Plan §38: una línea entre placas en tramos rectos, como la dice el XML
+struct RutaGui {
+    QString linea;            // "hilo A/P1.TX B/u0.PA3", "acople A/J1 B/J1"
+    bool    horizontal = true;
+    QVector<double> codos;    // mm
 };
 // Un acople: DOS conectores enchufados, o VARIOS en pila (PC/104), con las
 // placas a las que pertenece cada uno, en el mismo orden.
@@ -139,6 +151,14 @@ struct PlacaGui {
     // Lo mismo que SubPlacaGui::ilustracion y ::tabla, para una placa suelta
     QString              ilustracion;
     QVector<EnlaceTabla> tabla;
+    // Plan §38: la disposición que trae el XML -de una placa suelta, su giro
+    // y su escala; de las de un sistema, en cada SubPlacaGui-, el lienzo y
+    // las rutas
+    int                  giro = 0;
+    double               escala = 1.0;
+    bool                 lienzo_fijo = false;
+    double               lienzo[4] = {0, 0, 0, 0};    // x, y, ancho, alto, en mm
+    QVector<RutaGui>     rutas;
     // La tabla de una placa: su id en el sistema, o vacío si no lo es
     QVector<EnlaceTabla> tabla_de(const QString& placa_id) const;
     bool es_sistema() const { return !placas.isEmpty(); }

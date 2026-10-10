@@ -316,7 +316,8 @@ la misma escala, como en la mesa. Si no lo da, se iguala la altura y se avisa.
   las suyas con un botón (plan §33). Con el botón «Edición» las placas se
   mueven, se giran y se escalan con el ratón, y el lienzo tiene el tamaño
   que se le dé; los hilos van de colores y se enrutan en tramos rectos (plan
-  §37); y todo se recuerda en la configuración (plan §34 a §37,
+  §37); y todo se recuerda en la configuración o, para que viaje con el
+  sistema, en su XML, que `mcu-sim` manda en `T_PLACA` (plan §34 a §38,
   `doc/analisis_disposicion_ilustracion.md`);
 * **apiladas**: un shield encima de su Nucleo, o una pila PC/104 en cascada.
   Si el dibujo de cada placa marca dónde están sus conectores, **dos conectores

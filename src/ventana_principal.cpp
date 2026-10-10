@@ -20,6 +20,9 @@
 #include <QScrollArea>
 #include <QSpinBox>
 #include <QJsonValue>
+#include <QDir>
+#include <QMessageBox>
+#include <QSaveFile>
 #include <QStatusBar>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -519,6 +522,25 @@ void VentanaPrincipal::pon_placa()
         const QJsonValue d = cfg_.disposiciones.value(ilus_->clave_disposicion());
         if (d.isObject()) ilus_->pon_disposicion(d.toObject());
     }
+    // Plan §38: el XML, si se sabe dónde está, y lo que la ilustración dice
+    ilus_->pon_ruta_xml(ruta_xml());
+    connect(ilus_, &VistaIlustracion::dice, this,
+            [this](const QString& t) { statusBar()->showMessage(t); });
+    connect(ilus_, &VistaIlustracion::pide_guardar_xml, this, [this] {
+        const QString ruta = ilus_ ? ilus_->ruta_xml() : QString();
+        if (ruta.isEmpty()) return;
+        // Una copia de `make datos`: se puede escribir, pero no es el original
+        const bool copia = QDir::fromNativeSeparators(ruta).contains(QLatin1String("/build/"));
+        QString t = tr("Escribir lo colocado -donde va cada placa, su giro y su escala, el lienzo "
+                       "y las lineas en tramos rectos- en\n\n%1\n\nSolo se tocan esos "
+                       "atributos y las <ruta>; lo demas queda como esta.").arg(ruta);
+        if (copia)
+            t += tr("\n\nOjo: parece la copia que hace 'make datos' en build/, y el original "
+                    "esta en src/. La proxima vez que cambie el original, make la pisara.");
+        if (QMessageBox::question(this, tr("Guardar en el XML"), t) != QMessageBox::Yes) return;
+        QString e;
+        if (!escribe_xml(ruta, &e)) QMessageBox::warning(this, tr("Guardar en el XML"), e);
+    });
     connect(ilus_, &VistaIlustracion::guarda_disposicion, this,
             [this](const QString& clave, const QJsonObject& d) {
                 if (d.isEmpty()) cfg_.disposiciones.remove(clave);
@@ -554,6 +576,44 @@ void VentanaPrincipal::pon_placa()
     // Con un dibujo de verdad, la ventana se abre sola (`pon_dibujos`); sin
     // él, se queda como estuviera: abierta, con el generado, si se abrió
     if (ilus_->hay_dibujo()) act_ver_ilus_->setChecked(true);
+}
+
+QString VentanaPrincipal::ruta_xml() const
+{
+    if (!conecto_hijo_) return QString();
+    const QString placa = ses_.hola().value(QStringLiteral("placa"));
+    if (placa.isEmpty()) return QString();
+    const QFileInfo f(QDir(cfg_.directorio_absoluto()), placa);
+    return f.exists() ? f.absoluteFilePath() : QString();
+}
+
+bool VentanaPrincipal::escribe_xml(const QString& ruta, QString* error)
+{
+    QString e;
+    auto falla = [&](const QString& t) {
+        if (error) *error = t;
+        statusBar()->showMessage(t);
+        return false;
+    };
+    if (!ilus_) return falla(tr("no hay ilustracion"));
+    QFile f(ruta);
+    if (!f.open(QIODevice::ReadOnly)) return falla(tr("no se puede leer %1: %2").arg(ruta, f.errorString()));
+    QByteArray xml = f.readAll();
+    f.close();
+    if (!escribe_disposicion(xml, ilus_->para_xml(), e))
+        return falla(tr("%1 no se ha tocado: %2").arg(ruta, e));
+    QSaveFile s(ruta);
+    if (!s.open(QIODevice::WriteOnly) || s.write(xml) != xml.size() || !s.commit())
+        return falla(tr("no se puede escribir %1: %2").arg(ruta, s.errorString()));
+    // Lo de la configuración ya está en el XML: fuera, que la próxima vez no
+    // se ponga encima
+    ilus_->xml_guardado();
+    if (cfg_.disposiciones.contains(ilus_->clave_disposicion())) {
+        cfg_.disposiciones.remove(ilus_->clave_disposicion());
+        if (!cfg_.ruta.isEmpty()) cfg_.guarda(e);
+    }
+    statusBar()->showMessage(tr("Disposicion escrita en %1: la proxima vez sale de ahi").arg(ruta));
+    return true;
 }
 
 bool VentanaPrincipal::abre_dibujo(const QString& placa_id, const QByteArray& svg,

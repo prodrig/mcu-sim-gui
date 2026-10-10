@@ -129,6 +129,14 @@ public:
     // Abre el diálogo; si se acepta, guarda la configuración y lanza.
     void abre_dialogo();
 
+    // Plan §38: el XML del que salió la placa, si lo lanzó esta ventana -su
+    // `placa=` de T_HOLA, desde el directorio de trabajo-; vacío si no
+    QString ruta_xml() const;
+    // Escribe lo colocado en ese XML (`disposicion_xml.h`) y olvida lo de la
+    // configuración para esa placa, que ya está en el XML. false, y `error`
+    // dice por qué, si no se pudo; entonces el fichero no cambia
+    bool escribe_xml(const QString& ruta, QString* error = nullptr);
+
     // Cada cuánto tiempo SIMULADO se pide una instantánea por omisión: 60 por
     // segundo simulado, que a tiempo real -el ritmo por omisión- son 60 por
     // segundo de pared. Con ritmo libre son muchas más, y la cola las tira si no

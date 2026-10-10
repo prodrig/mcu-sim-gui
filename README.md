@@ -163,7 +163,7 @@ una con qué deja hecho, cómo se comprueba y qué NO entra.
 
 Y, aparte del plan, **las ilustraciones**
 ([`doc/analisis-uso-ilustraciones.md`](doc/analisis-uso-ilustraciones.md), plan
-§21 a §37): cada placa con su **dibujo SVG** —el que manda `mcu-sim` con la
+§21 a §38): cada placa con su **dibujo SVG** —el que manda `mcu-sim` con la
 placa, o uno que la ventana genera si no trae ninguno—, los LEDs que brillan,
 los botones que se pulsan, los mandos que giran sobre él —la rueda gira el
 encoder del KY-040—, el aspa de un servo que gira con su ángulo y las
@@ -176,8 +176,11 @@ puede tener un tamaño en milímetros, y Ctrl+rueda acerca o aleja. Lo
 colocado se guarda en la configuración y sale igual la próxima vez que se abre
 el mismo sistema. Cada hilo va de su color —negro la masa, rojo la
 alimentación— y las líneas se pueden enrutar en tramos horizontales y
-verticales con las esquinas redondeadas, que también se guardan
-([`doc/analisis_disposicion_ilustracion.md`](doc/analisis_disposicion_ilustracion.md)). La ilustración va en
+verticales con las esquinas redondeadas, que también se guardan. Y todo eso
+puede ir al XML del sistema, que lo lleva consigo: «Copiar como XML» da las
+líneas para pegarlas, y «Guardar en el XML» las escribe en el fichero si la
+ventana lanzó `mcu-sim` (plan §38;
+[`doc/analisis_disposicion_ilustracion.md`](doc/analisis_disposicion_ilustracion.md)). La ilustración va en
 **su propia ventana** (Vista ▸ Ilustración, Ctrl+I; plan §27), para ponerla
 donde se quiera; el panel de siempre se queda en la principal.
 

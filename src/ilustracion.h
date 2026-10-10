@@ -144,7 +144,14 @@
 // LO QUE SE HA COLOCADO SE RECUERDA (plan §36): al soltar «Edición», si algo
 // ha cambiado, la ventana lo guarda en su configuración, por sistema -o por
 // placa-, y lo pone la próxima vez que se abra el mismo. «Restablecer», en la
-// edición, lo deja todo como al principio y lo olvida.
+// edición, lo deja como al principio y lo olvida.
+//
+// Y EL XML TAMBIÉN LO PUEDE DECIR (plan §38): `mcu-sim` manda en T_PLACA el
+// sitio y la escala de cada placa, el lienzo y las rutas que diga el XML, y
+// eso es «como al principio». Lo de la configuración, si lo hay, va encima.
+// «Copiar como XML» pone en el portapapeles las líneas para el XML, y
+// «Guardar en el XML» -solo si la ventana lanzó `mcu-sim` y sabe dónde está
+// el fichero- las escribe en él (`disposicion_xml.h`).
 //
 // EL LIENZO Y EL ZOOM (plan §35): sin decir nada, la vista enseña todas las
 // placas, justas, como siempre. Ctrl+rueda acerca o aleja -en la edición y
@@ -157,7 +164,7 @@
 // `dibujo:<placa>` la fila de cada placa, `abrir:<placa>` su botón,
 // `conexiones:<placa>` el de sus líneas, `edicion` el botón del modo de
 // edición, `lienzo` y `ajustar` los del lienzo y el zoom, `restablecer` el
-// de volver al principio,
+// de volver al principio, `copiar_xml` y `guardar_xml` los del XML,
 // `informe:<placa>` lo encontrado, `vista:` el dibujo -uno para todas-, y en
 // la escena `vivo:<pieza>`. En una placa suelta, <placa> es vacío: `dibujo:`.
 // =============================================================================
@@ -178,6 +185,7 @@
 #include <memory>
 
 #include "dibujo.h"
+#include "disposicion_xml.h"
 #include "placa.h"
 
 class QGraphicsEllipseItem;
@@ -557,6 +565,23 @@ public:
     void pon_disposicion(const QJsonObject& d);
     // Sale de la edición si se estaba en ella -y guarda, si hay algo nuevo-
     void termina_edicion();
+    // Plan §38: la disposición que dice el XML, en el formato de la de
+    // `disposicion()`: «como al principio»
+    QJsonObject disposicion_xml() const;
+    // Lo colocado, para el XML: con el giro de la ventana sumado al del XML,
+    // y el giro y la escala solo de las placas en las que cambian
+    DisposicionXml para_xml() const;
+    // El XML del que salió la placa, si la ventana lo sabe -lanzó ella
+    // `mcu-sim`-: enciende «Guardar en el XML»
+    void pon_ruta_xml(const QString& ruta);
+    QString ruta_xml() const { return ruta_xml_; }
+    // Ya se ha escrito en el XML: lo de esta vez no se guarda además en la
+    // configuración, que la próxima vez lo pondría encima del XML -con el
+    // giro dos veces-
+    void xml_guardado();
+    bool xml_escrito() const { return xml_escrito_; }
+    // Lo mismo que el botón «Copiar como XML»: el texto, y al portapapeles
+    QString copia_xml();
 
     // Plan §33: el botón de las líneas de esa placa; nulo en una placa suelta
     QToolButton* boton_conexiones(const QString& placa_id) const
@@ -572,6 +597,10 @@ signals:
     // Plan §36: al salir de la edición con algo cambiado. `d` vacío: no hay
     // nada que recordar
     void guarda_disposicion(const QString& clave, const QJsonObject& d);
+    // Plan §38: se ha pulsado «Guardar en el XML»; y algo que decir en la
+    // barra de estado
+    void pide_guardar_xml();
+    void dice(const QString& texto);
 
 private:
     // La fila de cada placa, encima del dibujo: su nombre, lo que se ha
@@ -589,6 +618,10 @@ private:
     QToolButton*                 boton_lienzo_ = nullptr;
     QToolButton*                 ajustar_ = nullptr;
     QToolButton*                 restablecer_ = nullptr;
+    QToolButton*                 copiar_xml_ = nullptr;
+    QToolButton*                 guardar_xml_ = nullptr;
+    QString                      ruta_xml_;
+    bool                         xml_escrito_ = false;
     bool                         cambiada_ = false;   // algo nuevo desde que se entró
     QLabel*                      ayuda_edicion_ = nullptr;
 };

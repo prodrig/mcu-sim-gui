@@ -59,7 +59,8 @@
       "sistema (o 'placa nombre'): donde esta cada placa, en mm, su giro y su",
       "escala, el lienzo [x, y, ancho, alto] si es fijo, y las lineas en tramos",
       "rectos ('lineas': su eje, h o v, y sus codos en mm). La ventana lo escribe",
-      "sola al salir de la edicion; Restablecer lo borra."
+      "sola al salir de la edicion; Restablecer lo borra. Manda sobre lo que diga",
+      "el XML del sistema; y despues de 'Guardar en el XML', se borra: ya esta alli."
     ],
     "disposiciones": {}
   }

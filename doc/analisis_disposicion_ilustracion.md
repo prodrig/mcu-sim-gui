@@ -385,5 +385,48 @@ Pedido después de la fase 3, y guardado con lo demás.
   «Restablecer» las deja todas en curva.
 * **Cómo se comprueba**: `prueba_ilustracion` I18 (241 → 255).
 
-**Lo que queda** es la fase 4 —la disposición en el XML del sistema, leída por
-`mcu-sim` y mandada en `T_PLACA`, y «Copiar como XML»— y, si hace falta, la 5.
+### Fase 4, hecha (plan §38 de `mcu-sim-gui`, `doc/parts.md` §2.6 de `mcu-sim`)
+
+* **En el XML del sistema** (`mcu-sim`):
+  * `x=` e `y=` —juntos, en mm— y `escala=` —de 0.25 a 4— en cada
+    `<placa id>`, también en una placa escrita dentro del sistema;
+  * `lienzo="x y ancho alto"` en el `<sistema>`;
+  * en una placa suelta, `escala=` y `lienzo=` en su raíz;
+  * y `<ruta linea="hilo S/P1.PWM N/CN9.6" eje="h" codos="60 35 110"/>`,
+    una línea en tramos rectos, con la misma clave que en la configuración.
+
+  ```xml
+  <sistema nombre="nucleo-f446re-servo" lienzo="-10 -10 330 200">
+    <placa id="N" fichero="nucleo_f446re.xml" x="0" y="0"/>
+    <placa id="S" fichero="servo_sg90.xml" x="140" y="0" escala="1.5"/>
+    <placa id="T" fichero="tft_128x160.xml" giro="90" x="200" y="2"/>
+    ...
+    <ruta linea="hilo S/P1.PWM N/CN9.6" eje="h" codos="60 35 110"/>
+  </sistema>
+  ```
+* **`mcu-sim` lo lee y lo comprueba**: lo que no vale es un error que dice
+  por qué —una posición en una placa suelta, x sin y, un número que no lo es,
+  una escala fuera de rango, un lienzo sin tamaño, una ruta de una línea que
+  no hay, repetida, o con un eje que no es `h` ni `v`—. Lo dice en una línea
+  de consola, `ventana: N en (0, 0) mm; S en (140, 0) mm al 150 %; ...`, y lo
+  manda en `T_PLACA`, **añadido a la versión 2 sin subirla**. Para la
+  simulación no es nada: ningún invariante se mueve. `make gui-sistema` C16
+  (135 → 140).
+* **En la ventana, es lo de partida**: se pone al crear la ilustración, y lo
+  de la configuración, si lo hay, va encima: **configuración > XML >
+  automático**. «Restablecer» vuelve a lo del XML. Si al salir de la edición
+  todo está como dice el XML, la configuración lo olvida.
+* **«Copiar como XML»**, en la edición: lo colocado, como texto para pegar en
+  el fichero. El giro es el del XML más el de la ventana; el giro y la escala
+  solo se escriben si cambian respecto a lo que el XML ya decía.
+* **«Guardar en el XML»**, en la edición, **solo si la ventana lanzó
+  `mcu-sim`** y sabe qué fichero es. Pide confirmación y avisa si parece la
+  copia de `build/`. Escribe como texto —solo esos atributos y las `<ruta>`;
+  comentarios, espacios, orden y CRLF intactos— y no toca un XML que no
+  entiende. Después, lo de la configuración para ese sistema se borra.
+* `placas/nucleo_f446re_servo.xml` lleva ya sus cuatro placas colocadas,
+  escritas así.
+* **Cómo se comprueba**: `prueba_ilustracion` I19 (255 → 273).
+
+**Lo que queda** es la fase 5, solo si hace falta: guardar en el XML por el
+protocolo, con el modelo en otra máquina.

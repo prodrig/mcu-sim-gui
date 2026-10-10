@@ -25,6 +25,8 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QJsonArray>
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QToolButton>
 #include <QSvgRenderer>
 #include <QVBoxLayout>
@@ -2079,25 +2081,49 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
                                     "lienzo a su medida, y olvidar lo que se habia guardado"));
         restablecer_->setEnabled(false);
         connect(restablecer_, &QToolButton::clicked, this, [this] {
-            vista_->restablece_todas();
-            vista_->restablece_lineas();
-            vista_->lienzo_automatico();
+            // Como al principio: lo que diga el XML, o lo automático
+            vista_->pon_disposicion(disposicion_xml());
             vista_->ajusta();
             cambiada_ = true;
         });
+        // Plan §38: llevarlo al XML
+        copiar_xml_ = new QToolButton(this);
+        copiar_xml_->setObjectName(QStringLiteral("copiar_xml"));
+        copiar_xml_->setText(tr("Copiar como XML"));
+        copiar_xml_->setToolTip(tr("Las lineas del XML con lo colocado, al portapapeles, para "
+                                   "pegarlas en el fichero del sistema o de la placa"));
+        copiar_xml_->setEnabled(false);
+        connect(copiar_xml_, &QToolButton::clicked, this, [this] { copia_xml(); });
+        guardar_xml_ = new QToolButton(this);
+        guardar_xml_->setObjectName(QStringLiteral("guardar_xml"));
+        guardar_xml_->setText(tr("Guardar en el XML"));
+        guardar_xml_->setEnabled(false);
+        guardar_xml_->setToolTip(tr("Solo si esta ventana lanzo mcu-sim: entonces sabe donde "
+                                    "esta el XML"));
+        connect(guardar_xml_, &QToolButton::clicked, this, &VistaIlustracion::pide_guardar_xml);
         connect(vista_, &VistaPlaca::disposicion_cambiada, this, [this] { cambiada_ = true; });
         connect(edicion_, &QToolButton::toggled, this, [this](bool si) {
             vista_->pon_edicion(si);
             ayuda_edicion_->setVisible(si);
             boton_lienzo_->setEnabled(si);
             restablecer_->setEnabled(si);
-            // Al salir, lo nuevo se guarda
-            if (!si && cambiada_) emit guarda_disposicion(clave_disposicion(), disposicion());
+            copiar_xml_->setEnabled(si);
+            guardar_xml_->setEnabled(si && !ruta_xml_.isEmpty());
+            // Al salir, lo nuevo se guarda; si es lo que dice el XML, no hay
+            // nada que recordar. Después de escribirlo en el XML, nada: ver
+            // xml_guardado()
+            if (!si && cambiada_ && !xml_escrito_) {
+                const QJsonObject d = disposicion();
+                emit guarda_disposicion(clave_disposicion(),
+                                        d == disposicion_xml() ? QJsonObject() : d);
+            }
             cambiada_ = false;
         });
         barra->addWidget(edicion_);
         barra->addWidget(boton_lienzo_);
         barra->addWidget(restablecer_);
+        barra->addWidget(copiar_xml_);
+        barra->addWidget(guardar_xml_);
         barra->addWidget(ayuda_edicion_, 1);
         barra->addWidget(ajustar_);
         v->insertLayout(0, barra);
@@ -2152,6 +2178,9 @@ VistaIlustracion::VistaIlustracion(const PlacaGui& placa, QWidget* padre)
                          QStringLiteral("generado"), e);
     }
     v->addWidget(vista_, 1);
+    // Plan §38: lo que dice el XML, si dice algo, es lo de partida
+    const QJsonObject dx = disposicion_xml();
+    if (!dx.isEmpty()) vista_->pon_disposicion(dx);
 }
 
 bool VistaIlustracion::hay_dibujo() const
@@ -2336,6 +2365,107 @@ QJsonObject VistaIlustracion::disposicion() const
 void VistaIlustracion::pon_disposicion(const QJsonObject& d)
 {
     vista_->pon_disposicion(d);
+}
+
+QJsonObject VistaIlustracion::disposicion_xml() const
+{
+    QJsonObject d, placas;
+    auto una = [&](const QString& id, bool colocada, double x, double y, double escala) {
+        QJsonObject o;
+        if (colocada) {
+            o.insert(QStringLiteral("x"), x);
+            o.insert(QStringLiteral("y"), y);
+        }
+        if (escala != 1.0) o.insert(QStringLiteral("escala"), escala);
+        if (!o.isEmpty()) placas.insert(id, o);
+    };
+    if (placa_.es_sistema())
+        for (const SubPlacaGui& s : placa_.placas) una(s.id, s.colocada, s.x, s.y, s.escala);
+    else
+        una(QString(), false, 0, 0, placa_.escala);
+    if (!placas.isEmpty()) d.insert(QStringLiteral("placas"), placas);
+    if (placa_.lienzo_fijo)
+        d.insert(QStringLiteral("lienzo"), QJsonArray{placa_.lienzo[0], placa_.lienzo[1],
+                                                      placa_.lienzo[2], placa_.lienzo[3]});
+    QJsonObject lineas;
+    for (const RutaGui& r : placa_.rutas) {
+        QJsonArray c;
+        for (const double v : r.codos) c.append(v);
+        lineas.insert(r.linea, QJsonObject{{QStringLiteral("eje"), r.horizontal
+                                                                       ? QStringLiteral("h")
+                                                                       : QStringLiteral("v")},
+                                           {QStringLiteral("codos"), c}});
+    }
+    if (!lineas.isEmpty()) d.insert(QStringLiteral("lineas"), lineas);
+    return d;
+}
+
+DisposicionXml VistaIlustracion::para_xml() const
+{
+    DisposicionXml d;
+    d.sistema = placa_.es_sistema();
+    d.lienzo_fijo = vista_->lienzo_fijo();
+    if (d.lienzo_fijo) {
+        const QRectF l = vista_->lienzo();
+        d.lienzo[0] = l.x();
+        d.lienzo[1] = l.y();
+        d.lienzo[2] = l.width();
+        d.lienzo[3] = l.height();
+    }
+    // A la décima de milímetro: lo que se escribe se lee
+    auto decima = [](double v) { return std::round(v * 10) / 10; };
+    auto una = [&](const QString& id, const QString& fichero, int giro_xml, double escala_xml) {
+        const VistaPlaca::Ajuste a = vista_->ajuste(id);
+        DisposicionXml::Placa p;
+        p.id = id;
+        p.fichero = fichero;
+        p.colocada = d.sistema && a.fija;
+        p.x = decima(a.pos_mm.x());
+        p.y = decima(a.pos_mm.y());
+        const int giro = (giro_xml + a.giro) % 360;
+        if (giro != giro_xml) p.giro = giro;
+        if (a.escala != escala_xml) p.escala = a.escala;
+        d.placas.push_back(p);
+    };
+    if (d.sistema)
+        for (const SubPlacaGui& s : placa_.placas) una(s.id, s.fichero, s.giro, s.escala);
+    else
+        una(QString(), QString(), placa_.giro, placa_.escala);
+    const QJsonObject lineas = vista_->disposicion().value(QStringLiteral("lineas")).toObject();
+    for (auto it = lineas.constBegin(); it != lineas.constEnd(); ++it) {
+        const QJsonObject o = it.value().toObject();
+        RutaGui r;
+        r.linea = it.key();
+        r.horizontal = o.value(QStringLiteral("eje")).toString() != QLatin1String("v");
+        for (const QJsonValue& v : o.value(QStringLiteral("codos")).toArray())
+            r.codos.push_back(decima(v.toDouble()));
+        d.rutas.push_back(r);
+    }
+    return d;
+}
+
+void VistaIlustracion::pon_ruta_xml(const QString& ruta)
+{
+    ruta_xml_ = ruta;
+    guardar_xml_->setEnabled(edicion() && !ruta.isEmpty());
+    guardar_xml_->setToolTip(ruta.isEmpty()
+                                 ? tr("Solo si esta ventana lanzo mcu-sim: entonces sabe donde "
+                                      "esta el XML")
+                                 : tr("Escribir lo colocado en %1").arg(ruta));
+}
+
+void VistaIlustracion::xml_guardado()
+{
+    xml_escrito_ = true;
+    cambiada_ = false;
+}
+
+QString VistaIlustracion::copia_xml()
+{
+    const QString t = texto_disposicion(para_xml(), placa_.nombre);
+    if (QClipboard* c = QGuiApplication::clipboard()) c->setText(t);
+    emit dice(tr("La disposicion, como XML, en el portapapeles: pegala en el fichero"));
+    return t;
 }
 
 void VistaIlustracion::termina_edicion()

@@ -68,6 +68,13 @@ QString texto(const QXmlStreamAttributes& a, const char* n)
     return a.value(QLatin1String(n)).toString();
 }
 
+double numero(const QXmlStreamAttributes& a, const char* n, double omision)
+{
+    bool ok = false;
+    const double v = a.value(QLatin1String(n)).toDouble(&ok);
+    return ok ? v : omision;
+}
+
 } // namespace
 
 bool lee_catalogo(const QByteArray& xml, QVector<PiezaGui>& piezas, QString& error)
@@ -184,6 +191,13 @@ bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
             raiz = true;
             placa.nombre = texto(a, "nombre");
             placa.ilustracion = texto(a, "ilustracion");
+            // Plan §38: la disposición de la placa suelta, y el lienzo
+            placa.giro = a.value(QLatin1String("giro")).toInt();
+            placa.escala = numero(a, "escala", 1.0);
+            const QStringList l = lista(texto(a, "lienzo"));
+            bool ok = l.size() == 4;
+            for (int k = 0; ok && k < 4; ++k) placa.lienzo[k] = l[k].toDouble(&ok);
+            placa.lienzo_fijo = ok && placa.lienzo[2] > 0 && placa.lienzo[3] > 0;
         } else if (r.name() == QLatin1String("enlace")) {
             // La tabla de enlaces de la placa abierta, o de la suelta
             EnlaceTabla e{texto(a, "pieza"), texto(a, "elemento"), texto(a, "efecto")};
@@ -195,6 +209,14 @@ bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
             s.nombre  = texto(a, "nombre");
             s.fichero = texto(a, "fichero");
             s.ilustracion = texto(a, "ilustracion");
+            s.giro    = a.value(QLatin1String("giro")).toInt();
+            s.escala  = numero(a, "escala", 1.0);
+            {
+                bool bx = false, by = false;
+                s.x = a.value(QLatin1String("x")).toDouble(&bx);
+                s.y = a.value(QLatin1String("y")).toDouble(&by);
+                s.colocada = bx && by;
+            }
             bool ok = false;
             const int n = a.value(QLatin1String("piezas")).toInt(&ok);
             if (ok) s.n_piezas = n;
@@ -226,6 +248,18 @@ bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
                 for (const QString& c : ac.conectores) ac.placas << placa_de(c);
             ac.espejo = a.value(QLatin1String("espejo")) == QLatin1String("si");
             placa.acoples.push_back(ac);
+        } else if (r.name() == QLatin1String("ruta")) {
+            // Plan §38: una línea en tramos rectos
+            RutaGui ru;
+            ru.linea = texto(a, "linea");
+            ru.horizontal = a.value(QLatin1String("eje")) != QLatin1String("v");
+            bool bien = true;
+            for (const QString& c : lista(texto(a, "codos"))) {
+                bool ok = false;
+                ru.codos.push_back(c.toDouble(&ok));
+                bien = bien && ok;
+            }
+            if (bien && !ru.linea.isEmpty()) placa.rutas.push_back(ru);
         } else if (r.name() == QLatin1String("hilo")) {
             HiloGui h;
             h.a = texto(a, "a");

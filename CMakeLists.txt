@@ -103,6 +103,8 @@ qt_add_library(sesion STATIC
     src/configuracion.cpp
     src/lanzador.h
     src/lanzador.cpp
+    src/disposicion_xml.h
+    src/disposicion_xml.cpp
 )
 target_link_libraries(sesion PUBLIC transporte)
 

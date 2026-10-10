@@ -2623,3 +2623,74 @@ quien los siga. Dos cosas, las dos en `VistaPlaca`
 * el menú, volver a la curva y «Restablecer».
 
 La prueba del hilo de I11 dice ahora que es una línea continua de su color.
+
+## 38. Colocar las placas: la disposición, en el XML
+
+La fase 4 de [`doc/analisis_disposicion_ilustracion.md`](analisis_disposicion_ilustracion.md):
+lo colocado puede ir también al XML del sistema, y entonces viaja con él
+—a otra máquina, a otra persona, al repositorio—, no solo a la configuración
+de esta ventana. `mcu-sim` lo lee, lo comprueba y lo manda en `T_PLACA`
+(su `doc/parts.md` §2.6), **añadido a la versión 2 del protocolo sin
+subirla**: un `mcu-sim` anterior no lo manda y una ventana anterior no lo lee.
+
+1. **Lo que llega** (`junta_placa`, `placa.h`): en cada `<placa id>`, `x`,
+   `y` —juntos, la esquina del dibujo en mm— y `escala`, además del `giro`
+   que ya llegaba; en la raíz, el `lienzo` (`x y ancho alto`) y, en una placa
+   suelta, su `escala` y su `giro`; y las `<ruta linea eje codos>`, que son
+   las líneas en tramos rectos del §37 con la misma clave.
+2. **Es lo de partida.** `VistaIlustracion::disposicion_xml()` lo convierte
+   en una disposición como las del §36 —el giro no, que el dibujo ya llega
+   girado— y se pone nada más crear la ilustración. **La configuración manda
+   sobre el XML**: si hay algo guardado para ese sistema, se pone encima. Y
+   «Restablecer» vuelve a lo del XML, no a la fila automática. Al salir de la
+   edición con todo como dice el XML, no hay nada que recordar: se guarda
+   vacío, que es olvidarlo.
+3. **«Copiar como XML»** (`copiar_xml`), en la edición: lo colocado, como
+   texto para pegar a mano en el fichero —el `<sistema lienzo>`, cada
+   `<placa id fichero x y [giro] [escala]/>` y las `<ruta>`—, con un
+   comentario que dice dónde va. `para_xml()` lo prepara: x e y a la décima
+   de mm; el giro, el del XML más el que se le ha dado en la ventana; y el
+   giro y la escala solo si cambian respecto a lo que el XML ya decía.
+4. **«Guardar en el XML»** (`guardar_xml`), en la edición, **solo si la
+   ventana lanzó `mcu-sim`**: entonces sabe qué fichero es —el `placa=` de
+   T_HOLA, relativo a la carpeta del programa— y que es de esta máquina. Con
+   un `mcu-sim` lanzado a mano no se sabe, y el botón queda apagado. Pide
+   confirmación, y si la ruta pasa por `build/` avisa de que parece la copia
+   de `make datos` y de que el original está en `src/`.
+5. **Se escribe como texto** (`disposicion_xml.h`, `escribe_disposicion`),
+   sin rehacer el XML: se buscan la raíz, cada `<placa id>` y cada `<ruta>`
+   —saltando comentarios, instrucciones y CDATA—, se cambian, se ponen o se
+   quitan solo esos atributos, las `<ruta>` de antes se quitan y las nuevas
+   van al final del sistema con la sangría de las placas. Comentarios,
+   espacios, el orden de los atributos, las placas escritas dentro y los
+   CRLF quedan como estaban. Un XML que no se entiende —una raíz que no es
+   lo que se espera, una placa que no está, etiquetas sin cerrar— no se toca,
+   y se dice por qué. Se escribe con `QSaveFile`: o entero o nada.
+6. **Después de escribirlo**, lo de la configuración para ese sistema se
+   borra —ya está en el XML, y encima lo taparía—, y lo que se toque en esa
+   sesión ya no se guarda en la configuración. La próxima vez que se lance,
+   sale del XML.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 255 → **273** (I19):
+
+* T_PLACA con el sitio y la escala de cada placa, el lienzo y las rutas;
+* eso es la disposición de partida, ni más ni menos;
+* los dos botones, apagados fuera de la edición, y «Guardar» apagado sin
+  saber dónde está el XML;
+* «Restablecer» vuelve a lo del XML, y al salir no hay nada que recordar;
+* lo colocado, para el XML: el giro sumado, y el giro y la escala solo si
+  cambian;
+* el texto de «Copiar como XML»;
+* escribirlo en un fichero con comentarios, una placa escrita dentro y
+  CRLF, que siguen igual;
+* lo que no se deja: una placa donde se espera un sistema, un sistema sin
+  una de las placas y un XML roto;
+* una placa suelta, en su raíz;
+* y la ventana: sin haber lanzado ella `mcu-sim` no sabe dónde está el XML;
+  y después de escribirlo, el fichero lleva el sitio y la configuración lo
+  olvida.
+
+Y de punta a punta, con la ventana de verdad: las placas de
+`placas/nucleo_f446re_servo.xml` colocadas a mano y escritas con «Guardar en
+el XML»; `mcu-sim --valida` lo lee sin avisos, y la ventana, lanzada otra
+vez, las pone donde estaban. Así está ese fichero en `mcu-sim`.
