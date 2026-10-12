@@ -2087,7 +2087,7 @@ int main(int argc, char** argv)
         const QString ruta = dir.filePath("config.json");
         {
             QFile f(ruta);
-            f.open(QIODevice::WriteOnly);
+            comprueba(f.open(QIODevice::WriteOnly), "se crea la configuracion de prueba");
             f.write("{\"_comentario\": \"hola\", \"vista\": {\"ritmo\": \"libre\"}}");
         }
         Configuracion c;
@@ -2099,7 +2099,7 @@ int main(int argc, char** argv)
         Configuracion c2;
         Configuracion::lee(ruta, c2, e);
         QFile f(ruta);
-        f.open(QIODevice::ReadOnly);
+        comprueba(f.open(QIODevice::ReadOnly), "y se vuelve a abrir para leerla");
         const QJsonObject r = QJsonDocument::fromJson(f.readAll()).object();
         comprueba(c2.disposiciones == c.disposiciones && c2.ritmo == "libre" &&
                       r.value("_comentario").toString() == "hola" &&
@@ -2558,7 +2558,7 @@ int main(int argc, char** argv)
         const QString ruta = dir.filePath("sistema.xml");
         {
             QFile f(ruta);
-            f.open(QIODevice::WriteOnly);
+            comprueba(f.open(QIODevice::WriteOnly), "se crea el XML del sistema de prueba");
             f.write("<sistema nombre=\"nucleo-y-shield\">\n"
                     "  <placa id=\"N\" fichero=\"nucleo_f446re.xml\"/>\n"
                     "  <placa id=\"S\" fichero=\"shield_leds.xml\"/>\n"
@@ -2571,7 +2571,7 @@ int main(int argc, char** argv)
                   "escrito en el XML " + e.toStdString() +
                       ": lo de la configuracion para ese sistema se olvida");
         QFile f(ruta);
-        f.open(QIODevice::ReadOnly);
+        comprueba(f.open(QIODevice::ReadOnly), "y se vuelve a abrir para leerlo");
         const QString t = QString::fromUtf8(f.readAll());
         ilus->pon_edicion(false);
         comprueba(t.contains("<placa id=\"S\" fichero=\"shield_leds.xml\" x=\"150\" y=\"30\"/>") &&
