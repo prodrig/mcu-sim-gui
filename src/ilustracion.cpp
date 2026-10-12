@@ -2371,7 +2371,18 @@ QVector<quint16> VistaIlustracion::observados() const
 
 void VistaIlustracion::pon_edicion(bool si)
 {
-    edicion_->setChecked(si);
+    edicion_->setChecked(si && editable_);
+}
+
+void VistaIlustracion::pon_editable(bool si)
+{
+    if (!si) termina_edicion();
+    editable_ = si;
+    for (QWidget* w : {static_cast<QWidget*>(edicion_), static_cast<QWidget*>(boton_lienzo_),
+                       static_cast<QWidget*>(restablecer_), static_cast<QWidget*>(copiar_xml_),
+                       static_cast<QWidget*>(guardar_xml_), static_cast<QWidget*>(abrir_),
+                       static_cast<QWidget*>(dibujo_de_)})
+        if (w) w->setVisible(si);
 }
 
 bool VistaIlustracion::edicion() const

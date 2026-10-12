@@ -118,6 +118,12 @@ public:
     Sesion&   sesion() { return ses_; }
     Lanzador& lanzador() { return lanz_; }
     const Configuracion& configuracion() const { return cfg_; }
+    // Plan §45: si se puede EDITAR la ilustración -colocar placas, enrutar
+    // líneas, abrir otro dibujo-. Es `--edit` en la línea de órdenes; sin él,
+    // solo se enseñan y se esconden las conexiones. Por omisión, sí: así la
+    // construyen las pruebas
+    void pon_editable(bool si);
+    bool editable() const { return editable_; }
     // Lo que va detrás de `--gui` al lanzar: el host y el puerto en el que de
     // verdad se escucha.
     QString destino_gui() const;
@@ -190,6 +196,7 @@ private:
     Lanzador      lanz_;
     quint16       puerto_ = 0;
     bool          conecto_hijo_ = false;
+    bool          editable_ = true;
     QTabWidget*   abajo_     = nullptr;
     QPlainTextEdit* consola_ = nullptr;
     QAction*      act_lanzar_ = nullptr;

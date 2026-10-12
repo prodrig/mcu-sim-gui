@@ -99,6 +99,9 @@
 //       siempre.
 //   I23 (plan §43) EL BRILLO, EN ESCALA LOGARÍTMICA: los extremos, la barra
 //       azul a 3,3 V, el mismo escalón por cada década, y que siempre sube.
+//   I24 (plan §45) SIN --EDIT, la ilustración solo se mira: ni «Edición», ni
+//       lo que va con ella, ni «Abrir dibujo...» -tampoco en el menú de la
+//       ventana-; las conexiones y «Ajustar», sí.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -2773,6 +2776,66 @@ int main(int argc, char** argv)
         for (double i = 0.01; i < 2.0 / 1.3; i *= 1.3) sube = sube && op(i * 1.3) > op(i);
         comprueba(sube && VistaPlaca::opacidad_brillo(1.0, 0.0) == 1.0,
                   "y siempre sube; sin escala que valga, encendido del todo");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I24 Sin --edit, la ilustracion solo se mira\n");
+    {
+        const PlacaGui s = placa_de(SISTEMA_XML, CATALOGO_SISTEMA_XML);
+        VistaIlustracion il(s);
+        il.resize(1200, 500);
+        il.show();
+        espera([] { return false; }, 30);
+        const QStringList editar{"edicion", "lienzo", "restablecer", "copiar_xml", "guardar_xml"};
+        auto ocultos = [&](bool si) {
+            bool r = true;
+            for (const QString& n : editar) {
+                auto* b = il.findChild<QToolButton*>(n);
+                r = r && b && b->isHidden() == si;
+            }
+            auto* a = il.findChild<QPushButton*>("abrir");
+            auto* c = il.findChild<QComboBox*>("dibujo_de");
+            return r && a && c && a->isHidden() == si && c->isHidden() == si;
+        };
+        comprueba(il.editable() && ocultos(false), "por omision se puede editar: todo a la vista");
+        il.pon_edicion(true);
+        il.pon_editable(false);
+        auto* todas = il.findChild<QToolButton*>("conexiones_todas");
+        comprueba(!il.editable() && !il.edicion() && ocultos(true) && todas && !todas->isHidden() &&
+                      il.boton_conexiones("N") && !il.boton_conexiones("N")->isHidden() &&
+                      !il.findChild<QToolButton*>("ajustar")->isHidden(),
+                  "sin poder editar: sale de la edicion, y no quedan ni Edicion, ni el lienzo, "
+                  "ni Restablecer, ni el XML, ni Abrir dibujo; si las conexiones y Ajustar");
+        il.pon_edicion(true);
+        comprueba(!il.edicion() && !il.vista("N")->edicion(),
+                  "y la edicion no se deja pedir de ninguna manera");
+        todas->click();
+        comprueba(il.hay_conexiones_a_la_vista() && il.boton_conexiones("S")->isChecked(),
+                  "las conexiones, todas a la vez o de cada placa, se siguen ensenando");
+        il.pon_editable(true);
+        il.pon_edicion(true);
+        comprueba(ocultos(false) && il.edicion(), "y con --edit, todo como siempre");
+        il.pon_edicion(false);
+
+        // La ventana entera: sin --edit, ni el menu de abrir otro dibujo
+        VentanaPrincipal v(0);
+        v.pon_editable(false);
+        v.show();
+        ModeloFalso m;
+        m.conecta(v.sesion().puerto());
+        saluda_hasta_listo(m);
+        auto* arr = v.findChild<QPushButton*>("arrancar");
+        espera([&] { return arr->isEnabled(); });
+        auto* ilus = v.findChild<VistaIlustracion*>("ilustracion");
+        QAction* act = nullptr;
+        for (QAction* x : v.findChildren<QAction*>())
+            if (x->objectName() == "abrir_dibujo") act = x;
+        v.elige_dibujo(QString());
+        comprueba(ilus && !ilus->editable() && act && !act->isVisible() && !act->isEnabled() &&
+                      v.statusBar()->currentMessage().contains("--edit"),
+                  "y la ventana, sin --edit: la ilustracion no se edita, y Abrir dibujo de la "
+                  "placa no esta en el menu ni se deja pedir");
+        m.s.disconnectFromHost();
     }
 
     return resultado();

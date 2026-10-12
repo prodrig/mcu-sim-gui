@@ -578,7 +578,8 @@ void VentanaPrincipal::pon_placa()
             [this](const QString& id) { elige_dibujo(id); });
     // Las órdenes del dibujo salen por el mismo sitio que las del panel
     connect(ilus_, &VistaIlustracion::orden, this, &VentanaPrincipal::ordena);
-    act_dibujo_->setEnabled(true);
+    ilus_->pon_editable(editable_);
+    act_dibujo_->setEnabled(editable_);
     act_ver_ilus_->setEnabled(true);
     for (const QString& id : ilus_->placas()) {
         const auto d = dibujos_.constFind(ilus_->nombre_de(id));
@@ -588,6 +589,15 @@ void VentanaPrincipal::pon_placa()
     // Con un dibujo de verdad, la ventana se abre sola (`pon_dibujos`); sin
     // él, se queda como estuviera: abierta, con el generado, si se abrió
     if (ilus_->hay_dibujo()) act_ver_ilus_->setChecked(true);
+}
+
+void VentanaPrincipal::pon_editable(bool si)
+{
+    editable_ = si;
+    // «Abrir dibujo de la placa...» es editar: sin --edit, ni en el menú
+    act_dibujo_->setVisible(si);
+    act_dibujo_->setEnabled(si && ilus_);
+    if (ilus_) ilus_->pon_editable(si);
 }
 
 QString VentanaPrincipal::ruta_xml() const
@@ -709,6 +719,10 @@ void VentanaPrincipal::suscribe()
 
 void VentanaPrincipal::elige_dibujo(const QString& placa_id)
 {
+    if (!editable_) {
+        statusBar()->showMessage(tr("otro dibujo es editar la ilustracion: con --edit"));
+        return;
+    }
     if (!ilus_) {
         statusBar()->showMessage(tr("todavia no hay placa: el dibujo es de una placa"));
         return;

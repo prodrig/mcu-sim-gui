@@ -5,7 +5,7 @@
 // plan, `doc/plan_dos_procesos.md`) y, desde la fase 7, lo lanza ella misma
 // con «Simulacion > Lanzar mcu-sim» (Ctrl+L):
 //
-//   mcu-sim-gui [--config FICHERO] [--puerto N] [--lanza]
+//   mcu-sim-gui [--config FICHERO] [--puerto N] [--lanza] [--edit]
 //
 //   --config   la configuracion (JSON; la plantilla es `config.ejemplo.json`).
 //              Por omision, `config.json` en el directorio actual si lo hay, y
@@ -13,7 +13,13 @@
 //              crea al lanzar por primera vez;
 //   --puerto   donde escuchar, por encima de lo que diga la configuracion. Si
 //              esta cogido, se escucha en otro, sin decir nada;
-//   --lanza    lanza mcu-sim nada mas abrir, con la configuracion, sin dialogo.
+//   --lanza    lanza mcu-sim nada mas abrir, con la configuracion, sin dialogo;
+//   --edit     deja EDITAR la ilustracion: colocar, girar y escalar las placas,
+//              el lienzo, las lineas en tramos rectos, guardarlo en el XML y
+//              abrir otro dibujo (plan §34 a §40). Sin el, la ilustracion solo
+//              se mira: se ensenan y se esconden las conexiones, y se acerca o
+//              se aleja (plan §45). Lo colocado, de la configuracion o del XML,
+//              se ve igual.
 //
 // Y lanzarlo desde otra consola sigue valiendo:
 //
@@ -52,9 +58,15 @@ int main(int argc, char** argv)
                               QStringLiteral("N"));
     QCommandLineOption lanza(QStringLiteral("lanza"),
                              QStringLiteral("Lanza mcu-sim al abrir, con la configuracion."));
+    QCommandLineOption editar(QStringLiteral("edit"),
+                              QStringLiteral("Deja editar la ilustracion: colocar las placas, "
+                                             "enrutar las lineas y abrir otro dibujo. Sin "
+                                             "ella, solo se ensenan y se esconden las "
+                                             "conexiones."));
     args.addOption(config);
     args.addOption(puerto);
     args.addOption(lanza);
+    args.addOption(editar);
     args.process(app);
 
     mcusim::Configuracion c;
@@ -80,6 +92,7 @@ int main(int argc, char** argv)
     }
 
     mcusim::VentanaPrincipal v(c);
+    v.pon_editable(args.isSet(editar));
     v.show();
     if (args.isSet(lanza)) QTimer::singleShot(0, &v, [&v] { v.lanza(); });
 

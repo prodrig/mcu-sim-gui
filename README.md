@@ -41,6 +41,7 @@ La **contraparte de visualización gráfica de
 > cp config.ejemplo.json config.json      # apunta a ../mcu-sim y al blinky
 > ./build/mcu-sim-gui                     # Ctrl+L, Lanzar, y luego Arrancar
 > ./build/mcu-sim-gui --lanza             # o lanzarlo nada mas abrir
+> ./build/mcu-sim-gui --edit              # y para colocar las placas en la ilustracion
 > ```
 >
 > Lanzarlo a mano desde otra consola sigue valiendo: `mcu-sim placa.xml
@@ -169,8 +170,11 @@ los botones que se pulsan, los mandos que giran sobre él —la rueda gira el
 encoder del KY-040—, el aspa de un servo que gira con su ángulo y las
 pantallas que enseñan lo que enseñaría la de verdad —el TFT de 128x160, por
 `T_IMAGEN`—, y en un sistema todas las placas una al lado de otra con una
-línea por cada conector enchufado o hilo, que cada placa enseña o esconde con
-su botón «Conexiones» —o todas a la vez, y en la edición se enseñan solas—. Con el botón **Edición**, las placas se colocan con el ratón: se
+línea por cada conector enchufado o hilo —que llega al centro de un pin
+derecho, con un círculo, y al borde de uno acodado (plan §44)—, que cada placa enseña o esconde con
+su botón «Conexiones» —o todas a la vez, y en la edición se enseñan solas—.
+**Arrancando con `--edit`** (plan §45; sin él, la ilustración solo se mira),
+con el botón **Edición** las placas se colocan con el ratón: se
 arrastran, se giran de 90 en 90 grados y se agrandan o se achican; el lienzo
 puede tener un tamaño en milímetros, y Ctrl+rueda acerca o aleja. Lo
 colocado se guarda en la configuración y sale igual la próxima vez que se abre

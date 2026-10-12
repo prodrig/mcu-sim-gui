@@ -2866,3 +2866,36 @@ conector con su punto y llega al pin del shield con su círculo; el mismo
 sistema con J5 acodado llega a su borde, sin círculo; y el hilo de la pila
 llega al centro del pin de J9. Y con `mcu-sim`: el sistema de la barra, con
 todos los hilos en los morpho, y el del servo, con los módulos acodados.
+
+## 45. `--edit`: la ilustración, para mirarla o para editarla
+
+Pedido por el uso: quien solo usa la ventana para ver su placa no necesita
+—y puede estropear sin querer— lo de colocar placas, enrutar líneas o abrir
+otros dibujos. Ahora es una opción de la línea de órdenes:
+
+```
+mcu-sim-gui --edit
+```
+
+1. **Con `--edit`**, todo como hasta ahora (§34 a §40).
+2. **Sin él**, la ilustración **solo se mira** (`VistaIlustracion::pon_editable`):
+   * no están «Edición» ni lo que va con ella —«Lienzo...», «Restablecer»,
+     «Copiar como XML», «Guardar en el XML»—, ni «Abrir dibujo...» con su
+     desplegable, y la edición no se deja pedir de ninguna otra manera
+     (`pon_edicion` no entra). Sin edición, el ratón no mueve, no gira ni
+     escala placas, y las líneas no se enrutan;
+   * en la ventana principal, «Vista ▸ Abrir dibujo de la placa…» (Ctrl+D)
+     tampoco está (`VentanaPrincipal::pon_editable`);
+   * quedan **las conexiones** —el botón de cada placa y «Todas las
+     conexiones»— y **la vista**: «Ajustar» y Ctrl+rueda, que acercan o alejan
+     sin cambiar nada;
+   * lo que ya estaba colocado —en la configuración o en el XML— se ve igual.
+3. **Por omisión, en el código, sí se puede editar**: así construyen la
+   ventana las pruebas; es `main.cpp` quien la pone sin edición cuando falta
+   `--edit`.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 303 → **309** (I24): por
+omisión, todo a la vista; sin poder editar, sale de la edición y no quedan
+más que las conexiones y «Ajustar»; la edición no se deja pedir; las
+conexiones siguen funcionando; con `--edit` otra vez, todo; y la ventana
+entera sin `--edit`, sin el menú de abrir otro dibujo.

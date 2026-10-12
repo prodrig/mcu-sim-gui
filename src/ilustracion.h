@@ -134,8 +134,10 @@
 // al entrar en la edición sin ninguna a la vista se enseñan todas, que es
 // como se editan, y al salir se vuelven a esconder si nadie las ha tocado.
 //
-// EL MODO DE EDICIÓN (plan §34, `doc/analisis_disposicion_ilustracion.md`):
-// el botón «Edición» de la ventana, que se queda pulsado, pone el ratón a
+// EL MODO DE EDICIÓN (plan §34, `doc/analisis_disposicion_ilustracion.md`),
+// solo si `mcu-sim-gui` se arrancó con `--edit` (plan §45; sin él no hay ni
+// «Edición» ni «Abrir dibujo...», y la ilustración solo se mira): el botón
+// «Edición» de la ventana, que se queda pulsado, pone el ratón a
 // COLOCAR las placas en vez de tocar sus piezas. Mientras está pulsado los
 // mandos no hacen nada; al soltarlo vuelven como estuvieran. Arrastrar una
 // placa la mueve; un doble clic o Mayús+rueda la gira de 90 en 90 grados; el
@@ -570,8 +572,15 @@ public:
     // Fase 3: los mandos de todos los dibujos, los de ahora y los que vengan
     void activa_mandos(bool si);
 
-    // Plan §34: el modo de edición, como el botón «Edición»
+    // Plan §34: el modo de edición, como el botón «Edición». Sin poder
+    // editar (plan §45), no entra
     void pon_edicion(bool si);
+    // Plan §45: si se puede editar. Sin `--edit`, no: ni «Edición» ni lo que
+    // va con ella -el lienzo, «Restablecer», el XML-, ni «Abrir dibujo...».
+    // Quedan las conexiones -de cada placa y todas- y la vista: «Ajustar» y
+    // Ctrl+rueda, que no cambian nada
+    void pon_editable(bool si);
+    bool editable() const { return editable_; }
     bool edicion() const;
     // Plan §35: el diálogo del lienzo (`dialogo_lienzo`), sin esperar a que se
     // cierre: lo que se acepte se aplica
@@ -656,6 +665,7 @@ private:
     // Plan §39: «Todas las conexiones»; si las enseñó la edición y nadie las
     // ha tocado desde entonces; y si las está cambiando ella misma
     QToolButton*                 todas_ = nullptr;
+    bool                         editable_ = true;
     // Plan §40: «Abrir dibujo...» y, en un sistema, el desplegable de placas
     QPushButton*                 abrir_ = nullptr;
     QComboBox*                   dibujo_de_ = nullptr;
