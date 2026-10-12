@@ -4,6 +4,10 @@ La **contraparte de visualización gráfica de
 [`mcu-sim`](../mcu-sim)**, el modelo SystemC de microcontroladores STM32.
 `mcu-sim` simula; esto lo enseña y deja tocarlo.
 
+> **Para usarlo**: la [guía de usuario](doc/guia%20de%20usuario.md) —elegir
+> el circuito y el firmware, lanzar, depurar con GDB y el puerto serie, y
+> todas las opciones de la línea de órdenes—.
+
 > **Estado: fase 7.** La ventana escucha, `mcu-sim --gui` se conecta, se
 > saludan, y la ventana **se construye sola** a partir de la placa y el
 > catálogo que le manda el modelo: un recuadro por pieza, con sus patillas, un
@@ -164,7 +168,7 @@ una con qué deja hecho, cómo se comprueba y qué NO entra.
 
 Y, aparte del plan, **las ilustraciones**
 ([`doc/analisis-uso-ilustraciones.md`](doc/analisis-uso-ilustraciones.md), plan
-§21 a §39): cada placa con su **dibujo SVG** —el que manda `mcu-sim` con la
+§21 a §45): cada placa con su **dibujo SVG** —el que manda `mcu-sim` con la
 placa, o uno que la ventana genera si no trae ninguno—, los LEDs que brillan,
 los botones que se pulsan, los mandos que giran sobre él —la rueda gira el
 encoder del KY-040—, el aspa de un servo que gira con su ángulo y las
