@@ -1193,15 +1193,31 @@ int main(int argc, char** argv)
                   "por el de J5 que mira a la Nucleo");
         const VistaPlaca::Linea& l1 = v->lineas()[1];
         const QRectF p7 = v->caja_de("N/CN5.7"), p8 = v->caja_de("S/J5.8");
-        comprueba(l1.a == "N/CN5.7" && std::abs(l1.pa.x() - p7.right()) < 0.01 &&
-                      std::abs(l1.pb.x() - p8.left()) < 0.01 &&
+        comprueba(l1.a == "N/CN5.7" && QLineF(l1.pa, p7.center()).length() < 0.01 &&
+                      QLineF(l1.pb, p8.center()).length() < 0.01 &&
                       l1.item->pen().style() == Qt::SolidLine &&
                       l1.item->pen().color() == QColor(0x1f, 0x77, 0xb4),
                   "el hilo, de pin a pin: del 7 de CN5 al 8 de J5, como un cable de su color "
-                  "(plan §37)");
-        comprueba(l0.item->childItems().size() == 2 && l1.item->childItems().isEmpty(),
-                  "la del acople lleva un punto en cada conector; la del hilo, ninguno: llega "
-                  "al borde de cada pin y no lo tapa, que se vea como sus vecinos");
+                  "(plan §37), y al CENTRO de cada uno, que son de conectores derechos (plan "
+                  "§44)");
+        auto circulos = [](const VistaPlaca::Linea& l) {
+            int n = 0;
+            for (QGraphicsItem* c : l.item->childItems())
+                if (c->data(0).toString() == "circulo") ++n;
+            return n;
+        };
+        bool centrados = l1.item->childItems().size() == 2 && circulos(l1) == 2;
+        for (QGraphicsItem* c : l1.item->childItems()) {
+            auto* o = static_cast<QGraphicsEllipseItem*>(c);
+            const QPointF cc = o->rect().center();
+            centrados = centrados && o->brush().style() == Qt::NoBrush &&
+                        (QLineF(cc, p7.center()).length() < 0.01 ||
+                         QLineF(cc, p8.center()).length() < 0.01) &&
+                        o->rect().width() > std::max(p7.width(), p7.height());
+        }
+        comprueba(l0.item->childItems().size() == 2 && circulos(l0) == 0 && centrados,
+                  "la del acople lleva un punto en cada conector; la del hilo, un circulo "
+                  "hueco centrado en cada pin, algo mayor que el pin, que se sigue viendo");
         const QPointF medio = l0.item->path().pointAtPercent(0.5);
         const QImage oculta = v->imagen(1200);
         QToolButton* bn = il.boton_conexiones("N");
@@ -1248,9 +1264,33 @@ int main(int argc, char** argv)
                   "dibujo");
         comprueba(v->lineas()[1].a == "N/CN5.7" &&
                       std::abs(v->lineas()[1].pa.x() - cn5b.right()) < 0.01 &&
-                      v->lineas()[1].item->childItems().size() == 1,
-                  "el hilo, sin un CN5.7 dibujado, sale de CN5, y ahi si lleva su punto -en "
-                  "el pin 8 de J5, que esta dibujado, no-");
+                      v->lineas()[1].item->childItems().size() == 2 &&
+                      circulos(v->lineas()[1]) == 1,
+                  "el hilo, sin un CN5.7 dibujado, sale de CN5, y ahi lleva su punto; en el "
+                  "pin 8 de J5, que esta dibujado, su circulo");
+        {
+            // El mismo sistema con J5 ACODADO: el hilo llega al borde del pin 8,
+            // sin circulo
+            QByteArray ac(sx);
+            ac.replace("<conector ref=\"S/J5\" filas=\"1\" columnas=\"10\" numeracion=\"zigzag\"",
+                       "<conector ref=\"S/J5\" filas=\"1\" columnas=\"10\" numeracion=\"zigzag\" "
+                       "acodado=\"si\"");
+            const PlacaGui sa = placa_de(ac.constData(), CATALOGO_SISTEMA_XML);
+            VistaIlustracion ia(sa);
+            VistaPlaca* va = ia.vista("N");
+            const VistaPlaca::Linea* h = nullptr;
+            for (const VistaPlaca::Linea& l : va->lineas())
+                if (l.hilo) h = &l;
+            const QRectF q7 = va->caja_de("N/CN5.7"), q8 = va->caja_de("S/J5.8");
+            comprueba(sa.placas[1].conectores.value(0).acodado &&
+                          !sa.placas[0].conectores.value(0).acodado && h &&
+                          QLineF(h->pa, q7.center()).length() < 0.01 &&
+                          std::abs(h->pb.x() - q8.left()) < 0.01 &&
+                          std::abs(h->pb.y() - q8.center().y()) < 0.01 && circulos(*h) == 1,
+                      "con J5 acodado (acodado=\"si\" en su <conector>): el hilo sale del "
+                      "centro del 7 de CN5, con su circulo, y llega al borde del 8 de J5, sin "
+                      "nada que lo tape");
+        }
         comprueba(v->lineas()[0].item->isVisible() && v->lineas()[1].item->isVisible(),
                   "las lineas trazadas de nuevo con el dibujo nuevo se siguen viendo: el boton "
                   "de N sigue encendido");
@@ -1291,9 +1331,9 @@ int main(int argc, char** argv)
         const VistaPlaca::Linea& h = vp->lineas()[2];
         comprueba(std::abs(h.pa.x() - cpu.right()) < 0.01 &&
                       std::abs(h.pa.y() - cpu.center().y()) < 0.01 &&
-                      std::abs(h.pb.x() - vp->caja_de("L2/J9.1").left()) < 0.01,
+                      QLineF(h.pb, vp->caja_de("L2/J9.1").center()).length() < 0.01,
                   "un pin de chip no esta dibujado: el hilo sale del borde de la CPU, y llega "
-                  "al pin 1 de J9 de L2");
+                  "al centro del pin 1 de J9 de L2, un conector derecho");
         ip.boton_conexiones("CPU")->click();
         comprueba(vp->lineas()[0].item->isVisible() && !vp->lineas()[1].item->isVisible() &&
                       vp->lineas()[2].item->isVisible(),

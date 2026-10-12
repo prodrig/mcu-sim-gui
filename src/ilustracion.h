@@ -117,7 +117,9 @@
 // milímetros-, con una LÍNEA por cada par de conectores enchufados -en una
 // pila, cada uno con el siguiente-, del color de su acople, y una de trazos
 // por cada hilo. Van de conector a conector, o de pin a pin si están
-// dibujados; si no, desde el borde de la placa que mira a la otra. Apiladas
+// dibujados -al borde del pin si su conector es acodado, y al centro, con un
+// círculo, si es derecho (plan §44)-; si no, desde el borde de la placa que
+// mira a la otra. Apiladas
 // -un shield encima de su Nucleo- no: lo que se pidió es una al lado de otra.
 //
 // LAS LÍNEAS NACEN ESCONDIDAS (plan §33): con varias placas cableadas, todas

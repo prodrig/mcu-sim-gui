@@ -2837,3 +2837,32 @@ extremos, la barra azul y el común a 5 V, el mismo escalón por década, y que
 siempre sube; la prueba del halo de I5 espera ahora 0,91 con 1 mA. Y la barra
 azul del sistema de los morpho, capturada antes y después: el LED encendido
 se distingue de sus vecinos.
+
+## 44. Un hilo que llega a un pin derecho, a su centro
+
+Pedido por el uso: en los conectores de la Nucleo los pines salen hacia
+arriba, y un cable enchufado se ve llegar al centro del pin, no a su borde
+(§28). En los de los módulos —KY-040, pantalla, servo, FT232RL— los pines son
+**acodados**, salen de lado por el borde de la placa, y ahí el borde sí es lo
+que toca.
+
+1. **`mcu-sim` lo dice**: `acodado="si"` en un `Conector` (su
+   `doc/parts.md` §4.1), en el `<conector>` de `T_PLACA`; por omisión, derecho.
+   `ConectorGui::acodado`.
+2. **El extremo de un hilo** en un pin dibujado de un conector **derecho** va
+   al **centro** del pin, y lleva **un círculo hueco** del color del hilo,
+   algo mayor que el pin, que se sigue viendo debajo (`al_centro` y
+   `caja_linea` en `traza_lineas`). En uno **acodado**, como hasta ahora: al
+   borde que mira a la otra placa, sin nada encima.
+3. **Las rutas en tramos rectos** (§37) usan lo mismo: el último tramo llega
+   al centro del pin derecho.
+4. Lo que no es un pin dibujado —un conector entero en un acople, un pin de
+   chip— sigue igual, con su punto.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 302 → **303** (I11, que
+cambia): el hilo de prueba, entre dos conectores derechos, llega al centro de
+cada pin con su círculo; con el dibujo de la Nucleo sin el pin, sale del
+conector con su punto y llega al pin del shield con su círculo; el mismo
+sistema con J5 acodado llega a su borde, sin círculo; y el hilo de la pila
+llega al centro del pin de J9. Y con `mcu-sim`: el sistema de la barra, con
+todos los hilos en los morpho, y el del servo, con los módulos acodados.

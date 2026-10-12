@@ -104,6 +104,9 @@ struct ConectorGui {
     int     filas = 1, columnas = 0;
     bool    zigzag = true;    // numeracion="zigzag" (o "filas")
     int     acople = -1;      // índice en PlacaGui::acoples, o -1 si al aire
+    // Plan §44: los pines salen de lado, por el borde -una tira acodada-. Un
+    // hilo llega al borde de un pin acodado y al centro de uno derecho
+    bool    acodado = false;
 };
 struct SubPlacaGui {
     QString id, nombre, fichero;

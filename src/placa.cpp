@@ -231,6 +231,7 @@ bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
             c.filas    = a.value(QLatin1String("filas")).toInt();
             c.columnas = a.value(QLatin1String("columnas")).toInt();
             c.zigzag   = a.value(QLatin1String("numeracion")) != QLatin1String("filas");
+            c.acodado  = a.value(QLatin1String("acodado")) == QLatin1String("si");
             bool ok = false;
             const int k = a.value(QLatin1String("acople")).toInt(&ok);
             c.acople   = ok ? k : -1;

@@ -530,10 +530,37 @@ void VistaPlaca::traza_lineas()
     // de lado que encima o debajo; arriba o abajo si no, que es lo que pasa
     // con placas giradas o puestas una sobre otra (plan §34)-
     struct Enganche { QPointF p, dir; };
-    auto punto = [&](const QString& ref, const QPointF& hacia) {
+    // ¿Es un PIN dibujado -`F/P1.TX`, y el dibujo tiene un `P1.TX`-? Ahí la
+    // línea llega al borde del pin y no lleva punto: un punto de 2,6 mm tapa
+    // un pin de 1 mm, y ese pin se vería distinto de sus vecinos
+    auto pin_dibujado = [&](const QString& ref) {
+        const int b = ref.indexOf(QLatin1Char('/'));
+        const QString el = b > 0 ? ref.mid(b + 1) : ref;
+        const Capa* c = capa(placa_de(ref), false);
+        return c && el.contains(QLatin1Char('.')) && c->dibujo->existe(el);
+    };
+    // Plan §44: ¿es el pin dibujado de un conector DERECHO -no acodado-? Sus
+    // pines salen hacia arriba, y el cable se ve llegar a su centro: ahí acaba
+    // la línea, con un círculo alrededor del pin. Uno acodado sale por el
+    // borde de la placa, y la línea llega al borde del pin, como siempre
+    auto al_centro = [&](const QString& ref) {
+        if (!pin_dibujado(ref)) return false;
+        const SubPlacaGui* s = placa_.subplaca(placa_de(ref));
+        if (!s) return false;
+        for (const ConectorGui& c : s->conectores)
+            if (ref.startsWith(c.ref + QLatin1Char('.'))) return !c.acodado;
+        return false;
+    };
+    // La caja a la que llega la línea: la del pin, o su centro
+    auto caja_linea = [&](const QString& ref) {
         QRectF r = caja_de(ref);
-        if (r.isNull()) r = en_escena(placa_de(ref));
-        if (r.isNull()) return Enganche{};
+        if (r.isNull()) return en_escena(placa_de(ref));
+        if (al_centro(ref)) return QRectF(r.center(), QSizeF(0, 0));
+        return r;
+    };
+    auto punto = [&](const QString& ref, const QPointF& hacia) {
+        const QRectF r = caja_linea(ref);
+        if (r.isNull() && r.topLeft().isNull()) return Enganche{};
         const QPointF d = hacia - r.center();
         // Un conector de un dibujo -una tira- engancha por su lado; el borde
         // de una placa entera, por el centro de ese lado
@@ -551,23 +578,9 @@ void VistaPlaca::traza_lineas()
         if (r.isNull()) r = en_escena(placa_de(ref));
         return r.center();
     };
-    // ¿Es un PIN dibujado -`F/P1.TX`, y el dibujo tiene un `P1.TX`-? Ahí la
-    // línea llega al borde del pin y no lleva punto: un punto de 2,6 mm tapa
-    // un pin de 1 mm, y ese pin se vería distinto de sus vecinos
-    auto pin_dibujado = [&](const QString& ref) {
-        const int b = ref.indexOf(QLatin1Char('/'));
-        const QString el = b > 0 ? ref.mid(b + 1) : ref;
-        const Capa* c = capa(placa_de(ref), false);
-        return c && el.contains(QLatin1Char('.')) && c->dibujo->existe(el);
-    };
     static const QColor colores[] = {QColor(0xd9, 0x48, 0x1c), QColor(0x1f, 0x77, 0xb4),
                                      QColor(0x8e, 0x44, 0xad), QColor(0x16, 0xa0, 0x85),
                                      QColor(0xc0, 0x39, 0x2b), QColor(0x2c, 0x3e, 0x50)};
-    auto caja = [&](const QString& ref) {
-        QRectF r = caja_de(ref);
-        if (r.isNull()) r = en_escena(placa_de(ref));
-        return r;
-    };
     auto traza = [&](const QString& a, const QString& b, bool hilo, const QColor& col,
                      const QString& ayuda) {
         if (placa_de(a) == placa_de(b) || !capa(placa_de(a), false) || !capa(placa_de(b), false))
@@ -584,7 +597,7 @@ void VistaPlaca::traza_lineas()
             // Plan §37: en tramos rectos, con las esquinas redondeadas
             QVector<double> c;
             for (const double v : ruta->codos) c.push_back(v / mm);
-            puntos = puntos_ruta(caja(a), caja(b), ruta->horizontal, c);
+            puntos = puntos_ruta(caja_linea(a), caja_linea(b), ruta->horizontal, c);
             pa = puntos.front();
             pb = puntos.back();
             camino = redondeada(puntos, 2.5 / mm);
@@ -606,8 +619,19 @@ void VistaPlaca::traza_lineas()
         it->setZValue(10);
         it->setAcceptedMouseButtons(Qt::NoButton);
         it->setToolTip(ayuda);
-        // Y un punto en cada extremo que no sea un pin dibujado
+        // Y un punto en cada extremo que no sea un pin dibujado; en el de un
+        // conector derecho, un círculo alrededor del pin, que se sigue viendo
         for (const auto& [p, ref] : {std::make_pair(pa, a), std::make_pair(pb, b)}) {
+            if (al_centro(ref)) {
+                const QRectF pin = caja_de(ref);
+                const double r = std::max(std::max(pin.width(), pin.height()) * 0.75, 0.9 / mm);
+                auto* o = new QGraphicsEllipseItem(QRectF(p.x() - r, p.y() - r, 2 * r, 2 * r), it);
+                o->setPen(QPen(col, (hilo ? 0.5 : 0.45) / mm));
+                o->setBrush(Qt::NoBrush);
+                o->setData(0, QStringLiteral("circulo"));
+                o->setAcceptedMouseButtons(Qt::NoButton);
+                continue;
+            }
             if (pin_dibujado(ref)) continue;
             const double r = 1.3 / mm;
             auto* d = new QGraphicsEllipseItem(QRectF(p.x() - r, p.y() - r, 2 * r, 2 * r), it);
