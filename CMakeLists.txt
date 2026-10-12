@@ -16,7 +16,7 @@
 cmake_minimum_required(VERSION 3.19)
 
 project(mcu-sim-gui
-        VERSION 0.1.0
+        VERSION 0.2.0
         DESCRIPTION "Contraparte de visualizacion grafica de mcu-sim"
         LANGUAGES CXX)
 
