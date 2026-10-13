@@ -67,8 +67,24 @@ find_package(Qt6 6.3 REQUIRED COMPONENTS Core Widgets Network Svg SvgWidgets)
 # al construir una etiqueta `v1.2.3`, pasa -DMCU_SIM_GUI_VERSION=1.2.3. Asi un
 # ejecutable de una Release dice de cual sale, y uno compilado a mano no se
 # hace pasar por ella.
-set(MCU_SIM_GUI_VERSION "${PROJECT_VERSION}-desarrollo" CACHE STRING
-    "Version que anuncia el ejecutable")
+#
+# La de omision NO se guarda en la cache: si se guardara, un directorio de
+# construccion ya configurado seguiria diciendo la version de cuando se
+# configuro por primera vez -«0.1.0-desarrollo» con project() en 0.2.0-, y
+# `cmake --build` no la cambiaria nunca. En la cache solo va la que se dice
+# con -D; y una «-desarrollo» que quedo de antes se olvida.
+set(MCU_SIM_GUI_VERSION "" CACHE STRING
+    "Version que anuncia el ejecutable; vacia, la de project() con -desarrollo")
+if(MCU_SIM_GUI_VERSION MATCHES "-desarrollo$")
+    set(MCU_SIM_GUI_VERSION "" CACHE STRING
+        "Version que anuncia el ejecutable; vacia, la de project() con -desarrollo" FORCE)
+endif()
+if(MCU_SIM_GUI_VERSION)
+    set(VERSION_ANUNCIADA "${MCU_SIM_GUI_VERSION}")
+else()
+    set(VERSION_ANUNCIADA "${PROJECT_VERSION}-desarrollo")
+endif()
+message(STATUS "mcu-sim-gui ${VERSION_ANUNCIADA}")
 
 qt_standard_project_setup()
 
@@ -130,7 +146,7 @@ qt_add_executable(mcu-sim-gui
 
 target_link_libraries(mcu-sim-gui PRIVATE pantalla)
 target_compile_definitions(mcu-sim-gui PRIVATE
-    MCU_SIM_GUI_VERSION="${MCU_SIM_GUI_VERSION}")
+    MCU_SIM_GUI_VERSION="${VERSION_ANUNCIADA}")
 
 # En Windows, sin consola detrás de la ventana. En macOS, una .app.
 #
