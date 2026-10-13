@@ -1216,11 +1216,13 @@ int main(int argc, char** argv)
             centrados = centrados && o->brush().style() == Qt::NoBrush &&
                         (QLineF(cc, p7.center()).length() < 0.01 ||
                          QLineF(cc, p8.center()).length() < 0.01) &&
-                        o->rect().width() > std::max(p7.width(), p7.height());
+                        o->rect().width() > std::max(p7.width(), p7.height()) &&
+                        std::abs(o->rect().width() * v->mm_escena() - 2.4) < 1e-6;
         }
         comprueba(l0.item->childItems().size() == 2 && circulos(l0) == 0 && centrados,
                   "la del acople lleva un punto en cada conector; la del hilo, un circulo "
-                  "hueco centrado en cada pin, algo mayor que el pin, que se sigue viendo");
+                  "hueco centrado en cada pin, de 2,4 mm, algo mayor que el pin, que se sigue "
+                  "viendo");
         const QPointF medio = l0.item->path().pointAtPercent(0.5);
         const QImage oculta = v->imagen(1200);
         QToolButton* bn = il.boton_conexiones("N");
@@ -1293,6 +1295,37 @@ int main(int argc, char** argv)
                       "con J5 acodado (acodado=\"si\" en su <conector>): el hilo sale del "
                       "centro del 7 de CN5, con su circulo, y llega al borde del 8 de J5, sin "
                       "nada que lo tape");
+        }
+        {
+            // Un pin DIBUJADO GRANDE -el pin con su patilla, un grupo de 6 mm,
+            // como los del FT232RL-: el circulo, del mismo tamaño que en uno
+            // pequeño, no de la caja del pin
+            const QByteArray grande =
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\" "
+                "width=\"40mm\" height=\"30mm\">"
+                "<rect id=\"J5\" x=\"10\" y=\"100\" width=\"80\" height=\"30\"/>"
+                "<g id=\"J5.8\"><rect x=\"10\" y=\"112\" width=\"50\" height=\"6\"/>"
+                "<rect x=\"62\" y=\"110\" width=\"10\" height=\"10\"/></g></svg>";
+            VistaIlustracion ig(s);
+            QString eg;
+            const bool puesto = ig.pon_dibujo("S", grande, {}, eg);
+            VistaPlaca* vg = ig.vista("S");
+            const VistaPlaca::Linea* h = nullptr;
+            for (const VistaPlaca::Linea& l : vg->lineas())
+                if (l.hilo) h = &l;
+            const QRectF j8 = vg->caja_de("S/J5.8");
+            double d = 0;
+            if (h)
+                for (QGraphicsItem* c : h->item->childItems())
+                    if (c->data(0).toString() == "circulo" &&
+                        QLineF(static_cast<QGraphicsEllipseItem*>(c)->rect().center(),
+                               j8.center()).length() < 0.01)
+                        d = static_cast<QGraphicsEllipseItem*>(c)->rect().width() * vg->mm_escena();
+            comprueba(puesto && h && j8.width() * vg->mm_escena() > 6 && std::abs(d - 2.4) < 1e-6,
+                      "un pin dibujado grande -con su patilla, " +
+                          std::to_string(j8.width() * vg->mm_escena()) +
+                          " mm-: su circulo mide 2,4 mm, como el de uno pequeño, y no sale de "
+                          "su caja (" + std::to_string(d) + " mm)");
         }
         comprueba(v->lineas()[0].item->isVisible() && v->lineas()[1].item->isVisible(),
                   "las lineas trazadas de nuevo con el dibujo nuevo se siguen viendo: el boton "

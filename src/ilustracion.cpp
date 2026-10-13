@@ -623,8 +623,11 @@ void VistaPlaca::traza_lineas()
         // conector derecho, un círculo alrededor del pin, que se sigue viendo
         for (const auto& [p, ref] : {std::make_pair(pa, a), std::make_pair(pb, b)}) {
             if (al_centro(ref)) {
-                const QRectF pin = caja_de(ref);
-                const double r = std::max(std::max(pin.width(), pin.height()) * 0.75, 0.9 / mm);
+                // Del mismo tamaño en todos los pines: 1,2 mm de radio, que
+                // abarca un pin de 1,6 mm y cabe en el paso de 2,54. No sale
+                // de la caja del pin, que en un dibujo puede ser el pin con su
+                // patilla -un grupo de 5 mm- y daba círculos enormes
+                const double r = 1.2 / mm;
                 auto* o = new QGraphicsEllipseItem(QRectF(p.x() - r, p.y() - r, 2 * r, 2 * r), it);
                 o->setPen(QPen(col, (hilo ? 0.5 : 0.45) / mm));
                 o->setBrush(Qt::NoBrush);

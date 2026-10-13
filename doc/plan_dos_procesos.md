@@ -2852,15 +2852,18 @@ que toca.
 2. **El extremo de un hilo** en un pin dibujado de un conector **derecho** va
    al **centro** del pin, y lleva **un círculo hueco** del color del hilo,
    algo mayor que el pin, que se sigue viendo debajo (`al_centro` y
-   `caja_linea` en `traza_lineas`). En uno **acodado**, como hasta ahora: al
+   `caja_linea` en `traza_lineas`). **El círculo mide siempre 2,4 mm**: abarca
+   un pin de 1,6 mm y cabe en el paso de 2,54. Al principio salía de la caja
+   del pin, y donde el dibujo hace del pin un grupo con su patilla —los del
+   FT232RL, 6 mm— daba círculos enormes. En uno **acodado**, como hasta ahora: al
    borde que mira a la otra placa, sin nada encima.
 3. **Las rutas en tramos rectos** (§37) usan lo mismo: el último tramo llega
    al centro del pin derecho.
 4. Lo que no es un pin dibujado —un conector entero en un acople, un pin de
    chip— sigue igual, con su punto.
 
-**Cómo se ha comprobado**: `prueba_ilustracion` 302 → **303** (I11, que
-cambia): el hilo de prueba, entre dos conectores derechos, llega al centro de
+**Cómo se ha comprobado**: `prueba_ilustracion` 302 → **303** → **304** (I11,
+que cambia; y el pin grande, con su patilla, con su círculo de 2,4 mm): el hilo de prueba, entre dos conectores derechos, llega al centro de
 cada pin con su círculo; con el dibujo de la Nucleo sin el pin, sale del
 conector con su punto y llega al pin del shield con su círculo; el mismo
 sistema con J5 acodado llega a su borde, sin círculo; y el hilo de la pila
