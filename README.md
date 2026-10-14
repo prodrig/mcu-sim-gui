@@ -175,7 +175,7 @@ encoder del KY-040—, el aspa de un servo que gira con su ángulo y las
 pantallas que enseñan lo que enseñaría la de verdad —el TFT de 128x160, por
 `T_IMAGEN`—, y en un sistema todas las placas una al lado de otra con una
 línea por cada conector enchufado o hilo —que llega al centro de un pin
-derecho, con un círculo, y al borde de uno acodado (plan §44)—, que cada placa enseña o esconde con
+derecho y al codo de uno acodado, con un círculo (plan §44 y §46)—, que cada placa enseña o esconde con
 su botón «Conexiones» —o todas a la vez, y en la edición se enseñan solas—.
 **Arrancando con `--edit`** (plan §45; sin él, la ilustración solo se mira),
 con el botón **Edición** las placas se colocan con el ratón: se

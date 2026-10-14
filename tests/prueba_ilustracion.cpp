@@ -1274,8 +1274,8 @@ int main(int argc, char** argv)
                   "el hilo, sin un CN5.7 dibujado, sale de CN5, y ahi lleva su punto; en el "
                   "pin 8 de J5, que esta dibujado, su circulo");
         {
-            // El mismo sistema con J5 ACODADO: el hilo llega al borde del pin 8,
-            // sin circulo
+            // El mismo sistema con J5 ACODADO: su pin 8, un cuadrado sin patilla,
+            // se acoda en su centro, y ahi llega el hilo, con su circulo
             QByteArray ac(sx);
             ac.replace("<conector ref=\"S/J5\" filas=\"1\" columnas=\"10\" numeracion=\"zigzag\"",
                        "<conector ref=\"S/J5\" filas=\"1\" columnas=\"10\" numeracion=\"zigzag\" "
@@ -1290,11 +1290,10 @@ int main(int argc, char** argv)
             comprueba(sa.placas[1].conectores.value(0).acodado &&
                           !sa.placas[0].conectores.value(0).acodado && h &&
                           QLineF(h->pa, q7.center()).length() < 0.01 &&
-                          std::abs(h->pb.x() - q8.left()) < 0.01 &&
-                          std::abs(h->pb.y() - q8.center().y()) < 0.01 && circulos(*h) == 1,
+                          QLineF(h->pb, q8.center()).length() < 0.01 && circulos(*h) == 2,
                       "con J5 acodado (acodado=\"si\" en su <conector>): el hilo sale del "
-                      "centro del 7 de CN5, con su circulo, y llega al borde del 8 de J5, sin "
-                      "nada que lo tape");
+                      "centro del 7 de CN5, con su circulo, y llega al 8 de J5, que no tiene "
+                      "patilla dibujada, en su centro, tambien con su circulo");
         }
         {
             // Un pin DIBUJADO GRANDE -el pin con su patilla, un grupo de 6 mm,
@@ -1326,6 +1325,49 @@ int main(int argc, char** argv)
                           std::to_string(j8.width() * vg->mm_escena()) +
                           " mm-: su circulo mide 2,4 mm, como el de uno pequeño, y no sale de "
                           "su caja (" + std::to_string(d) + " mm)");
+        }
+        {
+            // Plan §44: el mismo pin grande en un J5 ACODADO. La patilla sale
+            // por el borde izquierdo de la placa y se acoda en su pad, a 6,7 mm
+            // del borde: ahi acaba el hilo, con su circulo de 2,4 mm
+            const QByteArray grande =
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\" "
+                "width=\"40mm\" height=\"30mm\">"
+                "<rect id=\"J5\" x=\"10\" y=\"100\" width=\"80\" height=\"30\"/>"
+                "<g id=\"J5.8\"><rect x=\"10\" y=\"112\" width=\"50\" height=\"6\"/>"
+                "<rect x=\"62\" y=\"110\" width=\"10\" height=\"10\"/></g></svg>";
+            QByteArray ac(sx);
+            ac.replace("<conector ref=\"S/J5\" filas=\"1\" columnas=\"10\" numeracion=\"zigzag\"",
+                       "<conector ref=\"S/J5\" filas=\"1\" columnas=\"10\" numeracion=\"zigzag\" "
+                       "acodado=\"si\"");
+            const PlacaGui sa = placa_de(ac.constData(), CATALOGO_SISTEMA_XML);
+            VistaIlustracion ia(sa);
+            QString eg;
+            const bool puesto = ia.pon_dibujo("S", grande, {}, eg);
+            VistaPlaca* va = ia.vista("S");
+            const VistaPlaca::Linea* h = nullptr;
+            for (const VistaPlaca::Linea& l : va->lineas())
+                if (l.hilo) h = &l;
+            const QRectF j8 = va->caja_de("S/J5.8"), sr = va->en_escena("S");
+            const double k = va->mm_escena();
+            // El pad: de 6,2 a 7,2 mm del borde izquierdo, centrado en 11,5
+            const QPointF pad(sr.left() + 6.7 / k, sr.top() + 11.5 / k);
+            QPointF c;
+            double d = 0;
+            if (h)
+                for (QGraphicsItem* o : h->item->childItems())
+                    if (o->data(0).toString() == "circulo" &&
+                        QLineF(static_cast<QGraphicsEllipseItem*>(o)->rect().center(),
+                               j8.center()).length() > 0.01) {
+                        c = static_cast<QGraphicsEllipseItem*>(o)->rect().center();
+                        d = static_cast<QGraphicsEllipseItem*>(o)->rect().width() * k;
+                    }
+            comprueba(puesto && h && QLineF(h->pb, pad).length() * k < 1e-6 &&
+                          QLineF(c, pad).length() * k < 1e-6 && std::abs(d - 2.4) < 1e-6,
+                      "en un J5 acodado, el hilo llega al CODO del pin -su pad, a " +
+                          std::to_string((h ? h->pb.x() - sr.left() : 0) * k) +
+                          " mm del borde, por donde sale la patilla-, con su circulo de 2,4 mm "
+                          "(" + std::to_string(d) + " mm)");
         }
         comprueba(v->lineas()[0].item->isVisible() && v->lineas()[1].item->isVisible(),
                   "las lineas trazadas de nuevo con el dibujo nuevo se siguen viendo: el boton "

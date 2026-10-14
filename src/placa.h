@@ -105,7 +105,7 @@ struct ConectorGui {
     bool    zigzag = true;    // numeracion="zigzag" (o "filas")
     int     acople = -1;      // índice en PlacaGui::acoples, o -1 si al aire
     // Plan §44: los pines salen de lado, por el borde -una tira acodada-. Un
-    // hilo llega al borde de un pin acodado y al centro de uno derecho
+    // hilo llega al codo de un pin acodado y al centro de uno derecho (§46)
     bool    acodado = false;
 };
 struct SubPlacaGui {

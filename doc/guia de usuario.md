@@ -143,7 +143,10 @@ el aspa del servo y la imagen de la pantalla. Ctrl+rueda acerca o aleja, y
 En un sistema, las **líneas entre placas** —un conector enchufado, un
 hilo— nacen escondidas: el botón **«Conexiones»** de cada placa enseña las
 suyas, y **«Todas las conexiones»**, las de todas. Cada hilo va de su color:
-negro la masa, rojo la alimentación.
+negro la masa, rojo la alimentación. Un hilo que llega a un pin dibujado
+acaba en un círculo donde se enchufa el cable: en el centro del pin si sale
+hacia arriba, y en su codo —el pad, donde entra en la placa— si es acodado y
+sale por el borde, como los del FT232RL.
 
 **Colocar las placas** —moverlas, girarlas, escalarlas, el tamaño del
 lienzo, llevar las líneas en tramos rectos, guardarlo en el XML— y **abrir

@@ -34,6 +34,7 @@
 #include <QVBoxLayout>
 
 #include <cmath>
+#include <optional>
 
 #include "generado.h"
 #include "panel.h"
@@ -539,23 +540,45 @@ void VistaPlaca::traza_lineas()
         const Capa* c = capa(placa_de(ref), false);
         return c && el.contains(QLatin1Char('.')) && c->dibujo->existe(el);
     };
-    // Plan §44: ¿es el pin dibujado de un conector DERECHO -no acodado-? Sus
-    // pines salen hacia arriba, y el cable se ve llegar a su centro: ahí acaba
-    // la línea, con un círculo alrededor del pin. Uno acodado sale por el
-    // borde de la placa, y la línea llega al borde del pin, como siempre
-    auto al_centro = [&](const QString& ref) {
-        if (!pin_dibujado(ref)) return false;
+    // Plan §44: ¿es el pin dibujado de un conector? Ahí acaba la línea, en un
+    // punto con un círculo alrededor. En uno DERECHO -no acodado-, los pines
+    // salen hacia arriba y el cable se ve llegar a su centro. En uno ACODADO,
+    // el pin sale por el borde de la placa y se dobla hacia arriba donde
+    // entra en ella, en su pad: ahí llega el cable, y ahí acaba la línea
+    auto acodado = [&](const QString& ref) -> std::optional<bool> {
+        if (!pin_dibujado(ref)) return std::nullopt;
         const SubPlacaGui* s = placa_.subplaca(placa_de(ref));
-        if (!s) return false;
+        if (!s) return std::nullopt;
         for (const ConectorGui& c : s->conectores)
-            if (ref.startsWith(c.ref + QLatin1Char('.'))) return !c.acodado;
-        return false;
+            if (ref.startsWith(c.ref + QLatin1Char('.'))) return c.acodado;
+        return std::nullopt;
     };
-    // La caja a la que llega la línea: la del pin, o su centro
+    auto al_centro = [&](const QString& ref) { return acodado(ref).has_value(); };
+    // El punto donde acaba la línea en un pin con círculo. El pin acodado es
+    // largo -la patilla con su pad, `P1.TX` del FT232RL-: el extremo de la
+    // patilla es el que queda más cerca del borde de la placa por su lado, y
+    // el codo, el otro extremo, a media anchura del pin hacia dentro
+    auto punto_pin = [&](const QString& ref) {
+        const QRectF r = caja_de(ref);
+        if (!acodado(ref).value_or(false)) return r.center();
+        const QRectF p = en_escena(placa_de(ref));
+        if (r.width() >= 1.5 * r.height()) {
+            const double m = r.height() / 2;
+            const bool sale_izq = r.left() - p.left() < p.right() - r.right();
+            return QPointF(sale_izq ? r.right() - m : r.left() + m, r.center().y());
+        }
+        if (r.height() >= 1.5 * r.width()) {
+            const double m = r.width() / 2;
+            const bool sale_arriba = r.top() - p.top() < p.bottom() - r.bottom();
+            return QPointF(r.center().x(), sale_arriba ? r.bottom() - m : r.top() + m);
+        }
+        return r.center();
+    };
+    // La caja a la que llega la línea: la del pin, o su punto
     auto caja_linea = [&](const QString& ref) {
         QRectF r = caja_de(ref);
         if (r.isNull()) return en_escena(placa_de(ref));
-        if (al_centro(ref)) return QRectF(r.center(), QSizeF(0, 0));
+        if (al_centro(ref)) return QRectF(punto_pin(ref), QSizeF(0, 0));
         return r;
     };
     auto punto = [&](const QString& ref, const QPointF& hacia) {
@@ -620,7 +643,8 @@ void VistaPlaca::traza_lineas()
         it->setAcceptedMouseButtons(Qt::NoButton);
         it->setToolTip(ayuda);
         // Y un punto en cada extremo que no sea un pin dibujado; en el de un
-        // conector derecho, un círculo alrededor del pin, que se sigue viendo
+        // conector, derecho o acodado, un círculo alrededor del punto donde
+        // llega el cable, que se sigue viendo
         for (const auto& [p, ref] : {std::make_pair(pa, a), std::make_pair(pb, b)}) {
             if (al_centro(ref)) {
                 // Del mismo tamaño en todos los pines: 1,2 mm de radio, que

@@ -2855,8 +2855,9 @@ que toca.
    `caja_linea` en `traza_lineas`). **El círculo mide siempre 2,4 mm**: abarca
    un pin de 1,6 mm y cabe en el paso de 2,54. Al principio salía de la caja
    del pin, y donde el dibujo hace del pin un grupo con su patilla —los del
-   FT232RL, 6 mm— daba círculos enormes. En uno **acodado**, como hasta ahora: al
-   borde que mira a la otra placa, sin nada encima.
+   FT232RL, 6 mm— daba círculos enormes. En uno **acodado**, al principio,
+   como hasta ahora: al borde que mira a la otra placa, sin nada encima; hoy,
+   a su codo, con el mismo círculo (§46).
 3. **Las rutas en tramos rectos** (§37) usan lo mismo: el último tramo llega
    al centro del pin derecho.
 4. Lo que no es un pin dibujado —un conector entero en un acople, un pin de
@@ -2902,3 +2903,32 @@ omisión, todo a la vista; sin poder editar, sale de la edición y no quedan
 más que las conexiones y «Ajustar»; la edición no se deja pedir; las
 conexiones siguen funcionando; con `--edit` otra vez, todo; y la ventana
 entera sin `--edit`, sin el menú de abrir otro dibujo.
+
+## 46. Un hilo que llega a un pin acodado, a su codo
+
+Pedido por el uso: en el FT232RL, el hilo de TX llegaba al borde de la
+patilla, por fuera de la placa, sin círculo, y se veía distinto de los de la
+Nucleo. Un pin acodado sale de lado por el borde de la placa y **se dobla
+hacia arriba donde entra en ella**, en su pad: ahí se suelda o se enchufa el
+cable, y ahí debe acabar la línea.
+
+1. **El codo** (`punto_pin` en `traza_lineas`): la caja del pin dibujado es
+   larga —la patilla con su pad, `P1.TX` del FT232RL, 5,2 mm por 1—. Su
+   extremo de fuera es el que queda **más cerca del borde de la placa** por su
+   lado; el codo, el otro extremo, **a media anchura del pin hacia dentro**:
+   el centro del pad. Vale de pie o tumbada —la pantalla saca los pines por
+   abajo; el FT232RL, por la izquierda— y con la placa girada, que se mira ya
+   en la escena.
+2. **Un pin acodado sin patilla dibujada** —una caja casi cuadrada, menos de
+   1,5 veces más larga que ancha— se acoda en su centro.
+3. **El círculo**, el de un pin derecho (§44): hueco, de 2,4 mm, del color
+   del hilo. Así todo hilo que llega a un pin dibujado acaba igual, en un
+   círculo donde se enchufa.
+4. **Las rutas en tramos rectos** (§37) llegan también al codo.
+
+**Cómo se ha comprobado**: `prueba_ilustracion` 310 → **311** (I11): el hilo
+a un J5 acodado con pines cuadrados llega a su centro, con su círculo; y con
+el pin grande —patilla y pad— en un J5 acodado, a 6,7 mm del borde, en el
+centro del pad, con su círculo de 2,4 mm. Y con `mcu-sim`: el sistema de la
+barra, con el FT232RL —TX, RX y GND, cada uno en su pad—, y el del servo, con
+el KY-040, el servo y la pantalla, que saca los pines por abajo.
