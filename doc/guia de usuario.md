@@ -10,7 +10,7 @@ y el resto de la documentación, en el [anexo B](#anexo-b-el-resto-de-la-documen
 ## 1. Qué es, y qué hace falta
 
 `mcu-sim-gui` es la ventana de **`mcu-sim`**, el simulador de
-microcontroladores STM32. Son **dos programas**:
+microcontroladores. Son **dos programas**:
 
 * **`mcu-sim`** simula: el MCU, la placa y lo que lleva conectado, con tu
   firmware dentro;
