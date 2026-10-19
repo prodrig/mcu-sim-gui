@@ -401,13 +401,35 @@ int main(int argc, char** argv)
             todas = todas && pz.en_placa;
             if (!pz.patillas.isEmpty()) nodo[pz.id] = pz.patillas[0].nodo;
         }
-        comprueba(pl.piezas.size() == 9 && todas && pl.avisos.isEmpty(),
-                  "nueve piezas -cuatro LED, tres pulsadores y dos cristales-, todas "
-                  "casadas con su componente y sin avisos");
-        comprueba(nodo.value("LED1") == "P1.0" && nodo.value("LED2_G") == "P2.1" &&
+        auto tipo_de = [](const PlacaGui& pl, const QString& id) {
+            for (const PiezaGui& pz : pl.piezas)
+                if (pz.id == id) return pz.tipo;
+            return QString();
+        };
+        // El LED RGB, una pieza: sus tres patillas y sus canales de color
+        QHash<QString, QString> rgb;             // "r" -> "P2.0"
+        QStringList colores;
+        for (const PiezaGui& pz : pl.piezas)
+            if (pz.id == "LED2") {
+                for (const PatillaGui& pt : pz.patillas) rgb[pt.nombre] = pt.nodo;
+                for (const ObservableGui& o : pz.observables)
+                    if (!o.color.isEmpty()) colores << o.nombre + "=" + o.color;
+            }
+        comprueba(pl.piezas.size() == 22 && todas && pl.avisos.isEmpty() &&
+                      tipo_de(pl, "LED1") == "Led" && tipo_de(pl, "LED2") == "RGBLed" &&
+                      tipo_de(pl, "S3") == "Button" && tipo_de(pl, "Y2") == "Crystal",
+                  "veintidos piezas -los LED, el LED RGB, los pulsadores, los cristales, los "
+                  "puentes y los conectores-, todas casadas con su componente y sin avisos");
+        comprueba(nodo.value("LED1") == "P1.0" && rgb.value("r") == "P2.0" &&
+                      rgb.value("g") == "P2.1" && rgb.value("b") == "P2.2" &&
                       nodo.value("Y2") == "PJ.3" && nodo.value("S3") == "RSTN",
                   "y sus patillas llegan con los nombres del datasheet de TI: P1.0, "
-                  "P2.1, PJ.3 y RSTN, no PB0 ni NRST");
+                  "P2.0/P2.1/P2.2, PJ.3 y RSTN, no PB0 ni NRST");
+        comprueba(colores.size() == 6 && colores.contains("rojo=#ff0000") &&
+                      colores.contains("verde=#00ff00") && colores.contains("azul=#0000ff") &&
+                      colores.contains("corriente_b=#0000ff"),
+                  "y el LED RGB declara sus canales de color, que la ventana mezcla: " +
+                      colores.join(' ').toStdString());
         quint16 id = 0;
         for (const PiezaGui& pz : pl.piezas)
             if (pz.id == "LED1" && !pz.observables.isEmpty())

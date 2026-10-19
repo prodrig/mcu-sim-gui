@@ -265,6 +265,15 @@ Seis cosas que merecen nombre propio:
   rojo y pone en rojo el título de su pieza. Solo aparece cuando es cierto, así
   que los observables de siempre salen igual. Se añadió el 2026-10-05 sin
   cambiar la versión: una ventana anterior lo ignora y lo pinta ● / ○.
+* **`color="#rrggbb"`** marca un observable como parte de un **canal de
+  color** de una pieza que mezcla varios en un encapsulado —un `RGBLed`—: un
+  0/1 con color (`rojo`) y una magnitud con unidad del mismo color
+  (`corriente_r`) son un canal. La ventana suma los canales encendidos, cada
+  uno con el brillo que le da su corriente, lleva la suma al tope y pinta el
+  halo de ese color —los tres a la vez, blanco—; en el panel, el ● de un canal
+  encendido sale de su color. Solo aparece en los observables que lo tienen.
+  Se añadió el 2026-10-19 sin cambiar la versión: una ventana anterior lo
+  ignora y pinta la pieza como un LED más con su primer 0/1, `encendido`.
 * **`tipo`** de un mando dice qué control poner, sin decir de qué pieza es:
   `boton` (el máximo mientras está hundido, el mínimo al soltarlo),
   `interruptor` (máximo o mínimo), `continuo` (cualquier valor del rango) y

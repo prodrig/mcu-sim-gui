@@ -101,6 +101,7 @@ private:
         ObservableGui obs;
         QWidget*      recuadro;          // el de su pieza, que también avisa
         bool          disparada = false; // la alarma, en la última muestra
+        QString       estilo;            // la hoja de estilo puesta a la etiqueta
     };
     QHash<quint16, Indicador> ind_;
     QHash<quint16, QLabel*>   img_;

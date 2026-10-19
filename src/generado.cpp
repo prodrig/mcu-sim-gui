@@ -67,8 +67,15 @@ QString glifo(const PiezaGui& p, double x, double y, bool claro)
                             "stroke-width=\"0.6\"/>\n")
                  .arg(n(x), n(y), n(x + 2.0), n(y - 2.0));
     } else if (g == QLatin1String("piloto")) {
-        s += QStringLiteral("    <circle cx=\"%1\" cy=\"%2\" r=\"2.4\" fill=\"#f2b632\" "
-                            "stroke=\"#a77a12\" stroke-width=\"0.3\"/>\n").arg(n(x), n(y));
+        // Con canales de color -un RGBLed- el encapsulado es transparente: el
+        // color lo pone el halo, mezclando los que estén encendidos
+        bool canales = false;
+        for (const ObservableGui& o : p.observables)
+            if (es_01(o) && !o.color.isEmpty()) canales = true;
+        s += QStringLiteral("    <circle cx=\"%1\" cy=\"%2\" r=\"2.4\" fill=\"%3\" "
+                            "stroke=\"%4\" stroke-width=\"0.3\"/>\n")
+                 .arg(n(x), n(y), canales ? QStringLiteral("#eef2f3") : QStringLiteral("#f2b632"),
+                      canales ? QStringLiteral("#9aa3a6") : QStringLiteral("#a77a12"));
     } else if (g == QLatin1String("medida")) {
         s += QStringLiteral("    <rect x=\"%1\" y=\"%2\" width=\"9\" height=\"5\" rx=\"0.5\" "
                             "fill=\"#f4f4f0\" stroke=\"#333333\" stroke-width=\"0.3\"/>\n")

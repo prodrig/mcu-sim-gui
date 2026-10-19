@@ -465,6 +465,16 @@ private:
         int     intensidad = -1;             // el que da la intensidad del brillo
         double  i_max = 1;
         QGraphicsEllipseItem* halo = nullptr;
+        // Los CANALES de color de una pieza que los mezcla -un RGBLed-: cada
+        // uno, su 0/1, su intensidad y su color. Con canales, el halo es la
+        // suma de los encendidos, y `color` la mezcla que se ve
+        struct Canal {
+            int    o01 = -1, intensidad = -1;
+            double i_max = 1;
+            QColor color;
+        };
+        QVector<Canal> canales;
+        QColor  color_halo;                  // con el que está hecho el degradado
         QGraphicsRectItem*    contorno = nullptr;
         QVector<quint16>      obs;           // los id_obs de la pieza, en orden
         QHash<quint16, float> valores;       // lo último de cada observable

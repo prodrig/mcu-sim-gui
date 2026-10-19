@@ -40,6 +40,10 @@ struct ObservableGui {
     // Un 0/1 que, a 1, es un AVISO -la sobrecorriente de una Fuente-: se
     // pinta para que se note. Un mcu-sim anterior no lo dice: entonces, no.
     bool    alarma = false;
+    // Un CANAL de color (`#rrggbb`): el 0/1 de un color y la corriente de ese
+    // color, de una pieza que mezcla varios en un encapsulado -un RGBLed-. La
+    // ventana suma los canales encendidos. Un mcu-sim anterior no lo dice.
+    QString color;
 };
 
 struct MandoGui {
