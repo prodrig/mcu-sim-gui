@@ -2932,3 +2932,31 @@ el pin grande —patilla y pad— en un J5 acodado, a 6,7 mm del borde, en el
 centro del pad, con su círculo de 2,4 mm. Y con `mcu-sim`: el sistema de la
 barra, con el FT232RL —TX, RX y GND, cada uno en su pad—, y el del servo, con
 el KY-040, el servo y la pantalla, que saca los pines por abajo.
+
+## 47. Un chip que no es de ST: el MSP432P401R
+
+Llega con la rama `msp432` de `mcu-sim`, que hace las fases T0 y T1 de su
+`doc/analisis_msp432.md`: el mismo núcleo Cortex-M4F, integrado por Texas
+Instruments. Lo que importaba aquí era una pregunta, **¿da esta ventana por
+hecho que los pines se llaman `PA5`?**, y la respuesta es que no:
+
+1. **Los nombres son cadenas.** Los nodos, las patillas de `T_PLACA` y los
+   enlaces de un dibujo llegan como texto, y la ventana no los analiza. `P1.0`,
+   `P10.3` o `PJ.4` -con un punto que NO es el del prefijo del MCU- valen lo
+   mismo que `PD12`.
+2. **`caja_de` busca primero el nombre entero** y solo después va quitando
+   segmentos por el final (`F/P1.TX` → `P1`): un `P1.0` dibujado se encuentra
+   tal cual.
+3. **El tipo del chip es texto**: `u0 (MSP432P401R)` en `mcus`, y el diálogo de
+   lanzamiento lo saca de `--argumentos`, donde `mcu-sim` ya lo lista.
+
+No hace falta cambiar código. Lo que se añade es la prueba.
+
+**Cómo se ha comprobado**: `prueba_cruzada` 44 → **51** (G7), contra el
+`mcu-sim` de esa rama: la LaunchPad MSP-EXP432P401R con su firmware de
+verificación cargado como ELF -el `.out` de Code Composer Studio-; nueve
+piezas casadas y sin avisos; sus patillas llegan como `P1.0`, `P2.1`, `PJ.3`
+y `RSTN`; y el LED1 parpadea en las muestras, 54 flancos en 60 ms.
+
+**Lo que queda**: el dibujo de la LaunchPad (`placas/msp_exp432p401r.svg` en
+`mcu-sim`). Hasta que lo haya, la ventana la enseña con el dibujo generado.

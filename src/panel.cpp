@@ -1,6 +1,7 @@
 #include "panel.h"
 
 #include <QCheckBox>
+#include <QColor>
 #include <QComboBox>
 #include <QFormLayout>
 #include <QGridLayout>
@@ -372,11 +373,19 @@ void Panel::pon_valor(quint16 id_obs, float valor)
     const QString t = texto_de(it->obs, valor);
     if (it->etiqueta->text() != t) it->etiqueta->setText(t);
     const bool d = en_alarma(it->obs, valor);
+    // Un 0/1 de un canal de color, encendido, se pinta de su color
+    const bool de_color = !it->obs.color.isEmpty() && !it->obs.alarma && valor >= 0.5f &&
+                          QColor(it->obs.color).isValid();
+    const QString estilo = d ? QStringLiteral("color: #c62828; font-weight: bold;")
+                         : de_color ? QStringLiteral("color: %1;").arg(it->obs.color)
+                                    : QString();
+    // Solo al cambiar: la hoja de estilo cuesta, y llegan muestras cada pocos ms
+    if (estilo != it->estilo) {
+        ind_[id_obs].estilo = estilo;
+        it->etiqueta->setStyleSheet(estilo);
+    }
     if (d == it->disparada) return;
     ind_[id_obs].disparada = d;
-    // Solo al cambiar: la hoja de estilo cuesta, y llegan muestras cada pocos ms
-    const QString rojo = QStringLiteral("color: #c62828; font-weight: bold;");
-    it->etiqueta->setStyleSheet(d ? rojo : QString());
     // El recuadro de la pieza avisa si alguna de sus alarmas está disparada
     bool alguna = false;
     for (const Indicador& x : std::as_const(ind_))

@@ -109,6 +109,7 @@ bool lee_catalogo(const QByteArray& xml, QVector<PiezaGui>& piezas, QString& err
             o.max         = real(a, "max");
             o.interesante = a.value(QLatin1String("interesante")) == QLatin1String("si");
             o.alarma      = a.value(QLatin1String("alarma")) == QLatin1String("si");
+            o.color       = texto(a, "color");
             piezas.back().observables.push_back(o);
         } else if (r.name() == QLatin1String("mando") && !piezas.isEmpty()) {
             MandoGui m;

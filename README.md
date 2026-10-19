@@ -1,7 +1,7 @@
 # mcu-sim-gui
 
 La **contraparte de visualización gráfica de
-[`mcu-sim`](../mcu-sim)**, el modelo SystemC de microcontroladores STM32.
+[`mcu-sim`](../mcu-sim)**, el modelo SystemC de microcontroladores.
 `mcu-sim` simula; esto lo enseña y deja tocarlo.
 
 > **Para usarlo**: la [guía de usuario](doc/guia%20de%20usuario.md) —elegir
@@ -55,10 +55,12 @@ La **contraparte de visualización gráfica de
 
 ## Qué es, y por qué es un programa aparte
 
-`mcu-sim` es un simulador didáctico para quien desarrolla en STM32CubeIDE y no
-tiene la tarjeta delante: se compila el firmware igual que para el chip y se
-ejecuta contra el modelo igual que contra una placa. Hoy tiene **dos familias y
-29 referencias**, y todo lo que se ve de él es texto en una consola.
+`mcu-sim` es un simulador didáctico para quien desarrolla en el IDE de su
+microcontrolador —STM32CubeIDE, Code Composer Studio— y no tiene la tarjeta
+delante: se compila el firmware igual que para el chip y se ejecuta contra el
+modelo igual que contra una placa. Hoy tiene **tres familias, de dos
+fabricantes, y 30 referencias**, y todo lo que se ve de él es texto en una
+consola.
 
 Lo que falta es lo que un alumno espera ver: **el LED encendiéndose**. Eso es
 esto.

@@ -102,6 +102,9 @@
 //   I24 (plan §45) SIN --EDIT, la ilustración solo se mira: ni «Edición», ni
 //       lo que va con ella, ni «Abrir dibujo...» -tampoco en el menú de la
 //       ventana-; las conexiones y «Ajustar», sí.
+//   I25 UN LED RGB: los canales de color de una pieza se MEZCLAN en un solo
+//       halo -rojo y verde, amarillo; los tres, blanco-; el panel pinta cada
+//       0/1 de su color, y el dibujo generado le da un encapsulado claro.
 // =============================================================================
 #include <QApplication>
 #include <QGraphicsEllipseItem>
@@ -2851,6 +2854,88 @@ int main(int argc, char** argv)
         for (double i = 0.01; i < 2.0 / 1.3; i *= 1.3) sube = sube && op(i * 1.3) > op(i);
         comprueba(sube && VistaPlaca::opacidad_brillo(1.0, 0.0) == 1.0,
                   "y siempre sube; sin escala que valga, encendido del todo");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I25 Un LED RGB: los colores se mezclan en un solo encapsulado\n");
+    {
+        const char* placa =
+            "<placa nombre=\"rgb\">\n"
+            "  <componente tipo=\"RGBLed\" id=\"D1\" comun=\"catodo\">\n"
+            "    <pin nombre=\"r\" nodo=\"PA1\"/>\n"
+            "    <pin nombre=\"g\" nodo=\"PA2\"/>\n"
+            "    <pin nombre=\"b\" nodo=\"PA3\"/>\n"
+            "  </componente>\n"
+            "</placa>\n";
+        const char* catalogo =
+            "<catalogo>\n"
+            "  <pieza idx=\"0\" id=\"D1\" tipo=\"RGBLed\">\n"
+            "    <observable idx=\"0\" id_obs=\"0\" nombre=\"encendido\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"no\"/>\n"
+            "    <observable idx=\"1\" id_obs=\"1\" nombre=\"rojo\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\" color=\"#ff0000\"/>\n"
+            "    <observable idx=\"2\" id_obs=\"2\" nombre=\"verde\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\" color=\"#00ff00\"/>\n"
+            "    <observable idx=\"3\" id_obs=\"3\" nombre=\"azul\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\" color=\"#0000ff\"/>\n"
+            "    <observable idx=\"4\" id_obs=\"4\" nombre=\"corriente_r\" unidad=\"mA\" min=\"0\" max=\"25\" interesante=\"no\" color=\"#ff0000\"/>\n"
+            "    <observable idx=\"5\" id_obs=\"5\" nombre=\"corriente_g\" unidad=\"mA\" min=\"0\" max=\"25\" interesante=\"no\" color=\"#00ff00\"/>\n"
+            "    <observable idx=\"6\" id_obs=\"6\" nombre=\"corriente_b\" unidad=\"mA\" min=\"0\" max=\"25\" interesante=\"no\" color=\"#0000ff\"/>\n"
+            "  </pieza>\n"
+            "</catalogo>\n";
+        const char* dibujo =
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100mm\" height=\"50mm\" "
+            "viewBox=\"0 0 200 100\">\n"
+            "  <rect id=\"pcb\" x=\"0\" y=\"0\" width=\"200\" height=\"100\" fill=\"#1e5a3a\"/>\n"
+            "  <circle id=\"D1\" cx=\"100\" cy=\"50\" r=\"8\" fill=\"#eef2f3\"/>\n"
+            "</svg>\n";
+        const PlacaGui p = placa_de(placa, catalogo);
+        comprueba(p.piezas.size() == 1 && p.piezas[0].observables.size() == 7 &&
+                      p.piezas[0].observables[0].color.isEmpty() &&
+                      p.piezas[0].observables[1].color == "#ff0000" &&
+                      p.piezas[0].observables[6].color == "#0000ff",
+                  "el catalogo trae el color de cada canal; el encendido de todo, sin color");
+        QString e;
+        std::unique_ptr<VistaPlaca> v(VistaPlaca::crea(p, QString(), dibujo, {}, e));
+        comprueba(v && v->efecto(0) == "brillo" && v->halo(0),
+                  "un 0/1: brilla, con un solo halo para los tres");
+        if (!v) return resultado();
+        auto mira = [&](float r, float g, float b, QRgb esperado, const char* que) {
+            v->pon_valor(1, r);
+            v->pon_valor(2, g);
+            v->pon_valor(3, b);
+            v->pon_valor(0, (r + g + b) > 0 ? 1.f : 0.f);
+            const QColor c = v->color(0);
+            comprueba(v->halo(0)->opacity() == 1.0 && parecido(c.rgb(), esperado, 8),
+                      std::string(que) + ": " + c.name().toStdString());
+        };
+        comprueba(v->halo(0)->opacity() == 0, "sin muestras, apagado");
+        mira(1, 0, 0, qRgb(255, 0, 0), "solo el rojo: rojo");
+        mira(0, 0, 1, qRgb(0, 0, 255), "solo el azul: azul");
+        mira(1, 1, 0, qRgb(255, 255, 0), "rojo y verde: amarillo");
+        mira(0, 1, 1, qRgb(0, 255, 255), "verde y azul: cian");
+        mira(1, 0, 1, qRgb(255, 0, 255), "rojo y azul: magenta");
+        mira(1, 1, 1, qRgb(255, 255, 255), "los tres: BLANCO");
+        const QImage blanco = v->imagen(400);
+        const QRgb fuera = en(blanco, *v, 100, 64);
+        comprueba(qRed(fuera) > qRed(VERDE_PCB) + 40 && qBlue(fuera) > qBlue(VERDE_PCB) + 40,
+                  "y el halo, alrededor, aclara la placa en todos los colores: " +
+                      hex(fuera).toStdString());
+        // Con corriente: el canal con menos corriente pesa menos en la mezcla
+        v->pon_valor(4, 10.f);
+        v->pon_valor(5, 0.02f);
+        v->pon_valor(6, 0.f);
+        v->pon_valor(3, 0.f);
+        const QColor c = v->color(0);
+        comprueba(c.red() == 255 && c.green() > 60 && c.green() < 200 && c.blue() == 0 &&
+                      v->halo(0)->opacity() == 1.0,
+                  "rojo a 10 mA y verde a 0,02 mA: un naranja, y el halo como el mas "
+                  "brillante: " + c.name().toStdString());
+        v->pon_valor(1, 0.f);
+        v->pon_valor(2, 0.f);
+        v->pon_valor(0, 0.f);
+        comprueba(v->halo(0)->opacity() == 0, "y todo apagado, sin halo");
+
+        // El dibujo generado: un encapsulado claro, no el ambar de un piloto
+        const QByteArray gen = dibujo_generado(p, QString(), OpcionesGenerado());
+        comprueba(gen.contains("#eef2f3") && !gen.contains("#f2b632"),
+                  "el dibujo generado lo pinta transparente; el color lo pone el halo");
     }
 
     // -------------------------------------------------------------------------

@@ -154,6 +154,16 @@ double distancia(const QPointF& s, const QPointF& a, const QPointF& b)
     return QLineF(s, a + d * t).length();
 }
 
+QColor mezcla(const QColor& a, const QColor& b, double t, int alfa);
+// El degradado del halo de algo que brilla de color `col`
+QRadialGradient degradado(const QPointF& c, double r, const QColor& col)
+{
+    QRadialGradient g(c, r);
+    g.setColorAt(0.0, mezcla(col, Qt::white, 0.55, 235));
+    g.setColorAt(0.35, mezcla(col, Qt::white, 0.2, 170));
+    g.setColorAt(1.0, mezcla(col, Qt::white, 0.0, 0));
+    return g;
+}
 QColor mezcla(const QColor& a, const QColor& b, double t, int alfa)
 {
     return QColor(int(a.red() + (b.red() - a.red()) * t),
@@ -922,12 +932,29 @@ void VistaPlaca::prepara(Capa& cp)
         }
         bool alarmas = false;
         QVector<const ObservableGui*> rotulos;
+        // Los canales de color: un 0/1 con color, y su intensidad, el primero
+        // con unidad del mismo color
+        for (const ObservableGui& o : pz.observables) {
+            if (o.alarma || !es_01(o) || !QColor(o.color).isValid()) continue;
+            Viva::Canal k;
+            k.o01 = o.id_obs;
+            k.color = QColor(o.color);
+            for (const ObservableGui& x : pz.observables)
+                if (!x.alarma && !es_01(x) && !x.unidad.isEmpty() && x.max != x.min &&
+                    QColor(x.color).isValid() && QColor(x.color) == k.color) {
+                    k.intensidad = x.id_obs;
+                    k.i_max = std::max(std::abs(x.min), std::abs(x.max));
+                    break;
+                }
+            w.canales.push_back(k);
+        }
         for (const ObservableGui& o : pz.observables) {
             decl_.insert(quint16(o.id_obs), o);
             w.obs.push_back(quint16(o.id_obs));
             if (o.alarma) alarmas = true;
             else if (es_01(o)) { if (w.o01 < 0) w.o01 = o.id_obs; }
-            else if (!o.unidad.isEmpty() && w.intensidad < 0 && o.max != o.min) {
+            else if (!o.unidad.isEmpty() && w.intensidad < 0 && o.max != o.min &&
+                     (w.canales.isEmpty() || o.color.isEmpty())) {
                 w.intensidad = o.id_obs;
                 w.i_max = std::max(std::abs(o.min), std::abs(o.max));
             }
@@ -997,16 +1024,13 @@ void VistaPlaca::prepara(Capa& cp)
         if (w.efecto == QLatin1String("brillo")) {
             w.color = color_de(cp.dibujo->renderer(), e.elemento);
             // Un halo redondo, tres veces más ancho que el elemento, del color
-            // de este y más claro en el centro
+            // de este -o de la mezcla de sus canales- y más claro en el centro
             const double r = std::max(w.caja.width(), w.caja.height()) * 1.5;
             const QPointF c = w.caja.center();
-            QRadialGradient g(c, r);
-            g.setColorAt(0.0, mezcla(w.color, Qt::white, 0.55, 235));
-            g.setColorAt(0.35, mezcla(w.color, Qt::white, 0.2, 170));
-            g.setColorAt(1.0, mezcla(w.color, Qt::white, 0.0, 0));
             w.halo = new QGraphicsEllipseItem(QRectF(c.x() - r, c.y() - r, 2 * r, 2 * r),
                                               cp.raiz);
-            w.halo->setBrush(g);
+            w.color_halo = w.color;
+            w.halo->setBrush(degradado(c, r, w.color));
             w.halo->setPen(Qt::NoPen);
             w.halo->setOpacity(0);
             w.halo->setZValue(2);
@@ -1133,7 +1157,34 @@ void VistaPlaca::repinta(Viva& w)
 {
     const float sin_valor = 0.f;
     // El brillo: apagado, nada; encendido, según la intensidad
-    if (w.halo) {
+    if (w.halo && !w.canales.isEmpty()) {
+        // Los canales se suman, cada uno con su brillo, y el resultado se
+        // lleva al tope: rojo y verde, amarillo; los tres, blanco. El halo
+        // brilla como el más brillante
+        double op = 0, rr = 0, gg = 0, bb = 0;
+        for (const Viva::Canal& k : std::as_const(w.canales)) {
+            if (w.valores.value(quint16(k.o01), sin_valor) < 0.5f) continue;
+            double o = 1;
+            if (k.intensidad >= 0 && w.valores.contains(quint16(k.intensidad)))
+                o = opacidad_brillo(std::abs(double(w.valores.value(quint16(k.intensidad)))),
+                                    k.i_max);
+            op = std::max(op, o);
+            rr += k.color.redF() * o;
+            gg += k.color.greenF() * o;
+            bb += k.color.blueF() * o;
+        }
+        const double m = std::max({rr, gg, bb});
+        if (m > 0) {
+            const QColor c = QColor::fromRgbF(float(rr / m), float(gg / m), float(bb / m));
+            w.color = c;
+            if (c != w.color_halo) {
+                w.color_halo = c;
+                const QRectF e = w.halo->rect();
+                w.halo->setBrush(degradado(e.center(), e.width() / 2, c));
+            }
+        }
+        if (w.halo->opacity() != op) w.halo->setOpacity(op);
+    } else if (w.halo) {
         double op = 0;
         if (w.o01 >= 0 && w.valores.value(quint16(w.o01), sin_valor) >= 0.5f) {
             op = 1;

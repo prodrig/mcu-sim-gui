@@ -17,7 +17,9 @@
 // una placa y el LED del shield, que está en la otra. Y G6, una PILA
 // (`placas/pila_pc104.xml`): un acople de tres conectores, lo que T_PLACA
 // cuenta de cada placa para poder dibujarla, y el mismo pin en las tres. Y
-// desde las ilustraciones, en G5, el dibujo de la Nucleo en T_ILUSTRACION.
+// desde las ilustraciones, en G5, el dibujo de la Nucleo en T_ILUSTRACION. Y
+// G7, desde la rama msp432: la LaunchPad MSP-EXP432P401R, un chip de TI con
+// sus pines llamados `P1.0` y su LED parpadeando en las muestras.
 //
 // Necesita un `mcu-sim` compilado y su árbol de fuentes, porque las placas y
 // los firmwares están allí. Se le dicen con dos variables de entorno:
@@ -358,6 +360,90 @@ int main(int argc, char** argv)
         comprueba(ts.size() == 500 && flancos >= 4 && distintos == 0,
                   "el blinky de la CPU los enciende y apaga a la vez, en dos placas de la "
                   "pila: " + std::to_string(flancos) + " flancos, ni una muestra distinta");
+        const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);
+        comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0,
+                  "y mcu-sim termina con codigo 0");
+    }
+    // -------------------------------------------------------------------------
+    // G7, desde la rama msp432 de los dos repositorios: un chip que NO es de ST.
+    // La LaunchPad MSP-EXP432P401R con su firmware de verificacion, cargado
+    // como ELF (el `.out` de CCS). Lo que se comprueba es lo que esta ventana
+    // podria dar por hecho y no debe: que los pines se llaman `PA5`. Aqui se
+    // llaman `P1.0`, `P2.1` y `PJ.3`, con un punto que NO es el del prefijo
+    // del MCU, y la ventana los tiene que tratar como una cadena mas.
+    // -------------------------------------------------------------------------
+    std::printf("G7 Un MSP432P401R: la LaunchPad roja, con los nombres de TI\n");
+    {
+        Sesion s;
+        s.escucha(QHostAddress::LocalHost, 0);
+        int listos = 0, fines = 0;
+        quint64 t_inst = 0;
+        QVector<quint64> ts;
+        QVector<float>   led;
+        QObject::connect(&s, &Sesion::listo, [&] { ++listos; });
+        QObject::connect(&s, &Sesion::fin, [&](quint32, qint32, quint64) { ++fines; });
+        QObject::connect(&s, &Sesion::instantanea, [&](quint64 t, quint32) { t_inst = t; });
+        QObject::connect(&s, &Sesion::muestra, [&](quint16, float v) {
+            ts.push_back(t_inst);
+            led.push_back(v);
+        });
+        QProcess p;
+        p.setWorkingDirectory(src);
+        p.start(sim, {"placas/msp_exp432p401r.xml",
+                      "verif/fw/msp432p4/p4_demo/p4_demo.out", "--ms=60",
+                      "--gui", QStringLiteral("127.0.0.1:%1").arg(s.puerto())});
+        comprueba(espera([&] { return listos == 1; }, 20000),
+                  "mcu-sim monta la LaunchPad, saluda y dice T_LISTO");
+        const PlacaGui& pl = s.placa();
+        bool todas = !pl.piezas.isEmpty();
+        QHash<QString, QString> nodo;            // "LED1" -> "P1.0"
+        for (const PiezaGui& pz : pl.piezas) {
+            todas = todas && pz.en_placa;
+            if (!pz.patillas.isEmpty()) nodo[pz.id] = pz.patillas[0].nodo;
+        }
+        auto tipo_de = [](const PlacaGui& pl, const QString& id) {
+            for (const PiezaGui& pz : pl.piezas)
+                if (pz.id == id) return pz.tipo;
+            return QString();
+        };
+        // El LED RGB, una pieza: sus tres patillas y sus canales de color
+        QHash<QString, QString> rgb;             // "r" -> "P2.0"
+        QStringList colores;
+        for (const PiezaGui& pz : pl.piezas)
+            if (pz.id == "LED2") {
+                for (const PatillaGui& pt : pz.patillas) rgb[pt.nombre] = pt.nodo;
+                for (const ObservableGui& o : pz.observables)
+                    if (!o.color.isEmpty()) colores << o.nombre + "=" + o.color;
+            }
+        comprueba(pl.piezas.size() == 22 && todas && pl.avisos.isEmpty() &&
+                      tipo_de(pl, "LED1") == "Led" && tipo_de(pl, "LED2") == "RGBLed" &&
+                      tipo_de(pl, "S3") == "Button" && tipo_de(pl, "Y2") == "Crystal",
+                  "veintidos piezas -los LED, el LED RGB, los pulsadores, los cristales, los "
+                  "puentes y los conectores-, todas casadas con su componente y sin avisos");
+        comprueba(nodo.value("LED1") == "P1.0" && rgb.value("r") == "P2.0" &&
+                      rgb.value("g") == "P2.1" && rgb.value("b") == "P2.2" &&
+                      nodo.value("Y2") == "PJ.3" && nodo.value("S3") == "RSTN",
+                  "y sus patillas llegan con los nombres del datasheet de TI: P1.0, "
+                  "P2.0/P2.1/P2.2, PJ.3 y RSTN, no PB0 ni NRST");
+        comprueba(colores.size() == 6 && colores.contains("rojo=#ff0000") &&
+                      colores.contains("verde=#00ff00") && colores.contains("azul=#0000ff") &&
+                      colores.contains("corriente_b=#0000ff"),
+                  "y el LED RGB declara sus canales de color, que la ventana mezcla: " +
+                      colores.join(' ').toStdString());
+        quint16 id = 0;
+        for (const PiezaGui& pz : pl.piezas)
+            if (pz.id == "LED1" && !pz.observables.isEmpty())
+                id = quint16(pz.observables[0].id_obs);
+        comprueba(s.suscribe(1000000, {id}), "suscrito al LED1, cada 1 ms");
+        comprueba(s.arranca(RIT_LIBRE) && espera([&] { return fines == 1; }, 60000),
+                  "60 ms simulados");
+        int flancos = 0;
+        for (int k = 1; k < led.size(); ++k)
+            if (led[k] != led[k - 1]) ++flancos;
+        comprueba(ts.size() == 60 && flancos >= 20,
+                  "y el LED1 parpadea en las muestras: el firmware para el perro y "
+                  "conmuta P1.0 cada 1,1 ms a 3 MHz (" + std::to_string(flancos) +
+                      " flancos en 60 muestras)");
         const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);
         comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0,
                   "y mcu-sim termina con codigo 0");
