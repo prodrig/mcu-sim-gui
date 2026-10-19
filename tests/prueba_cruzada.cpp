@@ -415,11 +415,23 @@ int main(int argc, char** argv)
                 for (const ObservableGui& o : pz.observables)
                     if (!o.color.isEmpty()) colores << o.nombre + "=" + o.color;
             }
-        comprueba(pl.piezas.size() == 22 && todas && pl.avisos.isEmpty() &&
+        comprueba(pl.piezas.size() == 23 && todas && pl.avisos.isEmpty() &&
                       tipo_de(pl, "LED1") == "Led" && tipo_de(pl, "LED2") == "RGBLed" &&
-                      tipo_de(pl, "S3") == "Button" && tipo_de(pl, "Y2") == "Crystal",
-                  "veintidos piezas -los LED, el LED RGB, los pulsadores, los cristales, los "
-                  "puentes y los conectores-, todas casadas con su componente y sin avisos");
+                      tipo_de(pl, "S3") == "Button" && tipo_de(pl, "Y2") == "Crystal" &&
+                      tipo_de(pl, "XDS") == "Xds110",
+                  "veintitres piezas -los LED, el LED RGB, los pulsadores, los cristales, la "
+                  "sonda XDS110, los puentes y los conectores-, todas casadas con su "
+                  "componente y sin avisos");
+        // La sonda XDS110: la corriente de su LDO, la alarma de sobrecorriente
+        // y si hay un OpenOCD conectado
+        QStringList xds;
+        for (const PiezaGui& pz : pl.piezas)
+            if (pz.id == "XDS")
+                for (const ObservableGui& o : pz.observables)
+                    xds << o.nombre + (o.alarma ? "!" : "") + (o.unidad.isEmpty() ? "" : "/" + o.unidad);
+        comprueba(xds == QStringList({"corriente/mA", "sobrecorriente!", "depurando"}),
+                  "y la sonda XDS110 ensena la corriente de su LDO, la sobrecorriente como "
+                  "alarma y si se esta depurando: " + xds.join(' ').toStdString());
         comprueba(nodo.value("LED1") == "P1.0" && rgb.value("r") == "P2.0" &&
                       rgb.value("g") == "P2.1" && rgb.value("b") == "P2.2" &&
                       nodo.value("Y2") == "PJ.3" && nodo.value("S3") == "RSTN",
