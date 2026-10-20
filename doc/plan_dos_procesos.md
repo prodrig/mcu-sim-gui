@@ -2986,3 +2986,9 @@ muestras de los ocho LED: se enciende de LD6 (`PE15`) a LD4 (`PE8`), uno cada
 **Lo que queda**: los sensores de la placa (el giróscopo y el
 acelerómetro-magnetómetro), que en `mcu-sim` son la fase S4 y en el dibujo ya
 están, como decoración.
+
+**Desde S3 del F303** la placa lleva el VCP (la USART1 en PC4/PC5, un
+`PuenteSerie` como el de la Nucleo), y su dibujo lo enlaza en el ST-LINK: G8
+cuenta **veinte** piezas. Sin código nuevo, como antes; y
+`placas/dos_f3discovery.xml`, el sistema de dos Discovery de S3, se abre en la
+ventana como cualquier otro sistema.

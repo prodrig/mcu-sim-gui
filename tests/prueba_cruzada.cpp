@@ -497,12 +497,12 @@ int main(int argc, char** argv)
             if (!pz.patillas.isEmpty()) nodo[pz.id] = pz.patillas[0].nodo;
             if (!pz.observables.isEmpty()) obs[pz.id] = quint16(pz.observables[0].id_obs);
         }
-        comprueba(pl.piezas.size() == 19 && todas && pl.avisos.isEmpty() &&
+        comprueba(pl.piezas.size() == 20 && todas && pl.avisos.isEmpty() &&
                       tipo["LD3"] == "Led" && tipo["B1"] == "Button" && tipo["X3"] == "Crystal" &&
                       tipo["MCO"] == "ExtClock" && tipo["JP3"] == "Jumper" &&
-                      tipo["EXP1"] == "Conector",
-                  "diecinueve piezas -la rosa, LD1, B1 y B2, el MCO del ST-LINK, X3, JP3 y las "
-                  "tiras P1 y P2-, todas casadas con su componente y sin avisos");
+                      tipo["EXP1"] == "Conector" && tipo["VCP"] == "PuenteSerie",
+                  "veinte piezas -la rosa, LD1, B1 y B2, el MCO y el VCP del ST-LINK, X3, JP3 y "
+                  "las tiras P1 y P2-, todas casadas con su componente y sin avisos");
         comprueba(nodo["LD3"] == "PE9" && nodo["LD6"] == "PE15" && nodo["LD4"] == "PE8" &&
                       nodo["B1"] == "PA0" && nodo["MCO"] == "PF0",
                   "y sus patillas: LD3 en PE9, LD6 en PE15, LD4 en PE8, B1 en PA0 y el MCO en PF0");
