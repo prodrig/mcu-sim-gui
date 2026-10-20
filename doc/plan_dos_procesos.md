@@ -2960,3 +2960,29 @@ y `RSTN`; y el LED1 parpadea en las muestras, 54 flancos en 60 ms.
 
 **Lo que queda**: el dibujo de la LaunchPad (`placas/msp_exp432p401r.svg` en
 `mcu-sim`). Hasta que lo haya, la ventana la enseña con el dibujo generado.
+
+## 48. Otro ST, otra familia: el STM32F303VC
+
+La rama `stm32f303` de `mcu-sim` (fases S0-S2 de su
+`doc/analisis_stm32f303.md`) trae un chip de ST que no es un F4 -su RCC, su
+Flash y la mitad de sus periféricos son otros- y una placa nueva, la
+STM32F3DISCOVERY, con su dibujo. Para esta ventana la pregunta era la de §47
+al revés: ¿hay algo que dé por hecho que un chip de ST es un F4? Y la
+respuesta vuelve a ser que no: el chip llega como texto (`u0 (STM32F303VC)`),
+las piezas son las de siempre (`Led`, `Button`, `Crystal`, `ExtClock`,
+`Jumper`, `Conector`) y el dibujo se enlaza por los id de sus piezas y de sus
+pines (`EXP1.1` ... `EXP2.50`).
+
+No hace falta cambiar código. Lo que se añade es la prueba.
+
+**Cómo se ha comprobado**: `prueba_cruzada` 53 → **61** (G8), contra el
+`mcu-sim` de esa rama: la Discovery con `GPIO_IOToggle` de STM32CubeF3 sin
+modificar; diecinueve piezas casadas y sin avisos, con sus patillas (LD3 en
+`PE9`, B1 en `PA0`, el MCO del ST-LINK en `PF0`); su dibujo,
+`stm32f3discovery.svg`, con cada pin de las dos tiras; y la rosa, en las
+muestras de los ocho LED: se enciende de LD6 (`PE15`) a LD4 (`PE8`), uno cada
+101 ms -el `HAL_Delay(100)` de ST, con su tick de más-.
+
+**Lo que queda**: los sensores de la placa (el giróscopo y el
+acelerómetro-magnetómetro), que en `mcu-sim` son la fase S4 y en el dibujo ya
+están, como decoración.
