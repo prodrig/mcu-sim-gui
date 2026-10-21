@@ -9,6 +9,8 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QLabel>
+#include <QMouseEvent>
+#include <QPainter>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSlider>
@@ -180,6 +182,79 @@ QWidget* control_de(Panel* panel, const PiezaGui& p, const MandoGui& m, QWidget*
     return w;
 }
 
+
+// EL MANDO DE INCLINACIÓN (S8 del F303): un círculo con un punto que se
+// arrastra, para una pieza que tiene a la vez un `alabeo` y un `cabeceo`
+// continuos -la Postura de una placa con acelerómetro-. No ordena nada por su
+// cuenta: MUEVE los dos deslizadores de esos mandos, que son los que ordenan,
+// y se pinta donde ellos estén. El protocolo no se entera de que existe.
+//
+// El punto es EL LADO QUE BAJA: a la derecha, el este abajo (alabeo
+// positivo); arriba, el norte abajo (cabeceo negativo). El borde del círculo
+// son 90 grados; el doble clic lo deja plano.
+class Nivel : public QWidget {
+public:
+    Nivel(QSlider* alabeo, QSlider* cabeceo, const MandoGui& ma, const MandoGui& mc, QWidget* padre)
+        : QWidget(padre), a_(alabeo), c_(cabeceo), ma_(ma), mc_(mc) {
+        setFixedSize(LADO, LADO);
+        setCursor(Qt::CrossCursor);
+        QObject::connect(a_, &QSlider::valueChanged, this, [this] { update(); });
+        QObject::connect(c_, &QSlider::valueChanged, this, [this] { update(); });
+    }
+    // Los grados de cada mando, de su deslizador
+    double alabeo() const { return grados(a_, ma_); }
+    double cabeceo() const { return grados(c_, mc_); }
+    // Lo que hace el ratón, también para las pruebas: un punto del widget
+    void lleva_a(QPointF p) {
+        const QPointF c(LADO / 2.0, LADO / 2.0);
+        QPointF d = p - c;
+        const double r = std::hypot(d.x(), d.y());
+        if (r > RADIO) d *= RADIO / r;
+        pon(a_, ma_, 90.0 * d.x() / RADIO);
+        pon(c_, mc_, 90.0 * d.y() / RADIO);
+    }
+    void plano() { pon(a_, ma_, 0); pon(c_, mc_, 0); }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter g(this);
+        g.setRenderHint(QPainter::Antialiasing);
+        const QPointF c(LADO / 2.0, LADO / 2.0);
+        const QColor tinta = isEnabled() ? palette().color(QPalette::WindowText)
+                                         : palette().color(QPalette::Disabled, QPalette::WindowText);
+        g.setPen(QPen(tinta, 1));
+        g.setBrush(palette().color(QPalette::Base));
+        g.drawEllipse(c, RADIO, RADIO);
+        g.drawEllipse(c, RADIO / 3.0, RADIO / 3.0);           // 30 grados
+        g.drawLine(QPointF(c.x() - RADIO, c.y()), QPointF(c.x() + RADIO, c.y()));
+        g.drawLine(QPointF(c.x(), c.y() - RADIO), QPointF(c.x(), c.y() + RADIO));
+        g.drawText(QRectF(c.x() - 8, 0, 16, 12), Qt::AlignCenter, QStringLiteral("N"));
+        const double x = std::clamp(alabeo(), -90.0, 90.0), y = std::clamp(cabeceo(), -90.0, 90.0);
+        g.setBrush(isEnabled() ? QColor(0x1e, 0x88, 0xe5) : tinta);
+        g.setPen(Qt::NoPen);
+        g.drawEllipse(QPointF(c.x() + x / 90.0 * RADIO, c.y() + y / 90.0 * RADIO), 6, 6);
+    }
+    void mousePressEvent(QMouseEvent* e) override { if (isEnabled()) lleva_a(e->position()); }
+    void mouseMoveEvent(QMouseEvent* e) override {
+        if (isEnabled() && (e->buttons() & Qt::LeftButton)) lleva_a(e->position());
+    }
+    void mouseDoubleClickEvent(QMouseEvent*) override { if (isEnabled()) plano(); }
+
+private:
+    static constexpr int LADO = 120;
+    static constexpr double RADIO = 52.0;
+    QSlider *a_, *c_;
+    MandoGui ma_, mc_;
+    static double grados(const QSlider* s, const MandoGui& m) {
+        return m.min + (m.max - m.min) * s->value() / 1000.0;
+    }
+    static void pon(QSlider* s, const MandoGui& m, double v) {
+        if (m.max <= m.min) return;
+        v = std::clamp(v, m.min, m.max);
+        s->setValue(int(std::lround((v - m.min) / (m.max - m.min) * 1000.0)));
+    }
+};
+
 // Una pieza con más patillas que esto -un conector de 38 pines- las pliega en
 // una línea, con la lista entera en la ayuda emergente: si no, su recuadro se
 // come la pantalla y no dice nada que se lea.
@@ -252,6 +327,28 @@ QGroupBox* recuadro_de(Panel* panel, const PiezaGui& p, const PlacaGui& placa,
     }
     for (const MandoGui& m : p.mandos)
         f->addRow(control_de(panel, p, m, g, controles));
+    // Con un alabeo y un cabeceo continuos, además, el mando de inclinación
+    const MandoGui *ma = nullptr, *mc = nullptr;
+    for (const MandoGui& m : p.mandos) {
+        if (m.tipo != QLatin1String("continuo")) continue;
+        if (m.nombre == QLatin1String("alabeo")) ma = &m;
+        if (m.nombre == QLatin1String("cabeceo")) mc = &m;
+    }
+    if (ma && mc) {
+        auto* sa = g->findChild<QSlider*>(QStringLiteral("mando:%1:%2").arg(p.idx).arg(ma->idx));
+        auto* sc = g->findChild<QSlider*>(QStringLiteral("mando:%1:%2").arg(p.idx).arg(mc->idx));
+        if (sa && sc) {
+            auto* n = new Nivel(sa, sc, *ma, *mc, g);
+            n->setObjectName(QStringLiteral("inclinacion:%1").arg(p.idx));
+            n->setToolTip(QObject::tr("Arrastra el punto hacia el lado que baja: a la derecha "
+                                      "el este, arriba el norte. El borde son 90 grados; el "
+                                      "doble clic la deja plana. Mueve los deslizadores de "
+                                      "%1 y %2.").arg(ma->nombre, mc->nombre));
+            n->setEnabled(false);
+            controles.push_back(n);
+            f->addRow(QObject::tr("inclinación"), n);
+        }
+    }
     if (ocultos > 0) {
         auto* l = new QLabel(QObject::tr("+%n observable(s) sin pintar", nullptr, ocultos), g);
         l->setObjectName(QStringLiteral("ocultos:%1").arg(p.idx));

@@ -56,6 +56,8 @@
 //       numérico que lo mueva se dice y se queda sin efecto; y con el
 //       pulsador encima, el clic es para el pulsador y la RUEDA lo atraviesa
 //       y gira el encoder.
+//   I14b (S8 del F303) la aguja del rumbo: `observable=` en la tabla elige qué
+//       numérico mueve el efecto `angulo`, aunque no sea el primero ni esté en °;
 //   I14 (plan §32) el aspa de un servo: el efecto `angulo`, el de omisión de
 //       una pieza que sugiere un numérico en grados -gira tantos grados como
 //       diga, a la derecha los positivos, sobre el centro de su caja, que un
@@ -1760,6 +1762,59 @@ int main(int argc, char** argv)
         comprueba(!v->etiqueta(0) && v->vivo(0)->toolTip().contains("angulo: -45"),
                   "el angulo no lleva etiqueta -ya lo dice el aspa-, y la ayuda lo dice: " +
                       v->vivo(0)->toolTip().toStdString());
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("I14b La aguja del rumbo: angulo con observable= (S8 del F303)\n");
+    {
+        const char* PLACA_MOV =
+            "<placa nombre=\"mov\">\n"
+            "  <componente tipo=\"Postura\" id=\"MOV\"/>\n"
+            "  <componente tipo=\"Postura\" id=\"MAL\"/>\n"
+            "  <ilustracion>\n"
+            "    <enlace pieza=\"MOV\" elemento=\"MOV\" efecto=\"angulo\" observable=\"rumbo\"/>\n"
+            "    <enlace pieza=\"MAL\" elemento=\"MAL\" efecto=\"angulo\" observable=\"guinada\"/>\n"
+            "  </ilustracion>\n"
+            "</placa>\n";
+        auto pieza = [](int idx, const char* id, int o0) {
+            return QString("  <pieza idx=\"%1\" id=\"%2\" tipo=\"Postura\">\n"
+                           "    <observable idx=\"0\" id_obs=\"%3\" nombre=\"alabeo\" unidad=\"grados\" min=\"-180\" max=\"180\" interesante=\"si\"/>\n"
+                           "    <observable idx=\"1\" id_obs=\"%4\" nombre=\"cabeceo\" unidad=\"grados\" min=\"-90\" max=\"90\" interesante=\"si\"/>\n"
+                           "    <observable idx=\"2\" id_obs=\"%5\" nombre=\"rumbo\" unidad=\"grados\" min=\"0\" max=\"360\" interesante=\"si\"/>\n"
+                           "  </pieza>\n").arg(idx).arg(id).arg(o0).arg(o0 + 1).arg(o0 + 2);
+        };
+        const QByteArray cat = ("<catalogo>\n" + pieza(0, "MOV", 0) + pieza(1, "MAL", 3) + "</catalogo>\n").toUtf8();
+        const char* DIBUJO_MOV =
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\">\n"
+            "  <rect x=\"0\" y=\"0\" width=\"200\" height=\"100\" fill=\"#1e5631\"/>\n"
+            "  <g id=\"MOV\">\n"
+            "    <circle cx=\"50\" cy=\"50\" r=\"42\" fill=\"none\" stroke=\"none\"/>\n"
+            "    <rect x=\"46\" y=\"12\" width=\"8\" height=\"40\" fill=\"#ffffff\"/>\n"
+            "  </g>\n"
+            "  <g id=\"MAL\"><circle cx=\"150\" cy=\"50\" r=\"42\" fill=\"#808080\"/></g>\n"
+            "</svg>\n";
+        const PlacaGui p = placa_de(PLACA_MOV, cat.constData());
+        QString e;
+        std::unique_ptr<VistaPlaca> v(VistaPlaca::crea(p, QString(), DIBUJO_MOV, p.tabla_de(QString()), e));
+        comprueba(v != nullptr, "la vista se construye " + e.toStdString());
+        if (!v) return resultado();
+        v->resize(700, 400);
+        v->show();
+        espera([] { return false; }, 50);
+        comprueba(v->efecto(0) == "angulo" && v->efecto(1) == "ninguno" &&
+                      v->informe().avisos.join(" ").contains("MAL: el efecto «angulo» pide el observable «guinada»"),
+                  "observable=\"rumbo\" elige el TERCERO de los angulos, aunque diga «grados» y no °; "
+                  "uno que la pieza no tiene se queda sin efecto, y se dice: " +
+                      v->informe().avisos.join(" | ").toStdString());
+        v->pon_valor(0, 30.f);              // el alabeo: no lo mueve
+        const double r0 = v->vivo(0)->rotation();
+        v->pon_valor(2, 135.f);             // el rumbo
+        const double r1 = v->vivo(0)->rotation();
+        comprueba(r0 == 0 && r1 == 135,
+                  "la aguja sigue al rumbo (135) y no al alabeo (" + std::to_string(r0) + ", " +
+                      std::to_string(r1) + ")");
+        comprueba(v->etiqueta(0) && v->etiqueta(1) && !v->etiqueta(2),
+                  "el rumbo no lleva etiqueta -ya lo dice la aguja-; el alabeo y el cabeceo, si");
     }
 
     // -------------------------------------------------------------------------
