@@ -8,6 +8,8 @@
 //
 //   G1  `construye_panel` sobre la placa de prueba: cuántos recuadros,
 //       indicadores y controles, y lo que dice cada uno;
+//   G1c (S8 del F303) el mando de inclinacion de una pieza con alabeo y
+//       cabeceo: mueve sus dos deslizadores, que son los que ordenan;
 //   G2  la VentanaPrincipal entera contra un modelo falso: espera, se
 //       construye al llegar la placa, «Arrancar» se habilita con T_LISTO y,
 //       pulsado, el modelo recibe T_ARRANCA; T_FIN lo deshabilita todo.
@@ -42,6 +44,9 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSlider>
+#include <QMouseEvent>
+#include <QApplication>
+#include <algorithm>
 #include <QSpinBox>
 #include <QStatusBar>
 
@@ -189,6 +194,59 @@ int main(int argc, char** argv)
                   Panel::texto_de(gr, 90.f) == "90 grados",
                   "un valor se escribe segun su DECLARACION: de 0 a 1 sin unidad, ● u ○; "
                   "lo demas, el numero con su unidad");
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("G1c El mando de inclinacion: alabeo y cabeceo con un punto (S8 del F303)\n");
+    {
+        PlacaGui placa;
+        PiezaGui mov;
+        mov.idx = 0; mov.id = "MOV"; mov.tipo = "Postura";
+        mov.mandos.push_back({0, "alabeo", "continuo", -180, 180, 0});
+        mov.mandos.push_back({1, "cabeceo", "continuo", -90, 90, 0});
+        mov.mandos.push_back({2, "rumbo", "continuo", 0, 360, 0});
+        placa.piezas.push_back(mov);
+        PiezaGui otra;                        // solo alabeo: sin mando de inclinacion
+        otra.idx = 1; otra.id = "X"; otra.tipo = "Raro";
+        otra.mandos.push_back({0, "alabeo", "continuo", -180, 180, 0});
+        placa.piezas.push_back(otra);
+        QWidget* w = construye_panel(placa);
+        auto* panel = qobject_cast<Panel*>(w);
+        QWidget* n = w->findChild<QWidget*>("inclinacion:0");
+        comprueba(n && !w->findChild<QWidget*>("inclinacion:1") && !n->isEnabled(),
+                  "la pieza con alabeo Y cabeceo continuos lleva el mando de inclinacion, "
+                  "apagado como los demas; la que solo tiene alabeo, no");
+        struct Ord { quint16 p, m; float v; };
+        std::vector<Ord> ords;
+        QObject::connect(panel, &Panel::orden,
+                         [&](quint16 p, quint16 m, float v) { ords.push_back({p, m, v}); });
+        panel->activa_mandos(true);
+        comprueba(n && n->isEnabled(), "activa_mandos() lo enciende");
+        if (n) {
+            // El centro es (60, 60) y el borde, 52 px: 26 a la derecha y 26 arriba
+            QMouseEvent ev(QEvent::MouseButtonPress, QPointF(86, 34), n->mapToGlobal(QPointF(86, 34)),
+                           Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(n, &ev);
+        }
+        float a = 999, c = 999;
+        for (const Ord& o : ords) { if (o.m == 0) a = o.v; if (o.m == 1) c = o.v; }
+        comprueba(std::fabs(a - 45.f) < 0.5f && std::fabs(c + 45.f) < 0.5f &&
+                      std::none_of(ords.begin(), ords.end(), [](const Ord& o) { return o.m == 2; }),
+                  "un clic a medio radio arriba a la derecha: el este abajo 45 y el norte abajo 45 "
+                  "(alabeo " + std::to_string(a) + ", cabeceo " + std::to_string(c) +
+                      "); lo ordenan los deslizadores, y el rumbo no se toca");
+        auto* sa = w->findChild<QSlider*>("mando:0:0");
+        comprueba(sa && sa->value() == 625, "el deslizador del alabeo se ha movido con el");
+        ords.clear();
+        if (n) {
+            QMouseEvent ev(QEvent::MouseButtonDblClick, QPointF(10, 10), n->mapToGlobal(QPointF(10, 10)),
+                           Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(n, &ev);
+        }
+        a = c = 999;
+        for (const Ord& o : ords) { if (o.m == 0) a = o.v; if (o.m == 1) c = o.v; }
+        comprueba(std::fabs(a) < 0.5f && std::fabs(c) < 0.5f, "el doble clic la deja plana");
+        delete w;
     }
 
     // -------------------------------------------------------------------------

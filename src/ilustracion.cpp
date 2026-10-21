@@ -965,7 +965,8 @@ void VistaPlaca::prepara(Capa& cp)
         if (w.efecto == QLatin1String("giro")) {
             // El primer numérico que sugiere: posiciones enteras de min a max
             for (const ObservableGui& o : pz.observables)
-                if (o.interesante && !o.alarma && !es_01(o) && o.max > o.min) {
+                if (!o.alarma && !es_01(o) && o.max > o.min &&
+                    (e.observable.isEmpty() ? o.interesante : o.nombre == e.observable)) {
                     w.giro = o.id_obs;
                     w.g_min = o.min;
                     w.g_max = o.max;
@@ -982,7 +983,22 @@ void VistaPlaca::prepara(Capa& cp)
         }
         // Una pieza con un ÁNGULO -un numérico que sugiere, en grados- gira con
         // él, si la tabla no dice otra cosa: el aspa de un servo (plan §32)
-        if (w.efecto.isEmpty() || w.efecto == QLatin1String("angulo")) {
+        // La tabla puede decir CUÁL (`observable=`): el rumbo de una Postura,
+        // que no es el primero de sus ángulos y se mide en «grados» (S8)
+        if (w.efecto == QLatin1String("angulo") && !e.observable.isEmpty()) {
+            int ang = -1;
+            for (const ObservableGui& o : pz.observables)
+                if (o.nombre == e.observable && !o.alarma && !es_01(o)) { ang = o.id_obs; break; }
+            if (ang >= 0) {
+                w.giro = ang;
+                rotulos.removeIf([&](const ObservableGui* o) { return o->id_obs == ang; });
+            } else {
+                cp.informe.avisos << QObject::tr("%1: el efecto «angulo» pide el observable «%2», "
+                                               "que la pieza no tiene (o no es un numérico); se "
+                                               "queda sin efecto").arg(pz.id_local, e.observable);
+                w.efecto = QStringLiteral("ninguno");
+            }
+        } else if (w.efecto.isEmpty() || w.efecto == QLatin1String("angulo")) {
             int ang = -1;
             for (const ObservableGui& o : pz.observables)
                 if (o.interesante && !o.alarma && !es_01(o) && o.unidad == QStringLiteral("°")) {

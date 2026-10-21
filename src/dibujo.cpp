@@ -305,7 +305,7 @@ InformeDibujo DibujoPlaca::enlaza(const PlacaGui& placa, const QString& placa_id
             continue;
         }
         hecho.insert(*it, {*it, t.elemento, QStringLiteral("tabla"), t.efecto,
-                           caja(t.elemento)});
+                           caja(t.elemento), t.observable});
     }
 
     // 2. El id, con el nombre de la pieza en su placa

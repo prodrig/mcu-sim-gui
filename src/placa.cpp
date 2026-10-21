@@ -201,7 +201,8 @@ bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
             placa.lienzo_fijo = ok && placa.lienzo[2] > 0 && placa.lienzo[3] > 0;
         } else if (r.name() == QLatin1String("enlace")) {
             // La tabla de enlaces de la placa abierta, o de la suelta
-            EnlaceTabla e{texto(a, "pieza"), texto(a, "elemento"), texto(a, "efecto")};
+            EnlaceTabla e{texto(a, "pieza"), texto(a, "elemento"), texto(a, "efecto"),
+                          texto(a, "observable")};
             (sub >= 0 ? placa.placas[sub].tabla : placa.tabla).push_back(e);
         } else if (r.name() == QLatin1String("placa")) {
             // Una placa DENTRO de un <sistema>, con lo que la describe dentro

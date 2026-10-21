@@ -52,6 +52,7 @@ struct EnlaceDibujo {
     QString por;              // "id" o "tabla"
     QString efecto;           // el de la tabla, si lo dice
     QRectF  caja;             // dónde está, en coordenadas del dibujo
+    QString observable;       // el de la tabla, si lo dice: el que mueve el efecto
 };
 
 struct InformeDibujo {

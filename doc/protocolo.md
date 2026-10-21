@@ -338,6 +338,12 @@ dentro la **tabla de enlaces**, como se escribe en la placa:
 La `pieza` es el nombre DENTRO de su placa (`LD2`, no `N/LD2`): el dibujo es
 de una placa, y en él no hay barras.
 
+Un enlace con `efecto="giro"` o `"angulo"` puede llevar además
+`observable="..."`: el NOMBRE del observable de la pieza que mueve el efecto,
+cuando no es el que se elegiría solo (S8 del F303: la aguja de la Discovery
+sigue el `rumbo` de la `Postura`, que es su tercer ángulo y se mide en
+«grados»). Una ventana anterior lo ignora; un `mcu-sim` anterior no lo manda.
+
 **`T_LISTO`** — sin cuerpo. Quiere decir: *la placa está construida, el catálogo
 es el que has recibido, y estoy parado esperándote.*
 
