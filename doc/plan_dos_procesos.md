@@ -2989,6 +2989,12 @@ están, como decoración.
 
 **Desde S3 del F303** la placa lleva el VCP (la USART1 en PC4/PC5, un
 `PuenteSerie` como el de la Nucleo), y su dibujo lo enlaza en el ST-LINK: G8
-cuenta **veinte** piezas. Sin código nuevo, como antes; y
+cuenta **veinte** piezas. **Desde S4**, los sensores: la `Postura` (`MOV`,
+con tres mandos `continuo` -alabeo, cabeceo y rumbo- que inclinan y giran la
+placa), el giroscopo `U5` y la brujula `U3` de la revision que se monta -la E
+por omision: I3G4250D y LSM303AGR- y los pull-up del I2C: **veinticinco**
+piezas, y G8 comprueba sus tipos y los mandos de la postura (`prueba_cruzada`
+61 → **62**). El rotulo del chip
+de cada revision es una variante del dibujo (`U5@I3G4250D`). Sin código nuevo, como antes; y
 `placas/dos_f3discovery.xml`, el sistema de dos Discovery de S3, se abre en la
 ventana como cualquier otro sistema.

@@ -79,6 +79,19 @@ ejemplo están en `placas/` de `mcu-sim`:
 | `nucleo_f446re_servo.xml` | La Nucleo con un servo, un encoder rotativo y la pantalla | el que dice el XML |
 | `nucleo_f446re_barra8ac_azul.xml` | La Nucleo con una barra de 8 LEDs y un adaptador USB-serie | el que dice el XML |
 | `nucleo_y_shield.xml` | La Nucleo con un shield de LEDs enchufado | el que dice el XML |
+| `stm32f3discovery.xml` | La STM32F3DISCOVERY (revisión E): la rosa de ocho LED, B1 y B2, el puerto serie del ST-LINK, y el giróscopo y la brújula con acelerómetro, que se mueven con los mandos de su **postura** (abajo) | `verif/fw/stm32f3/ejemplos_s4/BSP.bin`, el ejemplo de ST |
+| `stm32f3discovery_d.xml` | La misma, de la revisión D: otros sensores, el mismo firmware | el mismo |
+| `dos_f3discovery.xml` | Dos F3DISCOVERY cableadas, para los ejemplos de ST de dos placas | el que dice el XML |
+
+**La postura de la STM32F3DISCOVERY.** La pieza `MOV` no se ve en el dibujo,
+pero sale en el panel con tres deslizadores: **alabeo** (el borde de LD7 hacia
+abajo), **cabeceo** (el borde de LD3 hacia arriba) y **rumbo** (hacia dónde
+mira la placa). Al moverlos la placa se inclina o gira hasta ahí, a 90 grados
+por segundo, y eso es lo que leen el acelerómetro —la gravedad—, la brújula
+—el norte— y el giróscopo —mientras gira, y solo mientras gira—. Con el
+ejemplo `BSP` de ST: B1 cuando acabe la vuelta de la rosa y, al inclinar la
+placa, se enciende el LED del lado que baja; B1 dos veces más, lo mismo con el
+giróscopo, mientras se mueve.
 
 Para un montaje propio se copia uno parecido y se cambia: el formato está en
 `doc/parts.md` de `mcu-sim` ([anexo B](#anexo-b-el-resto-de-la-documentación)).
