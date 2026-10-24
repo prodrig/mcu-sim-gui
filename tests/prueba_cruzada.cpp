@@ -497,12 +497,15 @@ int main(int argc, char** argv)
             if (!pz.patillas.isEmpty()) nodo[pz.id] = pz.patillas[0].nodo;
             if (!pz.observables.isEmpty()) obs[pz.id] = quint16(pz.observables[0].id_obs);
         }
-        comprueba(pl.piezas.size() == 25 && todas && pl.avisos.isEmpty() &&
+        // S6 del F303: y R16, la de D+ del USB de usuario (sin dibujo)
+        comprueba(pl.piezas.size() == 26 && todas && pl.avisos.isEmpty() &&
                       tipo["LD3"] == "Led" && tipo["B1"] == "Button" && tipo["X3"] == "Crystal" &&
                       tipo["MCO"] == "ExtClock" && tipo["JP3"] == "Jumper" &&
-                      tipo["EXP1"] == "Conector" && tipo["VCP"] == "PuenteSerie",
-                  "veinticinco piezas -la rosa, LD1, B1 y B2, el MCO y el VCP del ST-LINK, X3, JP3, "
-                  "las tiras P1 y P2, y los sensores con su postura-, todas casadas y sin avisos");
+                      tipo["EXP1"] == "Conector" && tipo["VCP"] == "PuenteSerie" &&
+                      tipo["R16"] == "Resistencia",
+                  "veintiseis piezas -la rosa, LD1, B1 y B2, el MCO y el VCP del ST-LINK, X3, JP3, "
+                  "las tiras P1 y P2, los sensores con su postura y R16, la de D+ del USB-, todas "
+                  "casadas y sin avisos");
         // S4 del F303: los sensores de la revision E -la del fichero- y la
         // Postura que los mueve, con sus tres mandos
         {
