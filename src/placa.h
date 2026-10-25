@@ -97,6 +97,7 @@ struct EnlaceTabla {
     QString pieza;            // el nombre en la placa: "LD2", no "N/LD2"
     QString elemento;         // el id en el SVG
     QString efecto;           // "", "brillo", "hundido", "giro", "pantalla", "angulo", "ninguno"
+    QString observable;       // el que mueve el giro o el ángulo, si no es el primero (S8)
 };
 
 // UNA PLACA DE UN <sistema>, descrita entera: es lo que hace falta para

@@ -19,7 +19,9 @@
 // cuenta de cada placa para poder dibujarla, y el mismo pin en las tres. Y
 // desde las ilustraciones, en G5, el dibujo de la Nucleo en T_ILUSTRACION. Y
 // G7, desde la rama msp432: la LaunchPad MSP-EXP432P401R, un chip de TI con
-// sus pines llamados `P1.0` y su LED parpadeando en las muestras.
+// sus pines llamados `P1.0` y su LED parpadeando en las muestras. Y G8,
+// desde la rama stm32f303: la STM32F3DISCOVERY con GPIO_IOToggle de ST, su
+// dibujo, y la rosa encendiendose en orden, un LED cada 101 ms.
 //
 // Necesita un `mcu-sim` compilado y su árbol de fuentes, porque las placas y
 // los firmwares están allí. Se le dicen con dos variables de entorno:
@@ -456,6 +458,104 @@ int main(int argc, char** argv)
                   "y el LED1 parpadea en las muestras: el firmware para el perro y "
                   "conmuta P1.0 cada 1,1 ms a 3 MHz (" + std::to_string(flancos) +
                       " flancos en 60 muestras)");
+        const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);
+        comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0,
+                  "y mcu-sim termina con codigo 0");
+    }
+    // -------------------------------------------------------------------------
+    // G8, desde la rama stm32f303 de los dos repositorios: la STM32F3DISCOVERY
+    // (S1 de doc/analisis_stm32f303.md), con GPIO_IOToggle de STM32CubeF3 sin
+    // modificar. El reloj, 72 MHz por el HSE desde el MCO del ST-LINK; la
+    // rosa se enciende de PE15 (LD6) a PE8 (LD4), un LED cada 101 ms
+    // (HAL_Delay(100)). Sin los sensores, que llegan en S4.
+    // -------------------------------------------------------------------------
+    std::printf("G8 Un STM32F303VC: la STM32F3DISCOVERY y su rosa\n");
+    {
+        Sesion s;
+        s.escucha(QHostAddress::LocalHost, 0);
+        int listos = 0, fines = 0;
+        QHash<quint16, QVector<float>> m;
+        QObject::connect(&s, &Sesion::listo, [&] { ++listos; });
+        QObject::connect(&s, &Sesion::fin, [&](quint32, qint32, quint64) { ++fines; });
+        QObject::connect(&s, &Sesion::muestra, [&](quint16 id, float v) {
+            m[id].push_back(v);
+        });
+        QProcess p;
+        p.setWorkingDirectory(src);
+        p.start(sim, {"placas/stm32f3discovery.xml",
+                      "verif/fw/stm32f3/gpio_iotoggle/GPIO_IOToggle.bin", "--ms=900",
+                      "--gui", QStringLiteral("127.0.0.1:%1").arg(s.puerto())});
+        comprueba(espera([&] { return listos == 1; }, 20000),
+                  "mcu-sim monta la Discovery, saluda y dice T_LISTO");
+        const PlacaGui& pl = s.placa();
+        bool todas = !pl.piezas.isEmpty();
+        QHash<QString, QString> nodo, tipo;
+        QHash<QString, quint16> obs;
+        for (const PiezaGui& pz : pl.piezas) {
+            todas = todas && pz.en_placa;
+            tipo[pz.id] = pz.tipo;
+            if (!pz.patillas.isEmpty()) nodo[pz.id] = pz.patillas[0].nodo;
+            if (!pz.observables.isEmpty()) obs[pz.id] = quint16(pz.observables[0].id_obs);
+        }
+        // S6 del F303: y R16, la de D+ del USB de usuario (sin dibujo)
+        comprueba(pl.piezas.size() == 26 && todas && pl.avisos.isEmpty() &&
+                      tipo["LD3"] == "Led" && tipo["B1"] == "Button" && tipo["X3"] == "Crystal" &&
+                      tipo["MCO"] == "ExtClock" && tipo["JP3"] == "Jumper" &&
+                      tipo["EXP1"] == "Conector" && tipo["VCP"] == "PuenteSerie" &&
+                      tipo["R16"] == "Resistencia",
+                  "veintiseis piezas -la rosa, LD1, B1 y B2, el MCO y el VCP del ST-LINK, X3, JP3, "
+                  "las tiras P1 y P2, los sensores con su postura y R16, la de D+ del USB-, todas "
+                  "casadas y sin avisos");
+        // S4 del F303: los sensores de la revision E -la del fichero- y la
+        // Postura que los mueve, con sus tres mandos
+        {
+            const PiezaGui* mov = nullptr;
+            for (const PiezaGui& pz : pl.piezas) if (pz.id == "MOV") mov = &pz;
+            bool mandos = mov && mov->mandos.size() == 3;
+            if (mandos) {
+                const char* n[3] = {"alabeo", "cabeceo", "rumbo"};
+                for (int k = 0; k < 3; ++k) mandos = mandos && mov->mandos[k].nombre == n[k];
+            }
+            comprueba(tipo["U5"] == "I3g4250d" && tipo["U3"] == "Lsm303agr" &&
+                          tipo["MOV"] == "Postura" && tipo["R27"] == "Resistencia" && mandos,
+                      "los sensores de la revision E (I3G4250D y LSM303AGR) y la Postura, con "
+                      "alabeo, cabeceo y rumbo");
+        }
+        comprueba(nodo["LD3"] == "PE9" && nodo["LD6"] == "PE15" && nodo["LD4"] == "PE8" &&
+                      nodo["B1"] == "PA0" && nodo["MCO"] == "PF0",
+                  "y sus patillas: LD3 en PE9, LD6 en PE15, LD4 en PE8, B1 en PA0 y el MCO en PF0");
+        comprueba(pl.ilustracion.contains("stm32f3discovery") ||
+                      (s.ilustraciones().size() == 1 &&
+                       s.ilustraciones()[0].fichero == "stm32f3discovery.svg" &&
+                       s.ilustraciones()[0].svg.contains("id=\"EXP2.50\"")),
+                  "con su dibujo, stm32f3discovery.svg, que lleva cada pin de P1 y P2");
+        const QString orden[8] = {"LD6", "LD8", "LD10", "LD9", "LD7", "LD5", "LD3", "LD4"};
+        QVector<quint16> ids;
+        for (const QString& l : orden) ids << obs.value(l);
+        comprueba(!ids.contains(0) && s.suscribe(1000000, ids), "suscrito a los ocho LED, cada 1 ms");
+        comprueba(s.arranca(RIT_LIBRE) && espera([&] { return fines == 1; }, 120000),
+                  "900 ms simulados");
+        // Cuando se enciende cada uno: la primera muestra distinta de la
+        // primera. Una muestra por milisegundo, asi que el indice es el tiempo
+        // en ms (las instantaneas marcan lotes, no muestras)
+        int t_on[8] = {};
+        bool todos = true;
+        for (int k = 0; k < 8; ++k) {
+            const auto& v = m.value(ids[k]);
+            for (int j = 1; j < v.size() && !t_on[k]; ++j)
+                if (v[j] != v[0]) t_on[k] = j;
+            todos = todos && t_on[k];
+        }
+        bool en_orden = todos;
+        std::string dts;
+        for (int k = 1; k < 8 && todos; ++k) {
+            const int dt = t_on[k] - t_on[k - 1];
+            dts += (k > 1 ? " " : "") + std::to_string(dt);
+            en_orden = en_orden && std::abs(dt - 101) <= 1;
+        }
+        comprueba(en_orden,
+                  "y la rosa se enciende en el orden del ejemplo, de LD6 (PE15) a LD4 (PE8), "
+                  "uno cada 101 ms (" + dts + " ms)");
         const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);
         comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0,
                   "y mcu-sim termina con codigo 0");
