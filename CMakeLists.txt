@@ -121,6 +121,8 @@ qt_add_library(sesion STATIC
     src/lanzador.cpp
     src/disposicion_xml.h
     src/disposicion_xml.cpp
+    src/trama_serie.h
+    src/trama_serie.cpp
 )
 target_link_libraries(sesion PUBLIC transporte)
 
@@ -137,6 +139,8 @@ qt_add_library(pantalla STATIC
     src/generado.cpp
     src/ilustracion.h
     src/ilustracion.cpp
+    src/consola_serie.h
+    src/consola_serie.cpp
 )
 target_link_libraries(pantalla PUBLIC sesion Qt6::Widgets Qt6::Svg Qt6::SvgWidgets)
 
@@ -190,6 +194,7 @@ if(BUILD_TESTING)
     prueba(prueba_argumentos  tests/prueba_argumentos.cpp  pantalla)
     prueba(prueba_lanzamiento tests/prueba_lanzamiento.cpp pantalla)
     prueba(prueba_ilustracion tests/prueba_ilustracion.cpp pantalla)
+    prueba(prueba_serie       tests/prueba_serie.cpp       pantalla)
     # La plantilla de configuracion se lee de las fuentes
     target_compile_definitions(prueba_argumentos PRIVATE FUENTES="${CMAKE_SOURCE_DIR}")
 
@@ -207,4 +212,8 @@ if(BUILD_TESTING)
                          ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_test(NAME ilustracion COMMAND prueba_ilustracion)
     set_tests_properties(ilustracion PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # Las tramas de la pestaña de un puente serie -los escapes y los CRC-, la
+    # pestaña sola, y la ventana con un modelo falso que anuncia un puente
+    add_test(NAME serie COMMAND prueba_serie)
+    set_tests_properties(serie PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()

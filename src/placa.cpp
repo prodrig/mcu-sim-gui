@@ -131,6 +131,12 @@ bool lee_catalogo(const QByteArray& xml, QVector<PiezaGui>& piezas, QString& err
             if (a.value(QLatin1String("formato")) == QLatin1String("rgb888") &&
                 im.ancho > 0 && im.alto > 0)
                 piezas.back().imagenes.push_back(im);
+        } else if (r.name() == QLatin1String("serie") && !piezas.isEmpty()) {
+            // Solo en memoria: por red el terminal es otro programa
+            if (a.value(QLatin1String("destino")) == QLatin1String("memoria")) {
+                piezas.back().serie = true;
+                piezas.back().serie_formato = texto(a, "formato");
+            }
         }
     }
     if (r.hasError()) {

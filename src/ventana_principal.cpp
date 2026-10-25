@@ -19,6 +19,8 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
+#include <QSplitter>
+#include <QTabBar>
 #include <QJsonValue>
 #include <QDir>
 #include <QMessageBox>
@@ -110,16 +112,22 @@ void VentanaPrincipal::construye()
 
     // En el centro, el panel de la placa. La ilustración va aparte, en su
     // propia ventana (`ver_ilustracion`)
-    centro_ = new QScrollArea(cuerpo);
+    // Con las pestañas de abajo, separados por una barra que se arrastra: la
+    // de un puente serie quiere más sitio que la de los avisos
+    auto* corte = corte_ = new QSplitter(Qt::Vertical, cuerpo);
+    corte->setObjectName(QStringLiteral("corte"));
+    corte->setChildrenCollapsible(false);
+    centro_ = new QScrollArea(corte);
     centro_->setObjectName(QStringLiteral("centro"));
     centro_->setWidgetResizable(true);
-    caja->addWidget(centro_, 1);
+    corte->addWidget(centro_);
 
     // Abajo, dos pestañas: los avisos que llegan por el protocolo, y lo que
-    // mcu-sim dice por su salida estándar y de error (fase 7)
-    abajo_ = new QTabWidget(cuerpo);
+    // mcu-sim dice por su salida estándar y de error (fase 7). Y una más por
+    // cada puente serie en memoria (`pon_series`)
+    abajo_ = new QTabWidget(corte);
     abajo_->setObjectName(QStringLiteral("abajo"));
-    abajo_->setMaximumHeight(180);
+    abajo_->setMinimumHeight(110);
     avisos_ = new QListWidget(abajo_);
     avisos_->setObjectName(QStringLiteral("avisos"));
     consola_ = new QPlainTextEdit(abajo_);
@@ -129,7 +137,14 @@ void VentanaPrincipal::construye()
     consola_->setFont(QFont(QStringLiteral("monospace")));
     abajo_->addTab(avisos_, tr("Avisos"));
     abajo_->addTab(consola_, tr("mcu-sim"));
-    caja->addWidget(abajo_);
+    corte->addWidget(abajo_);
+    corte->setStretchFactor(0, 3);
+    corte->setStretchFactor(1, 1);
+    corte->setSizes({480, 180});
+    caja->addWidget(corte, 1);
+    // Lo nuevo en una pestaña que no se mira la pone en azul; mirarla, no
+    connect(abajo_, &QTabWidget::currentChanged, this,
+            [this](int i) { abajo_->tabBar()->setTabTextColor(i, QColor()); });
     setCentralWidget(cuerpo);
 
     ritmo_->setCurrentIndex(indice_de_ritmo(cfg_.ritmo));
@@ -255,6 +270,8 @@ void VentanaPrincipal::construye()
                 if (ilus_) ilus_->pon_imagen(id, an, al, rgb, b);
             });
     connect(&ses_, &Sesion::aviso, this, &VentanaPrincipal::pon_aviso);
+    connect(&ses_, &Sesion::serie, this,
+            [this](quint16 p, quint64, const QByteArray& b) { llega_serie(p, b); });
     connect(&ses_, &Sesion::estado_modelo, this, [this](quint32, quint64 t, double p, quint64 d) {
         pon_relojes(t, p, d);
         pon_controles();
@@ -511,6 +528,7 @@ void VentanaPrincipal::pon_placa()
     panel_ = construye_panel(p);
     connect(panel_, &Panel::orden, this, &VentanaPrincipal::ordena);
     centro_->setWidget(panel_);
+    pon_series();
 
     // La ilustración: un recuadro por placa, con el dibujo que se recuerde de
     // una placa que se llame igual
@@ -831,12 +849,65 @@ void VentanaPrincipal::pon_controles()
     pausa_->setText(corre && ses_.pausada() ? tr("Sigue") : tr("Pausa"));
     paso_->setEnabled(corre && demanda && ses_.pausada());
     paso_ms_->setEnabled(corre && demanda && ses_.pausada());
+    for (ConsolaSerie* c : series_) c->activa(ses_.puede_enviar_serie());
     if (act_lanzar_) {
         const bool libre = !lanz_.corriendo() &&
                            (e == E::Escuchando || e == E::Terminada) && puerto_ != 0;
         act_lanzar_->setEnabled(libre);
         act_otra_->setEnabled(libre && !cfg_.ejecutable.isEmpty());
         act_detener_->setEnabled(lanz_.corriendo());
+    }
+}
+
+// Una pestaña por cada puente serie en memoria; las de la placa anterior se
+// van con ella
+void VentanaPrincipal::pon_series()
+{
+    for (ConsolaSerie* c : series_) {
+        abajo_->removeTab(abajo_->indexOf(c));
+        delete c;
+    }
+    series_.clear();
+    for (const PiezaGui& pz : ses_.placa().piezas) {
+        if (!pz.serie) continue;
+        auto* c = new ConsolaSerie(quint16(pz.idx), pz.id, pz.serie_formato, abajo_);
+        c->pon_colores(QColor(cfg_.color_enviado), QColor(cfg_.color_recibido));
+        connect(c, &ConsolaSerie::envia, this, [this, c](quint16 pieza, const QByteArray& b) {
+            if (ses_.envia_serie(pieza, b)) c->enviado(b);
+            else statusBar()->showMessage(tr("no se puede mandar: la simulacion no esta en marcha"));
+        });
+        // Un color vale para todas las pestañas, y se recuerda
+        connect(c, &ConsolaSerie::colores, this, [this](const QColor& tx, const QColor& rx) {
+            for (ConsolaSerie* o : series_) o->pon_colores(tx, rx);
+            cfg_.color_enviado = tx.name();
+            cfg_.color_recibido = rx.name();
+            QString e;
+            if (!cfg_.ruta.isEmpty() && !cfg_.guarda(e)) statusBar()->showMessage(e);
+        });
+        const int i = abajo_->addTab(c, pz.id);
+        abajo_->setTabToolTip(i, tr("Puente serie %1 en memoria, %2: lo que manda el MCU, y "
+                                    "para mandarle").arg(pz.id, pz.serie_formato));
+        series_.push_back(c);
+    }
+    // Un terminal quiere más sitio que una lista de avisos: si lo hay, abajo
+    // se lleva casi la mitad, salvo que ya se haya agrandado a mano
+    if (!series_.isEmpty() && corte_) {
+        const QList<int> t = corte_->sizes();
+        const int total = t.value(0) + t.value(1);
+        if (total > 0 && t.value(1) < total * 2 / 5)
+            corte_->setSizes({total - total * 2 / 5, total * 2 / 5});
+    }
+    pon_controles();
+}
+
+void VentanaPrincipal::llega_serie(quint16 pieza, const QByteArray& b)
+{
+    for (ConsolaSerie* c : series_) {
+        if (c->pieza() != pieza) continue;
+        c->recibido(b);
+        const int i = abajo_->indexOf(c);
+        if (i != abajo_->currentIndex()) abajo_->tabBar()->setTabTextColor(i, QColor(0x1f, 0x6f, 0xd0));
+        return;
     }
 }
 

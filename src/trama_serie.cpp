@@ -1,0 +1,189 @@
+#include "trama_serie.h"
+
+#include <QCoreApplication>
+
+namespace mcusim {
+namespace trama {
+
+namespace {
+QString tr_(const char* s) { return QCoreApplication::translate("trama", s); }
+
+int cifra(QChar c)
+{
+    const ushort u = c.unicode();
+    if (u >= '0' && u <= '9') return u - '0';
+    if (u >= 'a' && u <= 'f') return u - 'a' + 10;
+    if (u >= 'A' && u <= 'F') return u - 'A' + 10;
+    return -1;
+}
+int cifra(char c) { return cifra(QChar(QLatin1Char(c))); }
+
+bool falla(QString* error, const QString& e)
+{
+    if (error) *error = e;
+    return false;
+}
+} // namespace
+
+QVector<CrcConocido> crcs_conocidos()
+{
+    return {
+        {Crc::ModbusRtu, tr_("Modbus RTU (CRC-16)"),
+         tr_("CRC-16/MODBUS: polinomio 0xA001, inicial 0xFFFF. Dos bytes, el bajo primero.")},
+        {Crc::ModbusAscii, tr_("Modbus ASCII (LRC)"),
+         tr_("LRC de las parejas de cifras que siguen a ':'. Dos caracteres hexadecimales.")},
+        {Crc::Suma256, tr_("Suma modulo 256"),
+         tr_("La suma de todos los bytes, modulo 256. Un byte.")},
+    };
+}
+
+bool desescapa(const QString& texto, QByteArray& out, QString* error)
+{
+    QByteArray r;
+    const int n = int(texto.size());
+    for (int i = 0; i < n; ++i) {
+        const QChar c = texto.at(i);
+        if (c != QLatin1Char('\\')) {
+            if (c.unicode() > 0x7F)
+                return falla(error, tr_("'%1' en la posicion %2 no es ASCII: ese byte va con \\xNN")
+                                        .arg(c).arg(i + 1));
+            r.append(char(c.unicode()));
+            continue;
+        }
+        if (i + 1 >= n)
+            return falla(error, tr_("acaba en '\\' sin nada detras (para la barra, \\\\)"));
+        const QChar e = texto.at(++i);
+        switch (e.unicode()) {
+        case 'r':  r.append('\r'); break;
+        case 'n':  r.append('\n'); break;
+        case 't':  r.append('\t'); break;
+        case '0':  r.append('\0'); break;
+        case '\\': r.append('\\'); break;
+        case 'x': {
+            int j = i + 1;
+            while (j < n && cifra(texto.at(j)) >= 0) ++j;
+            const int k = j - (i + 1);
+            if (k == 0)
+                return falla(error, tr_("'\\x' en la posicion %1 sin cifras hexadecimales detras")
+                                        .arg(i));
+            if (k % 2)
+                return falla(error, tr_("'\\x' en la posicion %1 lleva %2 cifras: van de dos en "
+                                        "dos (para una cifra suelta detras, otro escape)")
+                                        .arg(i).arg(k));
+            for (int m = i + 1; m < j; m += 2)
+                r.append(char(cifra(texto.at(m)) * 16 + cifra(texto.at(m + 1))));
+            i = j - 1;
+            break;
+        }
+        default:
+            return falla(error, tr_("'\\%1' en la posicion %2 no es un escape: los que hay son "
+                                    "\\xNN, \\r, \\n, \\t, \\0 y \\\\").arg(e).arg(i));
+        }
+    }
+    out = r;
+    return true;
+}
+
+quint16 crc16_modbus(const QByteArray& d)
+{
+    quint16 c = 0xFFFF;
+    for (char b : d) {
+        c ^= quint8(b);
+        for (int k = 0; k < 8; ++k) c = (c & 1u) ? quint16((c >> 1) ^ 0xA001u) : quint16(c >> 1);
+    }
+    return c;
+}
+
+quint8 lrc_modbus(const QByteArray& d)
+{
+    quint8 s = 0;
+    for (char b : d) s = quint8(s + quint8(b));
+    return quint8(-s);
+}
+
+quint8 suma256(const QByteArray& d)
+{
+    quint8 s = 0;
+    for (char b : d) s = quint8(s + quint8(b));
+    return s;
+}
+
+bool bytes_crc(Crc c, const QByteArray& datos, QByteArray& out, QString* error)
+{
+    out.clear();
+    switch (c) {
+    case Crc::ModbusRtu: {
+        const quint16 v = crc16_modbus(datos);
+        out.append(char(v & 0xFF));
+        out.append(char(v >> 8));
+        return true;
+    }
+    case Crc::ModbusAscii: {
+        // ':' y parejas de cifras: el LRC es de los bytes que representan
+        const QByteArray h = datos.startsWith(':') ? datos.mid(1) : datos;
+        if (h.isEmpty() || h.size() % 2)
+            return falla(error, tr_("Modbus ASCII: despues de ':' tiene que haber un numero par "
+                                    "de cifras hexadecimales, y hay %1 caracteres").arg(h.size()));
+        QByteArray b;
+        for (int i = 0; i < h.size(); i += 2) {
+            const int a = cifra(h.at(i)), z = cifra(h.at(i + 1));
+            if (a < 0 || z < 0)
+                return falla(error, tr_("Modbus ASCII: '%1' no es una pareja de cifras "
+                                        "hexadecimales")
+                                        .arg(QString::fromLatin1(h.mid(i, 2))));
+            b.append(char(a * 16 + z));
+        }
+        out = QByteArray::number(lrc_modbus(b), 16).toUpper().rightJustified(2, '0');
+        return true;
+    }
+    case Crc::Suma256:
+        out.append(char(suma256(datos)));
+        return true;
+    }
+    return falla(error, tr_("CRC desconocido"));
+}
+
+bool construye(const QString& texto, const Opciones& o, QByteArray& trama, QString* error)
+{
+    QByteArray d;
+    if (!desescapa(texto, d, error)) return false;
+    if (o.crc) {
+        QByteArray c;
+        if (!bytes_crc(o.tipo, d, c, error)) return false;
+        d += c;
+    }
+    if (o.cr) d.append('\r');
+    if (o.lf) d.append('\n');
+    trama = d;
+    return true;
+}
+
+QString legible(const QByteArray& b, bool& tras_cr)
+{
+    static const char hex[] = "0123456789ABCDEF";
+    QString s;
+    s.reserve(b.size());
+    for (char ch : b) {
+        const quint8 c = quint8(ch);
+        if (c == '\n') {
+            if (!tras_cr) s += QLatin1Char('\n');
+            tras_cr = false;
+            continue;
+        }
+        tras_cr = false;
+        if (c == '\r') {
+            s += QLatin1Char('\n');
+            tras_cr = true;
+        } else if (c == '\t' || (c >= 0x20 && c < 0x7F)) {
+            s += QLatin1Char(char(c));
+        } else {
+            s += QLatin1String("\\x");
+            s += QLatin1Char(hex[c >> 4]);
+            s += QLatin1Char(hex[c & 15]);
+        }
+    }
+    return s;
+}
+
+} // namespace trama
+} // namespace mcusim

@@ -303,6 +303,18 @@ de todos ellos**: así los de siempre no cambian por que una placa lleve una
 pantalla. Se pide en `T_SUSCRIBE` como cualquier observable, y llega en
 `T_IMAGEN` (§4.1). `formato` es `rgb888`, el único que hay.
 
+**`<serie>`** (añadido el 2026-10-25 sin subir la versión: una ventana que no
+lo conoce lo ignora) — un PuenteSerie cuyo destino es `memoria`, que no abre
+ningún puerto: la ventana hace de terminal, con `T_SERIE` y `T_SERIE_ENVIA`
+(§4). `formato` son los baudios y la trama, para enseñarlos. Un puente por red
+no lo lleva: su terminal es otro programa.
+
+```xml
+  <pieza idx="2" id="VCP" tipo="PuenteSerie">
+    <serie destino="memoria" formato="115200 8N1"/>
+  </pieza>
+```
+
 **`T_ILUSTRACION`** (`0x0005`, añadido el 2026-10-06 sin subir la versión:
 una ventana que no lo conoce lo salta por su longitud) — el **dibujo SVG** de
 una o varias placas, **uno por fichero**, entre `T_CATALOGO` y los avisos de la
@@ -429,6 +441,15 @@ manda si no cambia, y si la ventana no lee y hay **dos** esperando, la
 siguiente no se toma —la muestra de después mandará la que haya—: no hay
 `perdidas` que contar, porque la imagen que llega es siempre la de ahora.
 
+**`T_SERIE`** (`0x0016`, añadido el 2026-10-25 sin subir la versión) —
+`CabSerie` + `n` bytes: lo que el MCU ha mandado por un puente serie en
+memoria desde el anterior, tal cual, en el orden en que salió de la línea. No
+son texto: pueden traer cualquier byte, el cero incluido. `pieza` es el índice
+del catálogo. `t_sim_ns` es el instante en que el enlace lo recoge —en cada
+vuelta, cada 100 µs simulados—, no el de cada byte. Van a trozos de 4 KiB como
+mucho, y con la salida atascada **no se tira nada**: se queda en el puente y
+sale cuando haya sitio.
+
 **`T_AVISO`** — `CabAviso` + el `id` de `SC_REPORT` + el texto. Es la tubería por
 la que sale todo lo que hoy va a la consola: los avisos de «esto no está
 modelado», los de placa (dos piezas conduciendo el mismo nodo, un pad no
@@ -553,6 +574,15 @@ pendiente, un `T_ESTADO` `F_TERMINADA` y `T_FIN` con motivo `M_PARA` y código 0
 pausar; para arrancar en pausa está `RIT_DEMANDA`— y se leen y se ignoran.
 
 ---
+
+**`T_SERIE_ENVIA`** (`0x8009`, añadido el 2026-10-25 sin subir la versión) —
+`CabSerie`, con `t_sim_ns` a cero, + `n` bytes hacia el MCU por el puente serie
+en memoria de `pieza`. Entra en la cola del puente cuando el enlace lo lee, y
+de ahí sale a la línea a sus baudios. Lo que no cabe en esa cola (4 KiB por
+omisión) se tira, y un `T_AVISO` lo dice; también uno a una pieza que no es un
+puente en memoria, sin cabecera o que no mide lo que dice. **Antes de
+`T_ARRANCA` no vale**: el saludo lo salta, como lo que no conoce. La ventana
+solo deja mandar con la simulación en marcha.
 
 ## 5. Las órdenes, que es la parte con miga
 

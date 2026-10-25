@@ -81,6 +81,13 @@
 //   * la ventana RECUERDA cada dibujo abierto por el nombre de la placa: al
 //     volver a lanzar, o en las dos placas iguales de una pila, sale solo.
 //
+// Y cada PuenteSerie en memoria tiene su PESTAÑA abajo, junto a «Avisos» y
+// «mcu-sim» (`consola_serie.h`): un terminal, con lo enviado y lo recibido de
+// dos colores, una entrada con \xNN y las casillas de CR, LF y CRC. Se puede
+// mandar con la simulación en marcha. Una pestaña con algo nuevo que no se
+// está mirando sale con el nombre en azul. El panel y las pestañas se
+// reparten la altura con un separador que se arrastra.
+//
 // Lanzarlo desde una consola con `--gui` sigue valiendo: la ventana no
 // distingue quién lanzó al modelo que se le conecta.
 // =============================================================================
@@ -90,6 +97,7 @@
 #include <QMainWindow>
 
 #include "argumentos.h"
+#include "consola_serie.h"
 #include "configuracion.h"
 #include "lanzador.h"
 #include "ilustracion.h"
@@ -105,6 +113,7 @@ class QTabWidget;
 class QSpinBox;
 class QPushButton;
 class QScrollArea;
+class QSplitter;
 
 namespace mcusim {
 
@@ -159,6 +168,9 @@ public:
     // antes de qué placa es, si hay varias.
     void elige_dibujo(const QString& placa_id = QString());
 
+    // Las pestañas de los puentes serie en memoria, en el orden del catálogo
+    const QVector<ConsolaSerie*>& series() const { return series_; }
+
 private:
     void espera_modelo();
     void pon_placa();
@@ -175,6 +187,8 @@ private:
     }
     void ordena(quint16 pieza, quint16 mando, float v);
     void pon_controles();
+    void pon_series();
+    void llega_serie(quint16 pieza, const QByteArray& b);
     void suscribe();
     bool pon_dibujos(const QStringList& cuales, const QByteArray& svg, const QString& fichero,
                      QString* error = nullptr);
@@ -221,6 +235,8 @@ private:
     QHash<QString, QByteArray> dibujos_;
     QLabel*       relojes_   = nullptr;
     QListWidget*  avisos_    = nullptr;
+    QVector<ConsolaSerie*> series_;
+    QSplitter*    corte_     = nullptr;    // el panel arriba, las pestañas abajo
 };
 
 } // namespace mcusim

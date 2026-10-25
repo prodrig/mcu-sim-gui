@@ -80,6 +80,11 @@ struct PiezaGui {
     QVector<ObservableGui> observables;
     QVector<MandoGui>      mandos;
     QVector<ImagenGui>     imagenes;
+    // Un PuenteSerie en memoria: la ventana le abre su pestaña de terminal
+    // (T_SERIE y T_SERIE_ENVIA). `serie_formato`, «115200 8N1». Un mcu-sim
+    // anterior no lo dice: entonces no hay pestaña.
+    bool    serie = false;
+    QString serie_formato;
     // De T_PLACA. Una pieza que el modelo construye y la placa no declara -no
     // debería haberla- se queda sin patillas y con `en_placa` a false.
     QVector<PatillaGui>    patillas;

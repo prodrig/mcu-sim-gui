@@ -25,6 +25,8 @@
 //                    T_CATALOGO y T_LISTO; los del modelo, en marcha;
 //   T_ESTADO      -> `estado_modelo()`, con los dos relojes;
 //   T_IMAGEN      -> `imagen()`, con los píxeles RGB888 y la luz (plan §30);
+//   T_SERIE       -> `serie()`, los bytes que ha mandado el MCU a un puente
+//                    serie en memoria; `envia_serie()` -> T_SERIE_ENVIA;
 //   `suscribe()`  -> T_SUSCRIBE.
 //
 // Y desde la fase 5, las órdenes (`doc/protocolo.md` §5):
@@ -118,6 +120,12 @@ public:
     bool ordena(quint16 pieza, quint16 mando, float valor);
     quint64 ecos() const { return ecos_; }
 
+    // T_SERIE_ENVIA: bytes hacia el MCU por el puente serie en memoria de
+    // la pieza `pieza`. Solo en marcha: antes de T_ARRANCA el modelo no lo
+    // lee (doc/protocolo.md §4.2). false si no.
+    bool envia_serie(quint16 pieza, const QByteArray& bytes);
+    bool puede_enviar_serie() const { return estado_ == Estado::Corriendo; }
+
     // Instantáneas que el modelo dice haber tirado porque esto no leía.
     quint64 perdidas() const { return perdidas_; }
 
@@ -145,6 +153,8 @@ signals:
     // por filas de arriba abajo, sin la luz; `brillo`, de 0 a 1, la luz.
     void imagen(quint16 id_obs, quint64 t_sim_ns, int ancho, int alto, const QByteArray& rgb,
                 float brillo);
+    // Lo que ha mandado el MCU por el puente serie en memoria de `pieza`
+    void serie(quint16 pieza, quint64 t_sim_ns, const QByteArray& bytes);
     // Fase 5
     void orden_hecha(quint64 t_sim_ns, quint16 pieza, quint16 mando, float valor,
                      quint32 resultado);

@@ -51,6 +51,10 @@ struct Configuracion {
     // La ventana por encima de las demás: para ver los LED y tocar los
     // botones mientras se depura en el IDE, sin traerla delante cada vez.
     bool       siempre_encima = false;
+    // Los colores de las pestañas de los puentes serie en memoria, en
+    // `serie`: lo enviado, verde oliva, y lo recibido, azul
+    QString    color_enviado  = QStringLiteral("#808000");
+    QString    color_recibido = QStringLiteral("#0000ff");
     // Plan §36: clave -> disposición, en `ilustracion.disposiciones`
     QJsonObject disposiciones;
 

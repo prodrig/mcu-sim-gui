@@ -56,6 +56,16 @@
     "siempre_encima": false
   },
 
+  "serie": {
+    "_comentario": [
+      "Los colores de las pestanas de los puentes serie en memoria (--serie",
+      "ID=memoria): lo que se manda y lo que llega del MCU. Se eligen con los dos",
+      "iconos de la pestana, y la ventana los guarda aqui."
+    ],
+    "color_enviado": "#808000",
+    "color_recibido": "#0000ff"
+  },
+
   "ilustracion": {
     "_comentario": [
       "disposiciones: lo colocado en la ilustracion con el boton Edicion, por",

@@ -158,6 +158,17 @@ void Sesion::llega(quint16 tipo, const QByteArray& cuerpo)
         emit imagen(c.id, c.t_sim_ns, c.ancho, c.alto, cuerpo.mid(int(sizeof c)), c.brillo);
         break;
     }
+    case T_SERIE: {
+        CabSerie c{};
+        if (cuerpo.size() < int(sizeof c)) break;
+        std::memcpy(&c, cuerpo.constData(), sizeof c);
+        if (cuerpo.size() != qint64(sizeof c) + qint64(c.n)) {
+            emit problema(tr("un T_SERIE de %1 bytes no mide lo que dice").arg(cuerpo.size()));
+            break;
+        }
+        emit serie(c.pieza, c.t_sim_ns, cuerpo.mid(int(sizeof c)));
+        break;
+    }
     case T_AVISO: {
         CabAviso c{};
         if (cuerpo.size() < int(sizeof c)) break;
@@ -243,6 +254,15 @@ bool Sesion::ordena(const QVector<proto::Orden>& ordenes)
     return cx_.envia(proto::T_ORDENES,
                      QByteArray(reinterpret_cast<const char*>(ordenes.constData()),
                                 int(ordenes.size() * sizeof(proto::Orden))));
+}
+
+bool Sesion::envia_serie(quint16 pieza, const QByteArray& bytes)
+{
+    if (!puede_enviar_serie() || bytes.isEmpty()) return false;
+    proto::CabSerie c{0, pieza, 0, quint32(bytes.size())};
+    QByteArray b(reinterpret_cast<const char*>(&c), int(sizeof c));
+    b += bytes;
+    return cx_.envia(proto::T_SERIE_ENVIA, b);
 }
 
 bool Sesion::ordena(quint16 pieza, quint16 mando, float valor)

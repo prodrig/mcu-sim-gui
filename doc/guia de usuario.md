@@ -141,7 +141,8 @@ la **ilustración**. Nada se mueve hasta pulsar **Arrancar**.
 
 Arriba van **los dos relojes**, el simulado y el de pared. Abajo, la pestaña
 **Avisos** —los de la placa antes de arrancar, y los del modelo: una
-sobrecorriente, una orden que no se pudo aplicar— y la pestaña **mcu-sim**.
+sobrecorriente, una orden que no se pudo aplicar—, la pestaña **mcu-sim** y
+una por cada puente serie en memoria (§6.1).
 
 ### 4.2 El panel
 
@@ -227,6 +228,45 @@ trae el suyo, como la placa de verdad: el **VCP** del ST-LINK, la **USART2**
 3. **Para no perder lo primero** que imprime el firmware, marca
    **`--espera-terminal`**: el MCU no arranca hasta que haya un terminal
    conectado a cada puente.
+
+### 6.1 Sin terminal: la pestaña del puente
+
+Con **`--serie VCP=memoria`** el puente no abre ningún puerto, y **la ventana
+hace de terminal**. Cada puente en memoria tiene su **pestaña** abajo, con su
+nombre (`VCP`, o `N/VCP` en un sistema), junto a *Avisos* y *mcu-sim*:
+
+* **Arriba**, lo que pasa por la línea. Lo que llega del MCU va en **azul** y
+  lo que se manda en **verde oliva**. Los dos iconos de la derecha (una flecha
+  hacia la izquierda, lo recibido; hacia la derecha, lo enviado) cambian esos
+  colores, en todas las pestañas a la vez, y la ventana los recuerda. CR, LF o
+  CR+LF son un salto de línea. Lo que no se imprime sale como `\xNN`. Cuando
+  se pasa de recibir a enviar a media línea, lo nuevo empieza en otra: es solo
+  la vista, los bytes son los mismos. *Limpiar* borra lo que se ve.
+* **Abajo**, la **entrada**. Se escribe en ASCII, y los bytes que no lo son, en
+  hexadecimal, intercalados donde se quiera: `\x41` es un byte, `\x0102` dos,
+  `\x0A0B0C` tres —tantos como pares de cifras sigan a la `x`—. Así,
+  `AT\x0D\x0A` o `\x01\x03\x00\x0A\x00\x01`. Valen también `\r`, `\n`, `\t`,
+  `\0` y `\\` para la barra. Un hexadecimal se acaba en lo primero que no es
+  una cifra; para escribir una cifra justo detrás, otro escape: `\x41\x42`
+  y no `\x4142` si se quiere «AB». Debajo se ve lo que saldría, en
+  hexadecimal, o por qué no se puede.
+* **Las casillas**: *Añadir CR (\r, \x0D)* y *Añadir LF (\n, \x0A)* ponen esos
+  bytes al final, primero CR y luego LF. *Añadir CRC* pone el de la lista,
+  calculado sobre lo escrito y **delante** de CR y LF, que no entran nunca en
+  él:
+
+  | CRC | Qué añade |
+  | :--- | :--- |
+  | Modbus RTU (CRC-16) | Dos bytes, el bajo primero (polinomio 0xA001, inicial 0xFFFF) |
+  | Modbus ASCII (LRC) | Dos caracteres hexadecimales: el LRC de las parejas de cifras que van detrás de `:`. Lo escrito tiene que ser una trama ASCII, como `:1103006B0003` |
+  | Suma módulo 256 | Un byte |
+
+* **Enviar**, o Intro, manda. Lo escrito se queda seleccionado: Intro otra vez
+  lo repite, y escribir lo sustituye. Solo se puede con la simulación en
+  marcha.
+
+Una pestaña que no se está mirando y recibe algo pone su nombre en azul. La
+barra entre el panel y las pestañas se arrastra.
 
 **`--serie`** dice adónde da cada puente —`ID=memoria`, `tcp:PUERTO`,
 `rfc2217:PUERTO`, o como cliente de un servidor—; en el diálogo, varios
