@@ -239,7 +239,10 @@ nombre (`VCP`, o `N/VCP` en un sistema), junto a *Avisos* y *mcu-sim*:
   lo que se manda en **verde oliva**. Los dos iconos de la derecha (una flecha
   hacia la izquierda, lo recibido; hacia la derecha, lo enviado) cambian esos
   colores, en todas las pestañas a la vez, y la ventana los recuerda. CR, LF o
-  CR+LF son un salto de línea. Lo que no se imprime sale como `\xNN`. Cuando
+  CR+LF son un salto de línea. Un byte suelto que no se imprime sale como
+  `\xNN`, y varios seguidos, juntos en un `\x{...}`, aunque lleguen en
+  trozos; la barra sale doblada, `\\`. Es la notación de la entrada: lo que
+  se ve se puede copiar a ella y sale lo mismo. Cuando
   se pasa de recibir a enviar a media línea, lo nuevo empieza en otra: es solo
   la vista, los bytes son los mismos. *Limpiar* borra lo que se ve.
 * **Abajo**, la **entrada**. Se escribe en ASCII, y los bytes que no lo son, en

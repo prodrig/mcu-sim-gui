@@ -161,6 +161,8 @@ ConsolaSerie::ConsolaSerie(quint16 pieza, const QString& nombre, const QString& 
     connect(limpiar, &QToolButton::clicked, this, [this] {
         vista_->clear();
         ultimo_ = -1;
+        cola_.clear();
+        cola_pos_ = -1;
     });
 
     pon_colores(col_tx_, col_rx_);
@@ -239,16 +241,35 @@ void ConsolaSerie::pon(const QByteArray& b, bool tx)
         c.insertBlock();
         (tx ? cr_tx_ : cr_rx_) = false;
     }
+    // Un grupo de bytes que no se imprimen partido entre dos mensajes: lo
+    // pintado del primero se quita, y se pintan juntos
+    QByteArray d = b;
+    if (ultimo_ == sentido && !cola_.isEmpty() && cola_pos_ >= 0 &&
+        vista_->document()->characterAt(cola_pos_) == QLatin1Char('\\') &&
+        !trama::imprimible(quint8(b.at(0))) && b.at(0) != '\r' && b.at(0) != '\n') {
+        c.setPosition(cola_pos_);
+        c.movePosition(QTextCursor::End, QTextCursor::KeepAnchor);
+        c.removeSelectedText();
+        d = cola_ + b;
+    }
+    cola_.clear();
+    cola_pos_ = -1;
     ultimo_ = sentido;
     QTextCharFormat f;
     f.setForeground(tx ? col_tx_ : col_rx_);
     f.setProperty(SENTIDO, sentido);
-    const QString s = trama::legible(b, tx ? cr_tx_ : cr_rx_);
+    int cola = 0;
+    const QString s = trama::legible(d, tx ? cr_tx_ : cr_rx_, &cola);
     // Por líneas: insertText con '\n' dentro mete un U+2029, que es un
     // bloque nuevo, pero así queda claro
     const QStringList ls = s.split(QLatin1Char('\n'));
     for (int i = 0; i < ls.size(); ++i) {
         if (i) c.insertBlock();
+        if (i == ls.size() - 1 && cola > 0) {
+            // Dónde empieza el último grupo: su \x, el último de la línea
+            cola_pos_ = c.position() + int(ls[i].lastIndexOf(QLatin1String("\\x")));
+            cola_ = d.right(cola);
+        }
         if (!ls[i].isEmpty()) c.insertText(ls[i], f);
     }
     if (abajo) sb->setValue(sb->maximum());

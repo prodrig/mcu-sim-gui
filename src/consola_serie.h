@@ -8,8 +8,9 @@
 //   * LO QUE PASA POR LA LÍNEA: lo que llega del MCU (T_SERIE) y lo que se
 //     manda (T_SERIE_ENVIA), cada uno de su color. Los dos iconos de arriba
 //     los eligen; por omisión, lo enviado en verde oliva y lo recibido en
-//     azul. Lo imprimible sale tal cual; CR, LF o CR+LF, un salto de línea; lo
-//     demás, \xNN (`trama::legible`). Cuando cambia el sentido a media línea,
+//     azul. Lo imprimible sale tal cual; CR, LF o CR+LF, un salto de línea; un
+//     byte que no se imprime, \xNN, y varios seguidos, juntos en un \x{...}
+//     (`trama::legible`), también si llegan partidos en dos mensajes. Cuando cambia el sentido a media línea,
 //     lo nuevo empieza en otra: es solo la vista, los bytes son los mismos;
 //   * LA ENTRADA: ASCII con \xNN y \x{NNMM...} intercalados donde se quiera
 //     (`trama_serie.h`), y debajo los bytes que saldrían, o por qué no se
@@ -100,6 +101,11 @@ private:
     bool            activa_ = false;
     int             ultimo_ = -1;          // -1 nada, 0 recibido, 1 enviado
     bool            cr_rx_ = false, cr_tx_ = false;
+    // Los bytes que no se imprimen al final de lo último pintado, y dónde
+    // empieza su \x en el documento: si lo siguiente, del mismo sentido,
+    // empieza igual, se repintan juntos en un solo \x{...}
+    QByteArray      cola_;
+    int             cola_pos_ = -1;
     quint64         n_rx_ = 0, n_tx_ = 0;
     QPlainTextEdit* vista_     = nullptr;
     QToolButton*    b_tx_      = nullptr;

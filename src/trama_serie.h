@@ -39,8 +39,12 @@
 //                      un número par de cifras hexadecimales
 //       Suma mód. 256  la suma de todos los bytes, módulo 256: un byte
 //
-//   * LO QUE LLEGA se enseña como texto (`legible`): lo imprimible tal cual,
-//     un salto de línea por cada CR, LF o CR+LF, y lo demás como \xNN.
+//   * LO QUE LLEGA se enseña como texto (`legible`), con la misma notación
+//     que la entrada: lo imprimible tal cual, un salto de línea por cada CR,
+//     LF o CR+LF, un byte suelto que no se imprime como \xNN, y VARIOS
+//     seguidos juntos, como \x{NNMM...}, y la barra doblada, \\. Así, lo que
+//     se ve se puede copiar a la entrada y sale lo mismo (salvo CR y LF, que
+//     se ven como saltos).
 // =============================================================================
 #ifndef MCU_SIM_GUI_TRAMA_SERIE_H
 #define MCU_SIM_GUI_TRAMA_SERIE_H
@@ -83,9 +87,16 @@ struct Opciones {
 bool construye(const QString& texto, const Opciones& o, QByteArray& trama,
                QString* error = nullptr);
 
+// ¿Se enseña tal cual? Lo imprimible de ASCII y el tabulador. CR y LF no:
+// son saltos de línea
+bool imprimible(quint8 c);
+
 // Lo que llega, para la pantalla. `tras_cr` dice si lo anterior acabó en CR,
-// para que un CR+LF partido entre dos mensajes sea un salto y no dos.
-QString legible(const QByteArray& b, bool& tras_cr);
+// para que un CR+LF partido entre dos mensajes sea un salto y no dos. Si
+// `cola` no es nulo, dice cuántos bytes que no se imprimen hay al final de
+// `b`, seguidos: el que pinta sabe así qué grupo puede seguir en el próximo
+// mensaje, y juntarlos en un solo \x{...}.
+QString legible(const QByteArray& b, bool& tras_cr, int* cola = nullptr);
 
 } // namespace trama
 } // namespace mcusim

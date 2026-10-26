@@ -175,30 +175,61 @@ bool construye(const QString& texto, const Opciones& o, QByteArray& trama, QStri
     return true;
 }
 
-QString legible(const QByteArray& b, bool& tras_cr)
+bool imprimible(quint8 c)
+{
+    return c == '\t' || (c >= 0x20 && c < 0x7F);
+}
+
+QString legible(const QByteArray& b, bool& tras_cr, int* cola)
 {
     static const char hex[] = "0123456789ABCDEF";
     QString s;
     s.reserve(b.size());
-    for (char ch : b) {
-        const quint8 c = quint8(ch);
+    const int n = int(b.size());
+    int i = 0;
+    while (i < n) {
+        const quint8 c = quint8(b.at(i));
         if (c == '\n') {
             if (!tras_cr) s += QLatin1Char('\n');
             tras_cr = false;
+            ++i;
             continue;
         }
         tras_cr = false;
         if (c == '\r') {
             s += QLatin1Char('\n');
             tras_cr = true;
-        } else if (c == '\t' || (c >= 0x20 && c < 0x7F)) {
-            s += QLatin1Char(char(c));
-        } else {
-            s += QLatin1String("\\x");
-            s += QLatin1Char(hex[c >> 4]);
-            s += QLatin1Char(hex[c & 15]);
+            ++i;
+            continue;
         }
+        if (c == '\\') {                 // la barra, doblada: si no, \x41 escrito
+            s += QLatin1String("\\\\");  // como texto se leería como un byte
+            ++i;
+            continue;
+        }
+        if (imprimible(c)) {
+            s += QLatin1Char(char(c));
+            ++i;
+            continue;
+        }
+        // Los que no se imprimen, seguidos: uno solo, \xNN; varios, \x{...}
+        int j = i;
+        while (j < n && quint8(b.at(j)) != '\r' && quint8(b.at(j)) != '\n' &&
+               !imprimible(quint8(b.at(j))))
+            ++j;
+        s += QLatin1String(j - i > 1 ? "\\x{" : "\\x");
+        for (int k = i; k < j; ++k) {
+            const quint8 x = quint8(b.at(k));
+            s += QLatin1Char(hex[x >> 4]);
+            s += QLatin1Char(hex[x & 15]);
+        }
+        if (j - i > 1) s += QLatin1Char('}');
+        if (cola) *cola = j == n ? j - i : 0;
+        i = j;
     }
+    if (cola && (n == 0 || imprimible(quint8(b.at(n - 1))) || quint8(b.at(n - 1)) == '\r' ||
+                 quint8(b.at(n - 1)) == '\n'))
+        *cola = 0;
     return s;
 }
 

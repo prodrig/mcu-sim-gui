@@ -224,8 +224,34 @@ int main(int argc, char** argv)
                   "y un CR+LF partido entre dos mensajes es un salto, no dos");
         cr = false;
         comprueba(trama::legible(B({0x00, 'a', 0x7F, 0x80, 0xFF, '\t'}), cr) ==
-                      "\\x00a\\x7F\\x80\\xFF\t",
-                  "lo que no se imprime, \\xNN; el tabulador, tal cual");
+                      "\\x00a\\x{7F80FF}\t",
+                  "lo que no se imprime: uno suelto, \\xNN; varios seguidos, juntos en "
+                  "\\x{...}; el tabulador, tal cual");
+        cr = false;
+        comprueba(trama::legible(B({0x01, 0x02, '\r', '\n', 0x03, 0x04}), cr) ==
+                      "\\x{0102}\n\\x{0304}",
+                  "un salto de linea parte el grupo");
+        cr = false;
+        comprueba(trama::legible("\\x41", cr) == "\\\\x41",
+                  "y la barra que llega como texto sale doblada: \\x41 escrito no es un byte");
+        // Lo que se ve, copiado a la entrada, da los mismos bytes
+        {
+            const QByteArray orig = B({'A', 0x00, 0x01, '\\', 'x', '4', '1', 0xFE, 'z'});
+            cr = false;
+            QByteArray vuelta;
+            comprueba(trama::desescapa(trama::legible(orig, cr), vuelta) && vuelta == orig,
+                      "lo que se ve, escrito en la entrada, da los mismos bytes");
+        }
+        int cola = -1;
+        cr = false;
+        trama::legible(B({'a', 0x01, 0x02}), cr, &cola);
+        const int c1 = cola;
+        trama::legible(B({0x01, 'a'}), cr, &cola);
+        const int c2 = cola;
+        trama::legible(B({0x01, '\n'}), cr, &cola);
+        comprueba(c1 == 2 && c2 == 0 && cola == 0,
+                  "y dice cuantos bytes sin imprimir quedan al final, para juntarlos con "
+                  "los del mensaje siguiente");
     }
 
     // -------------------------------------------------------------------------
@@ -319,6 +345,25 @@ int main(int argc, char** argv)
                   "Intro con una buena manda, como Enviar");
         c.activa(false);
         comprueba(!env->isEnabled(), "y al terminar, se apaga otra vez");
+    }
+
+    {
+        // Un grupo partido entre dos mensajes se pinta junto
+        ConsolaSerie c(1, "U", "9600 8N1");
+        c.recibido(B({'O', 'K', 0x01, 0x02}));
+        c.recibido(B({0x03, 0x04}));
+        c.recibido(B({0x05, 'x', 0x06}));
+        comprueba(c.texto() == "OK\\x{0102030405}x\\x06",
+                  "varios bytes sin imprimir que llegan en tres mensajes salen en un solo "
+                  "\\x{...}: \"" + c.texto().toStdString() + "\"");
+        c.enviado(B({0x07, 0x08}));
+        c.recibido(B({0x0B}));
+        comprueba(c.texto() == "OK\\x{0102030405}x\\x06\n\\x{0708}\n\\x0B",
+                  "pero no se juntan los de sentidos distintos: \"" +
+                      c.texto().toStdString() + "\"");
+        auto* v = c.findChild<QPlainTextEdit*>("trafico");
+        comprueba(color_en(v, 2) == c.color_recibido() && color_en(v, 23) == c.color_enviado(),
+                  "y lo repintado conserva su color");
     }
 
     // -------------------------------------------------------------------------
@@ -429,7 +474,7 @@ int main(int argc, char** argv)
             const quint64 r1 = c->bytes_recibidos();
             c->findChild<QPushButton*>("enviar")->click();
             const bool vuelve = espera([&] { return c->bytes_recibidos() >= r1 + 7; }, 20000);
-            comprueba(vuelve && c->texto().endsWith("\\x01\\x7F\\xFF@p\n\\x01\\x7F\\xFF@p\n"),
+            comprueba(vuelve && c->texto().endsWith("\\x{017FFF}@p\n\\x{017FFF}@p\n"),
                       "y tres bytes que no son texto, con su CRC de Modbus RTU (40 70, \"@p\"), igual: \"" +
                           c->texto().right(40).toStdString() + "\"");
             const QString cap = qEnvironmentVariable("PRUEBA_CAPTURA");
