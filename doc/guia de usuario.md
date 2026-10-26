@@ -243,15 +243,17 @@ nombre (`VCP`, o `N/VCP` en un sistema), junto a *Avisos* y *mcu-sim*:
   se pasa de recibir a enviar a media línea, lo nuevo empieza en otra: es solo
   la vista, los bytes son los mismos. *Limpiar* borra lo que se ve.
 * **Abajo**, la **entrada**. Se escribe en ASCII, y los bytes que no lo son, en
-  hexadecimal, intercalados donde se quiera: `\x41` es un byte, `\x0102` dos,
-  `\x0A0B0C` tres —tantos como pares de cifras sigan a la `x`—. Así,
-  `AT\x0D\x0A` o `\x01\x03\x00\x0A\x00\x01`. Valen también `\r`, `\n`, `\t`,
-  `\0` y `\\` para la barra. Un hexadecimal se acaba en lo primero que no es
-  una cifra; para escribir una cifra justo detrás, otro escape: `\x41\x42`
-  y no `\x4142` si se quiere «AB». Debajo se ve lo que saldría, en
-  hexadecimal, o por qué no se puede.
-* **Las casillas**: *Añadir CR (\r, \x0D)* y *Añadir LF (\n, \x0A)* ponen esos
-  bytes al final, primero CR y luego LF. *Añadir CRC* pone el de la lista,
+  hexadecimal, intercalados donde se quiera, de dos maneras:
+  * `\xNN` es **un** byte, con dos cifras justas: lo que sigue ya es texto.
+    `\x41BC` son tres bytes: 0x41, «B» y «C».
+  * `\x{...}` son **varios**, con un número par de cifras entre llaves:
+    `\x{41BC}` son dos, 0x41 y 0xBC, y `\x{0D0A}` es lo mismo que `\x0D\x0A`.
+
+  Así, `AT\x0D\x0A` o `\x{0103000A0001}`. Valen también `\r`, `\n`, `\t`,
+  `\0` y `\\` para la barra. Debajo se ve lo que saldría, en hexadecimal, o
+  por qué no se puede.
+* **Las casillas**: *Enviar CR (\r, \x0D)* y *Enviar LF (\n, \x0A)* ponen esos
+  bytes al final, primero CR y luego LF. *Enviar CRC* pone el de la lista,
   calculado sobre lo escrito y **delante** de CR y LF, que no entran nunca en
   él:
 

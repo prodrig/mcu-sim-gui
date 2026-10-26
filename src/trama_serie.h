@@ -4,20 +4,22 @@
 //
 // La pestaña de cada PuenteSerie en memoria (`consola_serie.h`) manda lo que
 // se escribe en su entrada con T_SERIE_ENVIA. Esto es lo que hay entre las
-// dos cosas, sin un solo widget, para poder probarlo solo (`prueba_trama`):
+// dos cosas, sin un solo widget, para poder probarlo solo (`prueba_serie`, S1 y S2):
 //
 //   * LA ENTRADA es ASCII, con escapes intercalados donde se quiera:
 //
-//       \xNN, \xNNMM, \xNNMMOO...  bytes en hexadecimal, de dos en dos cifras:
-//                                  tantos como pares de cifras sigan a la x.
-//                                  Un número impar de cifras es un error: no
-//                                  hay forma de saber de quién es la suelta
-//       \r \n \t \0 \\             los de C de siempre
+//       \xNN                  UN byte: exactamente dos cifras hexadecimales.
+//                             Lo que siga ya es texto: `\x41BC` son tres
+//                             bytes, 0x41, 'B' y 'C'
+//       \x{NNMM...}           varios bytes: un número PAR de cifras entre
+//                             llaves, de dos en dos. `\x{0D0A}` es lo mismo
+//                             que `\x0D\x0A`, y `\x{41BC}` son 0x41 y 0xBC.
+//                             Dentro solo van cifras; vacías o con un número
+//                             impar de ellas, es un error
+//       \r \n \t \0 \\        los de C de siempre
 //
-//     Un hexadecimal se acaba en lo primero que no es una cifra. Para poner
-//     una cifra justo detrás como ASCII, otro escape: `\x41\x42` y no `\x4142`
-//     si se quiere «AB», o `\x01` y `2` escrito como `\x32`. Lo demás que no
-//     sea ASCII (una ñ, un €) es un error: el byte que se quiera va con \xNN.
+//     Lo demás que no sea ASCII (una ñ, un €) es un error: el byte que se
+//     quiera va con \xNN.
 //
 //   * EL FINAL, en este orden: lo escrito, el CRC si se pide —calculado sobre
 //     lo escrito, solo eso—, CR (0x0D) si se pide y LF (0x0A) si se pide. CR

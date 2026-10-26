@@ -112,10 +112,12 @@ ConsolaSerie::ConsolaSerie(quint16 pieza, const QString& nombre, const QString& 
     entrada_->setObjectName(QStringLiteral("entrada"));
     entrada_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
     entrada_->setPlaceholderText(tr("ASCII, con bytes en hexadecimal donde se quiera: \\x41, "
-                                    "\\x0102, hola\\x0D..."));
-    entrada_->setToolTip(tr("Texto ASCII. \\xNN, \\xNNMM, \\xNNMMOO... son bytes en hexadecimal, "
-                            "de dos en dos cifras: tantos como pares sigan a la x. Tambien "
-                            "\\r, \\n, \\t, \\0 y \\\\ para la barra."));
+                                    "\\x{0102}, hola\\x0D..."));
+    entrada_->setToolTip(tr("Texto ASCII. \\xNN es un byte en hexadecimal, con dos cifras "
+                            "exactas: \\x41BC son 0x41, 'B' y 'C'. \\x{NNMM...} son varios, con "
+                            "un numero par de cifras: \\x{41BC} son 0x41 y 0xBC, y \\x{0D0A} lo "
+                            "mismo que \\x0D\\x0A. Tambien \\r, \\n, \\t, \\0 y \\\\ para la "
+                            "barra."));
     enviar_ = new QPushButton(tr("Enviar"), this);
     enviar_->setObjectName(QStringLiteral("enviar"));
     fe->addWidget(entrada_, 1);
@@ -123,11 +125,11 @@ ConsolaSerie::ConsolaSerie(quint16 pieza, const QString& nombre, const QString& 
     caja->addLayout(fe);
 
     auto* fo = new QHBoxLayout;
-    cr_ = new QCheckBox(tr("Añadir CR (\\r, \\x0D)"), this);
+    cr_ = new QCheckBox(tr("Enviar CR (\\r, \\x0D)"), this);
     cr_->setObjectName(QStringLiteral("cr"));
-    lf_ = new QCheckBox(tr("Añadir LF (\\n, \\x0A)"), this);
+    lf_ = new QCheckBox(tr("Enviar LF (\\n, \\x0A)"), this);
     lf_->setObjectName(QStringLiteral("lf"));
-    crc_ = new QCheckBox(tr("Añadir CRC"), this);
+    crc_ = new QCheckBox(tr("Enviar CRC"), this);
     crc_->setObjectName(QStringLiteral("crc"));
     crc_->setToolTip(tr("Calculado sobre lo escrito, y delante de CR y LF, que no entran en el"));
     tipo_crc_ = new QComboBox(this);

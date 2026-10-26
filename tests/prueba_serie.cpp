@@ -1,8 +1,8 @@
 // =============================================================================
 // prueba_serie.cpp — La pestaña de un puente serie en memoria
 //
-//   S1  las tramas, sin widgets (`trama_serie.h`): ASCII y \xNN, \xNNMM... de
-//       dos en dos cifras, mezclados; los escapes de C; los errores, con su
+//   S1  las tramas, sin widgets (`trama_serie.h`): ASCII, \xNN con dos cifras
+//       exactas y \x{...} con un número par, mezclados; los escapes de C; los errores, con su
 //       posición; los tres CRC contra valores conocidos -el ejemplo de la
 //       especificación de Modbus y el CRC-16/MODBUS de «123456789»-; el orden
 //       de lo escrito, el CRC, CR y LF, y que CR y LF no entran en el CRC;
@@ -106,40 +106,49 @@ int main(int argc, char** argv)
         QString e;
         comprueba(trama::desescapa("hola", b) && b == "hola", "ASCII tal cual");
         comprueba(trama::desescapa("\\x41", b) && b == "A", "\\x41 es una A");
-        comprueba(trama::desescapa("\\x010203", b) && b == B({1, 2, 3}),
-                  "\\x010203: tantos bytes como pares de cifras, tres");
-        const bool mez = trama::desescapa("AT\\x0D\\x0aOK\\xFF-fin", b);
-        comprueba(mez && b == QByteArray("AT\r\nOK\xFF") + "-fin",
-                  "mezclados: ASCII, hex en mayusculas y en minusculas, y ASCII otra vez: " +
-                      hex(b));
-        comprueba(trama::desescapa("\\xABCDzz", b) && b == B({0xAB, 0xCD, 'z', 'z'}),
-                  "el hexadecimal se acaba en lo primero que no es una cifra");
+        comprueba(trama::desescapa("\\x{010203}", b) && b == B({1, 2, 3}),
+                  "\\x{010203}: entre llaves, tantos bytes como pares de cifras, tres");
+        {
+            QByteArray b2;
+            const bool ok_ = trama::desescapa("\\x0D\\x0A", b) && trama::desescapa("\\x{0D0A}", b2);
+            comprueba(ok_ && b == "\r\n" && b2 == b,
+                      "\\x0D\\x0A y \\x{0D0A} son lo mismo: \\r\\n");
+        }
+        comprueba(trama::desescapa("\\x41BC", b) && b == "ABC",
+                  "\\x41BC son TRES bytes: 0x41, 'B' y 'C'; \\xNN lleva dos cifras justas");
+        comprueba(trama::desescapa("\\x{41BC}", b) && b == B({0x41, 0xBC}),
+                  "y \\x{41BC}, DOS: 0x41 y 0xBC");
+        const bool mez = trama::desescapa("AT\\x0D\\x0aOK\\xFFfin\\x{aBcD}z", b);
+        comprueba(mez && b == QByteArray("AT\r\nOK\xFF") + "fin" + B({0xAB, 0xCD}) + "z",
+                  "mezclados: ASCII, hex en mayusculas y en minusculas, llaves y ASCII otra "
+                  "vez: " + hex(b));
         comprueba(trama::desescapa("a\\r\\n\\t\\0\\\\b", b) &&
                       b == QByteArray("a\r\n\t\0\\b", 7),
                   "\\r \\n \\t \\0 y \\\\, los de C");
-        {
-            const bool ok_ = trama::desescapa("ab\\x123", b, &e);
-            comprueba(!ok_ && e.contains("3 cifras") &&
-                          e.contains("posicion 3"),
-                      "un numero impar de cifras es un error, que dice donde: \"" +
-                          e.toStdString() + "\"");
+        struct Malo { const char* entrada; const char* dice; const char* que; };
+        const Malo malos[] = {
+            {"ab\\x{123}", "3 cifras", "\\x{123}: un numero impar de cifras"},
+            {"\\x{}", "vacio", "\\x{}: vacio"},
+            {"\\x{0D0A", "llave de cierre", "\\x{0D0A sin la llave de cierre"},
+            {"\\x{0D 0A}", "no es una cifra", "\\x{0D 0A}: dentro solo cifras"},
+            {"\\x4", "dos cifras", "\\x4: una sola cifra"},
+            {"\\xzz", "dos cifras", "\\xzz: sin cifras"},
+            {"\\q", "no es un escape", "\\q: un escape que no existe"},
+            {"fin\\", "sin nada detras", "una barra al final"},
+        };
+        for (const Malo& m : malos) {
+            e.clear();
+            const bool ok_ = trama::desescapa(QString::fromLatin1(m.entrada), b, &e);
+            comprueba(!ok_ && e.contains(QString::fromLatin1(m.dice)),
+                      std::string(m.que) + ", error: \"" + e.toStdString() + "\"");
         }
         {
-            const bool ok_ = trama::desescapa("\\xzz", b, &e);
-            comprueba(!ok_ && e.contains("sin cifras"),
-                      "\\x sin cifras, error: \"" + e.toStdString() + "\"");
+            e.clear();
+            const bool ok_ = trama::desescapa("ab\\x{123}", b, &e);
+            comprueba(!ok_ && e.contains("posicion 3"), "y el error dice donde");
         }
         {
-            const bool ok_ = trama::desescapa("\\q", b, &e);
-            comprueba(!ok_ && e.contains("no es un escape"),
-                      "un escape que no existe, error: \"" + e.toStdString() + "\"");
-        }
-        {
-            const bool ok_ = trama::desescapa("fin\\", b, &e);
-            comprueba(!ok_ && e.contains("sin nada detras"),
-                      "una barra al final, error");
-        }
-        {
+            e.clear();
             const bool ok_ = trama::desescapa(QString::fromUtf8("año"), b, &e);
             comprueba(!ok_ && e.contains("ASCII") &&
                           e.contains("posicion 2"),
@@ -153,7 +162,7 @@ int main(int argc, char** argv)
         // Modbus over Serial Line V1.02, §6.2.2: 02 07 -> CRC 0x1241, «41 12»
         comprueba(trama::crc16_modbus(B({0x02, 0x07})) == 0x1241,
                   "y el de 02 07, el del ejemplo de la especificacion: 0x1241");
-        comprueba(trama_de("\\x0103000A0001", false, false, true, Crc::ModbusRtu) ==
+        comprueba(trama_de("\\x{0103000A0001}", false, false, true, Crc::ModbusRtu) ==
                       B({0x01, 0x03, 0x00, 0x0A, 0x00, 0x01, 0xA4, 0x08}),
                   "Modbus RTU: 01 03 00 0A 00 01 lleva A4 08, el byte bajo primero");
         comprueba(trama::lrc_modbus(B({0x11, 0x03, 0x00, 0x6B, 0x00, 0x03})) == 0x7E,
@@ -190,7 +199,7 @@ int main(int argc, char** argv)
         comprueba(trama_de("AB", true, true, true, Crc::Suma256) ==
                       QByteArray("AB") + char(0x83) + "\r\n",
                   "con suma: A + B = 0x83, y CR y LF detras, sin entrar en ella");
-        const QByteArray rtu = trama_de("\\x0207", true, true, true, Crc::ModbusRtu);
+        const QByteArray rtu = trama_de("\\x{0207}", true, true, true, Crc::ModbusRtu);
         comprueba(rtu == B({0x02, 0x07, 0x41, 0x12, 0x0D, 0x0A}),
                   "con Modbus RTU: 02 07 41 12 0D 0A, el CRC antes que CR y LF: " + hex(rtu));
         comprueba(trama::crcs_conocidos().size() == 3 &&
@@ -272,15 +281,17 @@ int main(int argc, char** argv)
         auto* tipo = c.findChild<QComboBox*>("tipo_crc");
         auto* previa = c.findChild<QLabel*>("previa");
         comprueba(ent && env && cr && lf && crc && tipo && previa &&
+                      cr->text() == "Enviar CR (\\r, \\x0D)" && lf->text() == "Enviar LF (\\n, \\x0A)" &&
+                      crc->text() == "Enviar CRC" &&
                       cr->text().contains("CR") && cr->text().contains("\\x0D") &&
                       lf->text().contains("LF") && lf->text().contains("\\x0A") &&
                       crc->text().contains("CRC") && tipo->count() == 3,
-                  "la entrada, Enviar, las tres casillas y la lista de CRC");
+                  "la entrada, Enviar, las tres casillas -Enviar CR, Enviar LF y Enviar CRC- y la lista de CRC");
         comprueba(!tipo->isEnabled(), "la lista, apagada mientras no se pida el CRC");
         std::vector<QByteArray> mandado;
         QObject::connect(&c, &ConsolaSerie::envia,
                          [&](quint16 p, const QByteArray& b) { if (p == 7) mandado.push_back(b); });
-        ent->setText("\\x0207");
+        ent->setText("\\x02\\x07");
         cr->setChecked(true);
         lf->setChecked(true);
         crc->setChecked(true);
@@ -298,7 +309,7 @@ int main(int argc, char** argv)
         tipo->setCurrentIndex(2);
         crc->setChecked(false);
         ent->setText("hola\\x");
-        comprueba(!env->isEnabled() && previa->text().contains("sin cifras"),
+        comprueba(!env->isEnabled() && previa->text().contains("dos cifras"),
                   "una entrada que no vale apaga Enviar y dice por que");
         QMetaObject::invokeMethod(ent, "returnPressed");
         comprueba(mandado.size() == 1, "e Intro tampoco manda nada");
@@ -406,12 +417,12 @@ int main(int argc, char** argv)
             auto* ent = c->findChild<QLineEdit*>("entrada");
             c->findChild<QCheckBox*>("cr")->setChecked(true);
             c->findChild<QCheckBox*>("lf")->setChecked(true);
-            ent->setText("hola \\x41\\x42!");
+            ent->setText("hola \\x41BC\\x{2021}");
             const quint64 r0 = c->bytes_recibidos();
             QMetaObject::invokeMethod(ent, "returnPressed");
             comprueba(espera([&] { return c->bytes_recibidos() >= r0 + 10; }, 20000) &&
-                          c->texto().endsWith("hola AB!\nhola AB!\n"),
-                      "'hola \\x41\\x42!' con CR y LF sale, y vuelve con el eco de vcp_demo: "
+                          c->texto().endsWith("hola ABC !\nhola ABC !\n"),
+                      "'hola \\x41BC\\x{2021}' con CR y LF sale, y vuelve con el eco de vcp_demo: "
                       "una vez de cada color");
             ent->setText("\\x01\\x7F\\xFF");
             c->findChild<QCheckBox*>("crc")->setChecked(true);

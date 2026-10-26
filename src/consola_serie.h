@@ -11,11 +11,11 @@
 //     azul. Lo imprimible sale tal cual; CR, LF o CR+LF, un salto de línea; lo
 //     demás, \xNN (`trama::legible`). Cuando cambia el sentido a media línea,
 //     lo nuevo empieza en otra: es solo la vista, los bytes son los mismos;
-//   * LA ENTRADA: ASCII con \xNN, \xNNMM... intercalados donde se quiera
+//   * LA ENTRADA: ASCII con \xNN y \x{NNMM...} intercalados donde se quiera
 //     (`trama_serie.h`), y debajo los bytes que saldrían, o por qué no se
 //     puede. «Enviar» o Intro mandan; lo escrito se queda seleccionado, para
 //     repetirlo o escribir encima;
-//   * «Añadir CR», «Añadir LF» y «Añadir CRC», con la lista de los CRC
+//   * «Enviar CR», «Enviar LF» y «Enviar CRC», con la lista de los CRC
 //     conocidos: el CRC se calcula sobre lo escrito y va delante de CR y LF,
 //     que no entran nunca en él.
 //

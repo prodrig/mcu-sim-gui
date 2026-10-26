@@ -60,24 +60,41 @@ bool desescapa(const QString& texto, QByteArray& out, QString* error)
         case '0':  r.append('\0'); break;
         case '\\': r.append('\\'); break;
         case 'x': {
-            int j = i + 1;
-            while (j < n && cifra(texto.at(j)) >= 0) ++j;
-            const int k = j - (i + 1);
-            if (k == 0)
-                return falla(error, tr_("'\\x' en la posicion %1 sin cifras hexadecimales detras")
-                                        .arg(i));
-            if (k % 2)
-                return falla(error, tr_("'\\x' en la posicion %1 lleva %2 cifras: van de dos en "
-                                        "dos (para una cifra suelta detras, otro escape)")
-                                        .arg(i).arg(k));
-            for (int m = i + 1; m < j; m += 2)
-                r.append(char(cifra(texto.at(m)) * 16 + cifra(texto.at(m + 1))));
-            i = j - 1;
+            // \x{...}: un número par de cifras entre llaves
+            if (i + 1 < n && texto.at(i + 1) == QLatin1Char('{')) {
+                const int cierre = int(texto.indexOf(QLatin1Char('}'), i + 2));
+                if (cierre < 0)
+                    return falla(error, tr_("'\\x{' en la posicion %1 sin la llave de cierre")
+                                            .arg(i));
+                const int k = cierre - (i + 2);
+                for (int m = i + 2; m < cierre; ++m)
+                    if (cifra(texto.at(m)) < 0)
+                        return falla(error, tr_("'%1' en la posicion %2, dentro de \\x{...}, no "
+                                                "es una cifra hexadecimal")
+                                                .arg(texto.at(m)).arg(m + 1));
+                if (k == 0)
+                    return falla(error, tr_("'\\x{}' en la posicion %1 esta vacio").arg(i));
+                if (k % 2)
+                    return falla(error, tr_("'\\x{...}' en la posicion %1 lleva %2 cifras: van "
+                                            "de dos en dos, un numero par")
+                                            .arg(i).arg(k));
+                for (int m = i + 2; m < cierre; m += 2)
+                    r.append(char(cifra(texto.at(m)) * 16 + cifra(texto.at(m + 1))));
+                i = cierre;
+                break;
+            }
+            // \xNN: exactamente dos cifras; lo que siga ya es texto
+            if (i + 2 >= n || cifra(texto.at(i + 1)) < 0 || cifra(texto.at(i + 2)) < 0)
+                return falla(error, tr_("'\\x' en la posicion %1 necesita dos cifras "
+                                        "hexadecimales detras (o varias, entre llaves: "
+                                        "\\x{0D0A})").arg(i));
+            r.append(char(cifra(texto.at(i + 1)) * 16 + cifra(texto.at(i + 2))));
+            i += 2;
             break;
         }
         default:
             return falla(error, tr_("'\\%1' en la posicion %2 no es un escape: los que hay son "
-                                    "\\xNN, \\r, \\n, \\t, \\0 y \\\\").arg(e).arg(i));
+                                    "\\xNN, \\x{...}, \\r, \\n, \\t, \\0 y \\\\").arg(e).arg(i));
         }
     }
     out = r;
