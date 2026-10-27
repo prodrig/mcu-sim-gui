@@ -21,7 +21,10 @@
 // G7, desde la rama msp432: la LaunchPad MSP-EXP432P401R, un chip de TI con
 // sus pines llamados `P1.0` y su LED parpadeando en las muestras. Y G8,
 // desde la rama stm32f303: la STM32F3DISCOVERY con GPIO_IOToggle de ST, su
-// dibujo, y la rosa encendiendose en orden, un LED cada 101 ms.
+// dibujo, y la rosa encendiendose en orden, un LED cada 101 ms. Y G9, el
+// sistema de los dos motores (`placas/nucleo_f446re_encoder_lcd_servo_2xmcc.xml`):
+// nueve placas, el L298N, dos MotorCC con su encoder compartiendo dibujo, y el
+// mando que los pone en marcha.
 //
 // Necesita un `mcu-sim` compilado y su árbol de fuentes, porque las placas y
 // los firmwares están allí. Se le dicen con dos variables de entorno:
@@ -556,6 +559,94 @@ int main(int argc, char** argv)
         comprueba(en_orden,
                   "y la rosa se enciende en el orden del ejemplo, de LD6 (PE15) a LD4 (PE8), "
                   "uno cada 101 ms (" + dts + " ms)");
+        const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);
+        comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0,
+                  "y mcu-sim termina con codigo 0");
+    }
+
+    // -------------------------------------------------------------------------
+    // G9, del pulido de la 0.4.0: el sistema de la Nucleo con el servo, el
+    // KY-040 de 24 PPR, la pantalla y el FTDI, mas un L298N, dos motorreductores
+    // con su encoder y su bateria. Lo que la ventana tiene que saber de las
+    // piezas nuevas -MotorCC, L298 y Regulador- llega en el catalogo como el de
+    // cualquier otra; los dos motores comparten dibujo; y diez clics del mando,
+    // mandados antes de arrancar, los ponen a toda marcha.
+    // -------------------------------------------------------------------------
+    std::printf("G9 Dos motores con su encoder tras un L298N, en la Nucleo con ocho modulos\n");
+    {
+        Sesion s;
+        s.escucha(QHostAddress::LocalHost, 0);
+        int listos = 0, fines = 0;
+        QHash<quint16, QVector<float>> m;
+        QObject::connect(&s, &Sesion::listo, [&] { ++listos; });
+        QObject::connect(&s, &Sesion::fin, [&](quint32, qint32, quint64) { ++fines; });
+        QObject::connect(&s, &Sesion::muestra, [&](quint16 id, float v) {
+            m[id].push_back(v);
+        });
+        QProcess p;
+        p.setWorkingDirectory(src);
+        p.start(sim, {"placas/nucleo_f446re_encoder_lcd_servo_2xmcc.xml", "--ms=1300",
+                      "--serie", "F/U1=memoria", "--serie", "N/VCP=memoria",
+                      "--gui", QStringLiteral("127.0.0.1:%1").arg(s.puerto())});
+        comprueba(espera([&] { return listos == 1; }, 20000),
+                  "mcu-sim monta el sistema de los motores, saluda y dice T_LISTO");
+        const PlacaGui& pl = s.placa();
+        QHash<QString, const PiezaGui*> pz;
+        bool todas = !pl.piezas.isEmpty();
+        for (const PiezaGui& x : pl.piezas) {
+            pz[x.id] = &x;
+            todas = todas && x.en_placa;
+        }
+        auto tipo = [&](const char* id) { return pz.contains(id) ? pz[id]->tipo : QString(); };
+        comprueba(pl.placas.size() == 9 && pl.piezas.size() == 44 && todas &&
+                      pl.avisos.isEmpty() && tipo("MA/MOTOR") == "MotorCC" &&
+                      tipo("MB/MOTOR") == "MotorCC" && tipo("L/U1") == "L298" &&
+                      tipo("L/U2") == "Regulador" && tipo("K/ENC") == "Encoder" &&
+                      tipo("F/U1") == "PuenteSerie",
+                  "nueve placas y cuarenta y cuatro piezas, todas casadas y sin avisos: los dos "
+                  "MotorCC, el L298 y su Regulador, el encoder de mando y el FTDI");
+        const PiezaGui* ma = pz.value("MA/MOTOR");
+        bool obs = ma && ma->observables.size() == 7 && ma->mandos.size() == 2;
+        if (obs) {
+            const ObservableGui& a = ma->observables[0];
+            obs = a.nombre == "angulo" && a.unidad == QString::fromUtf8("\xc2\xb0") &&
+                  a.interesante && a.min == 0 && a.max == 360 &&
+                  ma->observables[1].nombre == "rpm" && ma->mandos[0].nombre == "bloquear" &&
+                  ma->mandos[1].nombre == "carga" && ma->mandos[1].tipo == "continuo";
+        }
+        comprueba(obs, "el motor sugiere su angulo, de 0 a 360 grados -el disco gira con el-, "
+                       "y se deja bloquear y cargar");
+        bool motor = false, l298 = false;
+        for (const Sesion::Ilustracion& il : s.ilustraciones()) {
+            if (il.fichero == "motor_tt_encoder.svg")
+                motor = il.placas.contains("MA") && il.placas.contains("MB") &&
+                        il.svg.contains("id=\"MOTOR\"");
+            if (il.fichero == "l298n.svg")
+                l298 = il.placas == QStringList{"L"} && !il.svg.contains("id=\"JA@5V-ENA\"") &&
+                       il.svg.contains("id=\"JP5@REG-5V\"");
+        }
+        comprueba(motor && l298,
+                  "los dos motores, con UN dibujo, el de su disco; el L298N, sin los puentes "
+                  "de ENA y ENB, que llevan el PWM");
+        quint16 rpm_a = 0, rpm_b = 0, enc = 0, girar = 0;
+        if (ma) rpm_a = quint16(ma->observables[1].id_obs);
+        if (pz.contains("MB/MOTOR") && pz["MB/MOTOR"]->observables.size() > 1)
+            rpm_b = quint16(pz["MB/MOTOR"]->observables[1].id_obs);
+        if (pz.contains("K/ENC") && !pz["K/ENC"]->mandos.isEmpty()) {
+            enc = quint16(pz["K/ENC"]->idx);
+            girar = quint16(pz["K/ENC"]->mandos[0].idx);
+        }
+        comprueba(rpm_a && rpm_b && s.suscribe(1000000, {rpm_a, rpm_b}) &&
+                      s.ordena(QVector<Orden>{{400000000ull, enc, girar, 10.f}}),
+                  "suscrito a las rpm de los dos, y diez clics del mando a los 400 ms");
+        comprueba(s.arranca(RIT_LIBRE) && espera([&] { return fines == 1; }, 120000),
+                  "1300 ms simulados");
+        const auto& va = m.value(rpm_a);
+        const auto& vb = m.value(rpm_b);
+        const float fa = va.isEmpty() ? 0.f : va.back(), fb = vb.isEmpty() ? 0.f : vb.back();
+        comprueba(va.size() == 1300 && va[390] == 0.f && fa > 237.f && fa < 240.5f && fb == fa,
+                  "parados hasta el mando; despues, el PWM al 100 % y los dos a " +
+                      std::to_string(fa) + " rpm");
         const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);
         comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0,
                   "y mcu-sim termina con codigo 0");
