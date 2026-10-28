@@ -259,8 +259,16 @@ Los efectos también salen de la declaración, no del tipo:
 `mcusim:efecto` o la tabla de enlaces cambian el efecto de un elemento:
 `brillo`, `opacidad`, `color`, `visible`, `texto`; y más adelante `rotacion`
 para el servo o el motor que `doc/analisis_gui.md` de `mcu-sim` ya preveía.
-Hoy la tabla admite `brillo`, `hundido`, `giro`, `pantalla`, `angulo` y
-`ninguno`.
+Hoy la tabla admite `brillo`, `hundido`, `giro`, `pantalla`, `angulo`,
+`display` y `ninguno`.
+**`display`** solo lo pone la tabla: la caja del elemento es el display de un
+aparato —el de la fuente de laboratorio de `mcu-sim`—, y la ventana escribe
+DENTRO, una por fila de arriba abajo, los numéricos que diga `observable=`
+—varios, separados por blancos— o, sin él, los que la pieza sugiere: cuatro
+cifras sacadas de la escala que declara cada uno, pegadas a la derecha, en
+rojo de display, y los mA que pasan de 1000, en A (`7.475 V`, `0.367 A`).
+Esos ya no llevan etiqueta. Un nombre que la pieza no tiene se dice; sin
+ninguno que enseñar, se queda sin efecto (prueba I26).
 **`pantalla`** (plan §30) es el de omisión de una pieza que enseña una
 IMAGEN —el TFT de 128x160—: la imagen se pinta encima del elemento, llenando
 su caja, con su luz; si el elemento es apaisado y la imagen no, girada un

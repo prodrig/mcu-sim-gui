@@ -567,10 +567,11 @@ int main(int argc, char** argv)
     // -------------------------------------------------------------------------
     // G9, del pulido de la 0.4.0: el sistema de la Nucleo con el servo, el
     // KY-040 de 24 PPR, la pantalla y el FTDI, mas un L298N, dos motorreductores
-    // con su encoder y su bateria. Lo que la ventana tiene que saber de las
-    // piezas nuevas -MotorCC, L298 y Regulador- llega en el catalogo como el de
-    // cualquier otra; los dos motores comparten dibujo; y diez clics del mando,
-    // mandados antes de arrancar, los ponen a toda marcha.
+    // con su encoder y una fuente de laboratorio. Lo que la ventana tiene que
+    // saber de las piezas nuevas -MotorCC, L298 y Regulador- llega en el
+    // catalogo como el de cualquier otra; los dos motores comparten dibujo; la
+    // fuente lleva su display; y diez clics del mando, mandados antes de
+    // arrancar, los ponen a toda marcha.
     // -------------------------------------------------------------------------
     std::printf("G9 Dos motores con su encoder tras un L298N, en la Nucleo con ocho modulos\n");
     {
@@ -602,9 +603,12 @@ int main(int argc, char** argv)
                       pl.avisos.isEmpty() && tipo("MA/MOTOR") == "MotorCC" &&
                       tipo("MB/MOTOR") == "MotorCC" && tipo("L/U1") == "L298" &&
                       tipo("L/U2") == "Regulador" && tipo("K/ENC") == "Encoder" &&
-                      tipo("F/U1") == "PuenteSerie",
+                      tipo("F/U1") == "PuenteSerie" && tipo("PS/PSU") == "Fuente" &&
+                      pz["PS/PSU"]->observables.size() == 3 &&
+                      pz["PS/PSU"]->observables[2].nombre == "tension",
                   "nueve placas y cuarenta y cuatro piezas, todas casadas y sin avisos: los dos "
-                  "MotorCC, el L298 y su Regulador, el encoder de mando y el FTDI");
+                  "MotorCC, el L298 y su Regulador, el encoder de mando, el FTDI y la fuente, "
+                  "que deja ver su corriente y su tension");
         const PiezaGui* ma = pz.value("MA/MOTOR");
         bool obs = ma && ma->observables.size() == 7 && ma->mandos.size() == 2;
         if (obs) {
@@ -623,11 +627,18 @@ int main(int argc, char** argv)
                         il.svg.contains("id=\"MOTOR\"");
             if (il.fichero == "l298n.svg")
                 l298 = il.placas == QStringList{"L"} && !il.svg.contains("id=\"JA@5V-ENA\"") &&
-                       il.svg.contains("id=\"JP5@REG-5V\"");
+                       !il.svg.contains("id=\"JP5@REG-5V\"");
         }
+        bool display = false;
+        for (const EnlaceTabla& t : pl.tabla_de("PS"))
+            display = display || (t.pieza == "PSU" && t.efecto == "display" &&
+                                  t.observable == "tension corriente");
+        comprueba(display, "la fuente lleva su display en la tabla de enlaces: la tension y la "
+                           "corriente, una por fila");
         comprueba(motor && l298,
                   "los dos motores, con UN dibujo, el de su disco; el L298N, sin los puentes "
-                  "de ENA y ENB, que llevan el PWM");
+                  "de ENA y ENB, que llevan el PWM, ni el 5V-EN: la logica va al +5V de la "
+                  "Nucleo");
         quint16 rpm_a = 0, rpm_b = 0, enc = 0, girar = 0;
         if (ma) rpm_a = quint16(ma->observables[1].id_obs);
         if (pz.contains("MB/MOTOR") && pz["MB/MOTOR"]->observables.size() > 1)
@@ -644,7 +655,7 @@ int main(int argc, char** argv)
         const auto& va = m.value(rpm_a);
         const auto& vb = m.value(rpm_b);
         const float fa = va.isEmpty() ? 0.f : va.back(), fb = vb.isEmpty() ? 0.f : vb.back();
-        comprueba(va.size() == 1300 && va[390] == 0.f && fa > 237.f && fa < 240.5f && fb == fa,
+        comprueba(va.size() == 1300 && va[390] == 0.f && fa > 241.f && fa < 246.f && fb == fa,
                   "parados hasta el mando; despues, el PWM al 100 % y los dos a " +
                       std::to_string(fa) + " rpm");
         const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);

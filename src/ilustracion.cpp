@@ -29,6 +29,7 @@
 #include <QGuiApplication>
 #include <QToolButton>
 #include <QComboBox>
+#include <QRegularExpression>
 #include <QSignalBlocker>
 #include <QSvgRenderer>
 #include <QVBoxLayout>
@@ -1016,6 +1017,50 @@ void VistaPlaca::prepara(Capa& cp)
                 w.efecto = QStringLiteral("ninguno");
             }
         }
+        // El display: los numéricos, uno por fila, escritos dentro del elemento
+        if (w.efecto == QLatin1String("display")) {
+            const QStringList pedidos =
+                e.observable.split(QRegularExpression(QStringLiteral("\\s+")),
+                                   Qt::SkipEmptyParts);
+            QStringList faltan;
+            if (pedidos.isEmpty()) {
+                for (const ObservableGui& o : pz.observables)
+                    if (o.interesante && !o.alarma && !es_01(o)) w.display.push_back(o.id_obs);
+            } else {
+                for (const QString& n : pedidos) {
+                    int id = -1;
+                    for (const ObservableGui& o : pz.observables)
+                        if (o.nombre == n && !o.alarma && !es_01(o)) { id = o.id_obs; break; }
+                    if (id >= 0) w.display.push_back(id);
+                    else faltan << n;
+                }
+            }
+            if (!faltan.isEmpty())
+                cp.informe.avisos << QObject::tr("%1: el display pide «%2», que la pieza no "
+                                               "tiene (o no son numéricos)")
+                                         .arg(pz.id_local, faltan.join(QStringLiteral(", ")));
+            if (w.display.isEmpty()) {
+                cp.informe.avisos << QObject::tr("%1: el efecto «display» necesita numéricos "
+                                               "que enseñar; se queda sin efecto")
+                                         .arg(pz.id_local);
+                w.efecto = QStringLiteral("ninguno");
+            } else {
+                for (int k = 0; k < w.display.size(); ++k) {
+                    const int id = w.display[k];
+                    rotulos.removeIf([&](const ObservableGui* o) { return o->id_obs == id; });
+                    // Hija del elemento, como la imagen de una pantalla
+                    auto* t = new QGraphicsSimpleTextItem(QStringLiteral("----"), w.item);
+                    QFont f(QStringLiteral("DejaVu Sans Mono"));
+                    f.setStyleHint(QFont::Monospace);
+                    f.setPixelSize(20);
+                    f.setBold(true);
+                    t->setFont(f);
+                    t->setBrush(QColor(0xff, 0x45, 0x2a));
+                    t->setAcceptedMouseButtons(Qt::NoButton);
+                    w.cifras.push_back(t);
+                }
+            }
+        }
         // Una pieza que enseña una imagen la enseña, si la tabla no dice otra cosa
         if (w.efecto.isEmpty() && !pz.imagenes.isEmpty()) w.efecto = QStringLiteral("pantalla");
         if (w.efecto == QLatin1String("pantalla") && pz.imagenes.isEmpty()) {
@@ -1029,6 +1074,7 @@ void VistaPlaca::prepara(Capa& cp)
                                    w.efecto != QLatin1String("giro") &&
                                    w.efecto != QLatin1String("pantalla") &&
                                    w.efecto != QLatin1String("angulo") &&
+                                   w.efecto != QLatin1String("display") &&
                                    w.efecto != QLatin1String("ninguno"))) {
             if (!e.efecto.isEmpty())
                 cp.informe.avisos << QObject::tr("%1: el efecto «%2» no existe; se usa el que "
@@ -1097,9 +1143,45 @@ void VistaPlaca::prepara(Capa& cp)
             etiquetas_.insert(quint16(o->id_obs), t);
             y += alto;
         }
+        for (int k = 0; k < w.cifras.size(); ++k) coloca_cifras(w, k);
         vivas_.push_back(w);
     }
     reindexa();
+}
+
+// El texto de una fila de un display: cuatro cifras, con su unidad; los mA
+// que pasan de 1000, en A. Las cifras salen de la escala que declara el
+// observable, como en un aparato, que no cambia de decimales a cada lectura
+QString VistaPlaca::texto_display(const ObservableGui& o, float valor)
+{
+    double v = double(valor), m = std::max(std::abs(o.min), std::abs(o.max));
+    QString u = o.unidad;
+    if (u == QLatin1String("mA") && m >= 1000.0) {
+        v /= 1000.0;
+        m /= 1000.0;
+        u = QStringLiteral("A");
+    }
+    int dec = 3;
+    if (m >= 1.0) dec = std::clamp(3 - int(std::floor(std::log10(m))), 0, 3);
+    QString t = QString::number(v, 'f', dec);
+    if (!u.isEmpty()) t += QLatin1Char(' ') + u;
+    return t;
+}
+
+// Una fila del display: su texto, de un alto del 70 % de la fila -o lo que
+// quepa de ancho-, pegado a la derecha, en la caja del elemento
+void VistaPlaca::coloca_cifras(Viva& w, int fila)
+{
+    QGraphicsSimpleTextItem* t = w.cifras.value(fila, nullptr);
+    if (!t || w.display.isEmpty()) return;
+    const QRectF caja = w.item->boundingRect();
+    const double alto = caja.height() / w.display.size();
+    const QRectF b = t->boundingRect();
+    if (b.isEmpty()) return;
+    const double k = std::min(0.7 * alto / b.height(), 0.9 * caja.width() / b.width());
+    t->setScale(k);
+    t->setPos(caja.right() - 0.05 * caja.width() - b.width() * k,
+              caja.top() + fila * alto + (alto - b.height() * k) / 2);
 }
 
 // Plan §34: una etiqueta, DERECHA y centrada bajo su pieza en la escena,
@@ -1151,6 +1233,15 @@ void VistaPlaca::pon_valor(quint16 id_obs, float valor)
         if (t->text() != s) {
             t->setText(s);
             coloca_etiqueta(t);
+        }
+    }
+    const int fila = w.display.indexOf(int(id_obs));
+    if (fila >= 0) {
+        QGraphicsSimpleTextItem* t = w.cifras[fila];
+        const QString s = texto_display(decl_.value(id_obs), valor);
+        if (t->text() != s) {
+            t->setText(s);
+            coloca_cifras(w, fila);
         }
     }
     repinta(w);

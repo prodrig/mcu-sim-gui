@@ -58,6 +58,11 @@
 //       y gira el encoder.
 //   I14b (S8 del F303) la aguja del rumbo: `observable=` en la tabla elige qué
 //       numérico mueve el efecto `angulo`, aunque no sea el primero ni esté en °;
+//   I26 el DISPLAY de una fuente de laboratorio: el efecto `display` de la
+//       tabla escribe dentro del elemento, una por fila, la tension y la
+//       corriente que pide `observable=`, con cuatro cifras -los mA, en A-,
+//       pegadas a la derecha, sin etiqueta debajo; lo que la pieza no tiene,
+//       se dice; y sin nada que ensenar, se queda sin efecto.
 //   I14 (plan §32) el aspa de un servo: el efecto `angulo`, el de omisión de
 //       una pieza que sugiere un numérico en grados -gira tantos grados como
 //       diga, a la derecha los positivos, sobre el centro de su caja, que un
@@ -3051,6 +3056,91 @@ int main(int argc, char** argv)
                   "y la ventana, sin --edit: la ilustracion no se edita, y Abrir dibujo de la "
                   "placa no esta en el menu ni se deja pedir");
         m.s.disconnectFromHost();
+    }
+
+    // -------------------------------------------------------------------------
+    // I26: el display de una fuente
+    // -------------------------------------------------------------------------
+    std::printf("I26 El display de una fuente: el efecto display\n");
+    {
+        const char* PLACA_PSU =
+            "<placa nombre=\"fuente\">\n"
+            "  <componente tipo=\"Fuente\" id=\"PSU\"><pin nombre=\"pin\" nodo=\"PA0\"/></componente>\n"
+            "  <componente tipo=\"Fuente\" id=\"OTRA\"><pin nombre=\"pin\" nodo=\"PA1\"/></componente>\n"
+            "  <componente tipo=\"Led\" id=\"MUDO\"><pin nombre=\"anodo\" nodo=\"PA2\"/></componente>\n"
+            "  <ilustracion>\n"
+            "    <enlace pieza=\"PSU\" elemento=\"PSU\" efecto=\"display\" observable=\"tension corriente\"/>\n"
+            "    <enlace pieza=\"OTRA\" elemento=\"OTRA\" efecto=\"display\" observable=\"potencia\"/>\n"
+            "  </ilustracion>\n"
+            "</placa>\n";
+        const char* CAT_PSU =
+            "<catalogo>\n"
+            "  <pieza idx=\"0\" id=\"PSU\" tipo=\"Fuente\">\n"
+            "    <observable idx=\"0\" id_obs=\"0\" nombre=\"corriente\" unidad=\"mA\" min=\"-3000\" max=\"3000\" interesante=\"si\"/>\n"
+            "    <observable idx=\"1\" id_obs=\"1\" nombre=\"sobrecorriente\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\" alarma=\"si\"/>\n"
+            "    <observable idx=\"2\" id_obs=\"2\" nombre=\"tension\" unidad=\"V\" min=\"0\" max=\"9\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "  <pieza idx=\"1\" id=\"OTRA\" tipo=\"Fuente\">\n"
+            "    <observable idx=\"0\" id_obs=\"3\" nombre=\"corriente\" unidad=\"mA\" min=\"-100\" max=\"100\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "  <pieza idx=\"2\" id=\"MUDO\" tipo=\"Led\">\n"
+            "    <observable idx=\"0\" id_obs=\"4\" nombre=\"encendido\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "</catalogo>\n";
+        const char* DIBUJO_PSU =
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\">\n"
+            "  <rect x=\"0\" y=\"0\" width=\"200\" height=\"100\" fill=\"#cfd8dc\"/>\n"
+            "  <rect id=\"PSU\" x=\"10\" y=\"10\" width=\"120\" height=\"80\" fill=\"#111111\"/>\n"
+            "  <rect id=\"OTRA\" x=\"150\" y=\"10\" width=\"40\" height=\"20\" fill=\"#111111\"/>\n"
+            "  <rect id=\"MUDO\" x=\"150\" y=\"60\" width=\"20\" height=\"20\" fill=\"#808080\"/>\n"
+            "</svg>\n";
+        const PlacaGui p = placa_de(PLACA_PSU, CAT_PSU);
+        QString e;
+        std::unique_ptr<VistaPlaca> v(VistaPlaca::crea(p, QString(), DIBUJO_PSU, p.tabla_de(QString()), e));
+        comprueba(v != nullptr, "la vista se construye " + e.toStdString());
+        if (!v) return resultado();
+        v->resize(700, 400);
+        v->show();
+        espera([] { return false; }, 50);
+        const QString av = v->informe().avisos.join(" | ");
+        comprueba(v->efecto(0) == "display" && v->efecto(1) == "ninguno" &&
+                      av.contains("OTRA: el display pide «potencia»") &&
+                      av.contains("OTRA: el efecto «display» necesita"),
+                  "la fuente, con su display; la otra, que pide un numerico que no tiene, sin "
+                  "efecto, y se dice: " + av.toStdString());
+        // Las cifras: hijas del elemento, una por fila
+        QVector<QGraphicsSimpleTextItem*> filas;
+        for (QGraphicsItem* h : v->vivo(0)->childItems())
+            if (auto* t = dynamic_cast<QGraphicsSimpleTextItem*>(h)) filas.push_back(t);
+        comprueba(filas.size() == 2 && !v->etiqueta(0) && !v->etiqueta(2),
+                  "dos filas dentro del display, y ni la tension ni la corriente llevan "
+                  "etiqueta debajo");
+        v->pon_valor(2, 7.4746f);
+        v->pon_valor(0, 367.3f);
+        espera([] { return false; }, 20);
+        if (filas.size() == 2) {
+            const QRectF caja = v->vivo(0)->boundingRect();
+            const QRectF f0 = filas[0]->mapRectToParent(filas[0]->boundingRect());
+            const QRectF f1 = filas[1]->mapRectToParent(filas[1]->boundingRect());
+            comprueba(filas[0]->text() == "7.475 V" && filas[1]->text() == "0.367 A",
+                      "cuatro cifras: " + filas[0]->text().toStdString() + " arriba y " +
+                          filas[1]->text().toStdString() + " abajo -los mA, en A-");
+            comprueba(caja.contains(f0) && caja.contains(f1) && f0.bottom() <= caja.center().y() &&
+                          f1.top() >= caja.center().y() &&
+                          std::abs(f0.right() - f1.right()) < 0.5 &&
+                          caja.right() - f0.right() < 0.1 * caja.width(),
+                      "cada una en su mitad de la caja, pegadas a la derecha");
+        }
+        v->pon_valor(0, -12.0f);
+        comprueba(filas.size() == 2 && filas[1]->text() == "-0.012 A",
+                  "y una corriente que vuelve, con su signo: " +
+                      (filas.size() == 2 ? filas[1]->text().toStdString() : std::string()));
+        ObservableGui o;
+        o.unidad = "rpm";
+        o.min = -375;
+        o.max = 375;
+        comprueba(VistaPlaca::texto_display(o, 243.27f) == "243.3 rpm",
+                  "las cifras salen de la escala: hasta 375 rpm, una decimal");
     }
 
     return resultado();
