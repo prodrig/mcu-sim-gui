@@ -344,6 +344,15 @@ cuando no es el que se elegiría solo (S8 del F303: la aguja de la Discovery
 sigue el `rumbo` de la `Postura`, que es su tercer ángulo y se mide en
 «grados»). Una ventana anterior lo ignora; un `mcu-sim` anterior no lo manda.
 
+Con `efecto="display"`, `observable=` son varios, separados por blancos: los
+que se escriben, uno por fila. Con `efecto="desplaza"` (fase F0 de la CNC de
+`mcu-sim`), varios también, y además `vector="..."`: dos números por
+observable, x e y, lo que se traslada el elemento por unidad de cada uno, en
+unidades del dibujo. `mcu-sim` ya ha comprobado que el vector tenga dos números
+por observable; si no casa, la ventana deja la pieza sin efecto y lo dice. Una
+ventana anterior no conoce el efecto y le pone el que toca; un `mcu-sim`
+anterior no lo acepta.
+
 **`T_LISTO`** — sin cuerpo. Quiere decir: *la placa está construida, el catálogo
 es el que has recibido, y estoy parado esperándote.*
 
