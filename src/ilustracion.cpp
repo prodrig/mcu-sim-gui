@@ -1195,9 +1195,19 @@ void VistaPlaca::prepara(Capa& cp)
 
 // El texto de una fila de un display: cuatro cifras, con su unidad; los mA
 // que pasan de 1000, en A. Las cifras salen de la escala que declara el
-// observable, como en un aparato, que no cambia de decimales a cada lectura
+// observable, como en un aparato, que no cambia de decimales a cada lectura.
+// Una COTA -en mm, la posicion de un carro de una fresadora- lleva su signo
+// siempre y una cifra mas: +123.45 mm, como el display de un control numerico
 QString VistaPlaca::texto_display(const ObservableGui& o, float valor)
 {
+    if (o.unidad == QLatin1String("mm")) {
+        const double m = std::max(std::abs(o.min), std::abs(o.max));
+        int dec = 4;
+        if (m >= 1.0) dec = std::clamp(4 - int(std::floor(std::log10(m))), 0, 4);
+        QString t = QString::number(double(valor), 'f', dec);
+        if (!t.startsWith(QLatin1Char('-'))) t.prepend(QLatin1Char('+'));
+        return t + QStringLiteral(" mm");
+    }
     double v = double(valor), m = std::max(std::abs(o.min), std::abs(o.max));
     QString u = o.unidad;
     if (u == QLatin1String("mA") && m >= 1000.0) {

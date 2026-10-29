@@ -278,7 +278,9 @@ DENTRO, una por fila de arriba abajo, los numéricos que diga `observable=`
 —varios, separados por blancos— o, sin él, los que la pieza sugiere: cuatro
 cifras sacadas de la escala que declara cada uno, pegadas a la derecha, en
 rojo de display, y los mA que pasan de 1000, en A (`7.475 V`, `0.367 A`).
-Esos ya no llevan etiqueta. Un nombre que la pieza no tiene se dice; sin
+Una COTA —un numérico en mm, la posición de un carro de una fresadora— lleva
+siempre su signo y una cifra más, como el display de un control numérico
+(`+123.46 mm`). Esos ya no llevan etiqueta. Un nombre que la pieza no tiene se dice; sin
 ninguno que enseñar, se queda sin efecto (prueba I26).
 **`pantalla`** (plan §30) es el de omisión de una pieza que enseña una
 IMAGEN —el TFT de 128x160—: la imagen se pinta encima del elemento, llenando

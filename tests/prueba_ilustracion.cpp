@@ -62,7 +62,8 @@
 //       tabla escribe dentro del elemento, una por fila, la tension y la
 //       corriente que pide `observable=`, con cuatro cifras -los mA, en A-,
 //       pegadas a la derecha, sin etiqueta debajo; lo que la pieza no tiene,
-//       se dice; y sin nada que ensenar, se queda sin efecto.
+//       se dice; y sin nada que ensenar, se queda sin efecto. Una cota en mm,
+//       con su signo siempre y una cifra mas.
 //   I27 el CABEZAL de una fresadora: el efecto `desplaza` de la tabla traslada
 //       el elemento, cada observable de `observable=` por su vector de
 //       `vector=` -en unidades del dibujo por unidad-, sumados; con el van su
@@ -3147,6 +3148,17 @@ int main(int argc, char** argv)
         o.max = 375;
         comprueba(VistaPlaca::texto_display(o, 243.27f) == "243.3 rpm",
                   "las cifras salen de la escala: hasta 375 rpm, una decimal");
+        // Una cota: la posicion de un carro, con su signo y una cifra mas
+        ObservableGui c;
+        c.unidad = "mm";
+        c.min = -300;
+        c.max = 300;
+        comprueba(VistaPlaca::texto_display(c, 123.456f) == "+123.46 mm" &&
+                      VistaPlaca::texto_display(c, -7.5f) == "-7.50 mm" &&
+                      VistaPlaca::texto_display(c, 0.0f) == "+0.00 mm",
+                  "una cota en mm lleva su signo siempre y una cifra mas: " +
+                      VistaPlaca::texto_display(c, 123.456f).toStdString() + ", " +
+                      VistaPlaca::texto_display(c, -7.5f).toStdString());
     }
 
     // -------------------------------------------------------------------------
