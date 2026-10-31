@@ -318,6 +318,20 @@ bool VistaPlaca::pon_capa(const QString& placa_id, bool bandeja, const QByteArra
     // (0,0)-(su caja sin las transformaciones de sus grupos); se le pone en el
     // origen de esa caja y, después, las transformaciones de sus grupos, que
     // `boundsOnElement` no aplica.
+    //
+    // Unos encima de otros, EN EL ORDEN DEL DIBUJO, como el fondo: lo que el
+    // SVG pinta después va encima. Sin esto irían en el orden de las piezas,
+    // y la pieza mecanizada de una fresadora -que se declara después de sus
+    // carros- taparía el carro X que la recorre.
+    QHash<QString, int> orden_svg;
+    {
+        static const QRegularExpression re(QStringLiteral("\\bid\\s*=\\s*\"([^\"]+)\""));
+        auto it = re.globalMatch(QString::fromUtf8(svg));
+        for (int k = 0; it.hasNext(); ++k) {
+            const QString id = it.next().captured(1);
+            if (!orden_svg.contains(id)) orden_svg.insert(id, k);
+        }
+    }
     QSvgRenderer* r = d->renderer();
     for (const EnlaceDibujo& e : inf.enlaces) {
         auto* it = new QGraphicsSvgItem(cp->raiz);
@@ -328,7 +342,7 @@ bool VistaPlaca::pon_capa(const QString& placa_id, bool bandeja, const QByteArra
                          r->transformForElement(e.elemento));
         it->setObjectName(QStringLiteral("vivo:%1").arg(e.pieza));
         it->setData(0, e.pieza);
-        it->setZValue(1);
+        it->setZValue(1.0 + 1e-6 * orden_svg.value(e.elemento, 0));
         const PiezaGui& pz = placa_.piezas[e.pieza];
         QString ayuda = QStringLiteral("%1 · %2").arg(pz.id_local, pz.tipo);
         if (e.por == QLatin1String("tabla"))
@@ -1061,8 +1075,12 @@ void VistaPlaca::prepara(Capa& cp)
                 }
             }
         }
-        // El desplazamiento: cada numérico, con su vector
-        if (w.efecto == QLatin1String("desplaza")) {
+        // El desplazamiento: cada numérico, con su vector. También una pantalla
+        // que lo pide -observable= y vector=-: la imagen de la pieza
+        // mecanizada de una fresadora va con la mesa, que se mueve en Y
+        const bool pantalla_que_va = w.efecto == QLatin1String("pantalla") &&
+                                     !e.observable.trimmed().isEmpty();
+        if (w.efecto == QLatin1String("desplaza") || pantalla_que_va) {
             const QStringList pedidos =
                 e.observable.split(QRegularExpression(QStringLiteral("\\s+")),
                                    Qt::SkipEmptyParts);
@@ -1095,7 +1113,7 @@ void VistaPlaca::prepara(Capa& cp)
                                                    "observable; se queda sin efecto")
                                              .arg(pz.id_local);
                 w.desplaza.clear();
-                w.efecto = QStringLiteral("ninguno");
+                if (!pantalla_que_va) w.efecto = QStringLiteral("ninguno");
             } else {
                 for (int k = 0; k < w.desplaza.size(); ++k) {
                     w.vectores.push_back(QPointF(v[2 * k], v[2 * k + 1]));

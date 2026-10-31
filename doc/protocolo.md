@@ -146,7 +146,12 @@ una `Gnd` y lo que cuelgue de ellas. La ventana dice entonces «sin MCU».
 ```
 protocolo=2
 gui=0.1.0
+imagen_parcial=1
 ```
+
+`imagen_parcial=1` (2026-10, sin subir la versión) dice que la GUI sabe pegar
+los TROZOS de una imagen, `T_IMAGEN_RECT` (§4.1). Una GUI que no lo dice no
+los recibe nunca: le siguen llegando las imágenes enteras.
 
 Si la GUI no sabe hablar ninguna versión que el modelo ofrezca, manda
 `protocolo=0` y cierra; el modelo lo dice por la salida de error y termina con
@@ -437,6 +442,23 @@ Una imagen de 128x160 son 60 kB: más que todo lo demás junto. Por eso no se
 manda si no cambia, y si la ventana no lee y hay **dos** esperando, la
 siguiente no se toma —la muestra de después mandará la que haya—: no hay
 `perdidas` que contar, porque la imagen que llega es siempre la de ahora.
+
+**`T_IMAGEN_RECT`** (`0x0016`, añadido el 2026-10-31 sin subir la versión, y
+solo para una GUI que dijo `imagen_parcial=1` en `T_VERSION`) —
+`CabImagenRect` + `w` x `h` píxeles RGB888, por filas: **el rectángulo que ha
+cambiado** desde la anterior que salió de esa imagen, entera o a trozos.
+`ancho` y `alto` son los de la imagen entera, para comprobar que es la que se
+tiene; `x`, `y`, `w` y `h`, los del trozo; un trozo vacío (0 x 0) cambia solo la
+luz. La primera tras una suscripción va siempre entera, en `T_IMAGEN`, y
+también la que cambia en más de media imagen. Como salen en el orden en que se
+tomaron, pegarlos uno detrás de otro sobre la última entera da siempre la de
+ahora, aunque la ventana vaya atrasada. Uno que se sale de la imagen, o de una
+imagen que no ha llegado entera, se ignora y se dice.
+
+Es lo que hace barata la pieza mecanizada de una fresadora
+(`parts/pieza.h` de `mcu-sim`): cada instantánea cambia unas pocas celdas de
+una imagen de 288 kB. Once segundos de una ranura con instantáneas cada 5 ms son
+196 MB en imágenes enteras y 319 kB a trozos.
 
 **`T_AVISO`** — `CabAviso` + el `id` de `SC_REPORT` + el texto. Es la tubería por
 la que sale todo lo que hoy va a la consola: los avisos de «esto no está

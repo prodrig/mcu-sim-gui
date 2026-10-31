@@ -271,7 +271,14 @@ elemento se mueve con dos ejes sin componer grupos anidados (fase F0 de la CNC
 de `mcu-sim`, `doc/analisis_cnc.md` §9 allí). No se mueve hasta tener los
 valores de todos; con él van su halo y su contorno de alarma, y lo que lo
 mueve no lleva etiqueta. Un vector que no casa, o un observable que la pieza no
-tiene, se dice, y se queda sin efecto (prueba I27).
+tiene, se dice, y se queda sin efecto (prueba I27). Una **`pantalla`** también
+se desplaza si la tabla le da `observable=` y `vector=`, y su imagen va con
+ella: la de la pieza mecanizada de una fresadora, que va con la mesa
+(`observable="mesa" vector="0 1.5"`, fase F4; prueba I28).
+**Unos encima de otros**, los elementos vivos se apilan en el ORDEN DEL DIBUJO,
+como el fondo: lo que el SVG pinta después va encima, y no lo que se declaró
+después en la placa. Así el carro X de una fresadora, dibujado después de la
+pieza, la recorre por encima aunque la pieza se declare después de él (I28).
 **`display`** solo lo pone la tabla: la caja del elemento es el display de un
 aparato —el de la fuente de laboratorio de `mcu-sim`—, y la ventana escribe
 DENTRO, una por fila de arriba abajo, los numéricos que diga `observable=`
