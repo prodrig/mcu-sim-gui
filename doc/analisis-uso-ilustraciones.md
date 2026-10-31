@@ -260,14 +260,27 @@ Los efectos también salen de la declaración, no del tipo:
 `brillo`, `opacidad`, `color`, `visible`, `texto`; y más adelante `rotacion`
 para el servo o el motor que `doc/analisis_gui.md` de `mcu-sim` ya preveía.
 Hoy la tabla admite `brillo`, `hundido`, `giro`, `pantalla`, `angulo`,
-`display` y `ninguno`.
+`display`, `desplaza` y `ninguno`.
+**`desplaza`** solo lo pone la tabla, y es el `angulo` lineal: TRASLADA el
+elemento. Lo mueven los numéricos de `observable=` —uno o varios, separados por
+blancos—, cada uno con su vector de `vector=` —x e y por observable—, en
+unidades del dibujo (las de su viewBox) por unidad del observable, y se suman:
+con `observable="x z" vector="2.5 0  0 -2.5"` el cabezal de una fresadora va
+2,5 a la derecha por cada mm de x y 2,5 arriba por cada mm de z. Así un
+elemento se mueve con dos ejes sin componer grupos anidados (fase F0 de la CNC
+de `mcu-sim`, `doc/analisis_cnc.md` §9 allí). No se mueve hasta tener los
+valores de todos; con él van su halo y su contorno de alarma, y lo que lo
+mueve no lleva etiqueta. Un vector que no casa, o un observable que la pieza no
+tiene, se dice, y se queda sin efecto (prueba I27).
 **`display`** solo lo pone la tabla: la caja del elemento es el display de un
 aparato —el de la fuente de laboratorio de `mcu-sim`—, y la ventana escribe
 DENTRO, una por fila de arriba abajo, los numéricos que diga `observable=`
 —varios, separados por blancos— o, sin él, los que la pieza sugiere: cuatro
 cifras sacadas de la escala que declara cada uno, pegadas a la derecha, en
 rojo de display, y los mA que pasan de 1000, en A (`7.475 V`, `0.367 A`).
-Esos ya no llevan etiqueta. Un nombre que la pieza no tiene se dice; sin
+Una COTA —un numérico en mm, la posición de un carro de una fresadora— lleva
+siempre su signo y una cifra más, como el display de un control numérico
+(`+123.46 mm`). Esos ya no llevan etiqueta. Un nombre que la pieza no tiene se dice; sin
 ninguno que enseñar, se queda sin efecto (prueba I26).
 **`pantalla`** (plan §30) es el de omisión de una pieza que enseña una
 IMAGEN —el TFT de 128x160—: la imagen se pinta encima del elemento, llenando

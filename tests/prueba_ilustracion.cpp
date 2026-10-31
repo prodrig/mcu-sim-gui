@@ -62,7 +62,14 @@
 //       tabla escribe dentro del elemento, una por fila, la tension y la
 //       corriente que pide `observable=`, con cuatro cifras -los mA, en A-,
 //       pegadas a la derecha, sin etiqueta debajo; lo que la pieza no tiene,
-//       se dice; y sin nada que ensenar, se queda sin efecto.
+//       se dice; y sin nada que ensenar, se queda sin efecto. Una cota en mm,
+//       con su signo siempre y una cifra mas.
+//   I27 el CABEZAL de una fresadora: el efecto `desplaza` de la tabla traslada
+//       el elemento, cada observable de `observable=` por su vector de
+//       `vector=` -en unidades del dibujo por unidad-, sumados; con el van su
+//       halo y su contorno, y lo que lo mueve no lleva etiqueta; sin un
+//       vector que case, o con un observable que la pieza no tiene, se dice y
+//       se queda sin efecto.
 //   I14 (plan §32) el aspa de un servo: el efecto `angulo`, el de omisión de
 //       una pieza que sugiere un numérico en grados -gira tantos grados como
 //       diga, a la derecha los positivos, sobre el centro de su caja, que un
@@ -3141,6 +3148,102 @@ int main(int argc, char** argv)
         o.max = 375;
         comprueba(VistaPlaca::texto_display(o, 243.27f) == "243.3 rpm",
                   "las cifras salen de la escala: hasta 375 rpm, una decimal");
+        // Una cota: la posicion de un carro, con su signo y una cifra mas
+        ObservableGui c;
+        c.unidad = "mm";
+        c.min = -300;
+        c.max = 300;
+        comprueba(VistaPlaca::texto_display(c, 123.456f) == "+123.46 mm" &&
+                      VistaPlaca::texto_display(c, -7.5f) == "-7.50 mm" &&
+                      VistaPlaca::texto_display(c, 0.0f) == "+0.00 mm",
+                  "una cota en mm lleva su signo siempre y una cifra mas: " +
+                      VistaPlaca::texto_display(c, 123.456f).toStdString() + ", " +
+                      VistaPlaca::texto_display(c, -7.5f).toStdString());
+    }
+
+    // -------------------------------------------------------------------------
+    // I27: el cabezal de una fresadora, que se desplaza con dos ejes
+    // -------------------------------------------------------------------------
+    std::printf("I27 El cabezal de una fresadora: el efecto desplaza\n");
+    {
+        const char* PLACA_CNC =
+            "<placa nombre=\"cnc\">\n"
+            "  <componente tipo=\"Eje\" id=\"CAB\"><pin nombre=\"pin\" nodo=\"PA0\"/></componente>\n"
+            "  <componente tipo=\"Eje\" id=\"MAL\"><pin nombre=\"pin\" nodo=\"PA1\"/></componente>\n"
+            "  <componente tipo=\"Eje\" id=\"FALTA\"><pin nombre=\"pin\" nodo=\"PA2\"/></componente>\n"
+            "  <ilustracion>\n"
+            "    <enlace pieza=\"CAB\" elemento=\"CAB\" efecto=\"desplaza\" observable=\"x z\" "
+            "vector=\"2.5 0  0 -2.5\"/>\n"
+            "    <enlace pieza=\"MAL\" elemento=\"MAL\" efecto=\"desplaza\" observable=\"x\" "
+            "vector=\"1 2 3\"/>\n"
+            "    <enlace pieza=\"FALTA\" elemento=\"FALTA\" efecto=\"desplaza\" observable=\"y\" "
+            "vector=\"0 1\"/>\n"
+            "  </ilustracion>\n"
+            "</placa>\n";
+        const char* CAT_CNC =
+            "<catalogo>\n"
+            "  <pieza idx=\"0\" id=\"CAB\" tipo=\"Eje\">\n"
+            "    <observable idx=\"0\" id_obs=\"0\" nombre=\"x\" unidad=\"mm\" min=\"0\" max=\"300\" interesante=\"si\"/>\n"
+            "    <observable idx=\"1\" id_obs=\"1\" nombre=\"z\" unidad=\"mm\" min=\"-72\" max=\"0\" interesante=\"si\"/>\n"
+            "    <observable idx=\"2\" id_obs=\"2\" nombre=\"tope\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\" alarma=\"si\"/>\n"
+            "    <observable idx=\"3\" id_obs=\"3\" nombre=\"rpm\" unidad=\"rpm\" min=\"-600\" max=\"600\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "  <pieza idx=\"1\" id=\"MAL\" tipo=\"Eje\">\n"
+            "    <observable idx=\"0\" id_obs=\"4\" nombre=\"x\" unidad=\"mm\" min=\"0\" max=\"300\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "  <pieza idx=\"2\" id=\"FALTA\" tipo=\"Eje\">\n"
+            "    <observable idx=\"0\" id_obs=\"5\" nombre=\"x\" unidad=\"mm\" min=\"0\" max=\"300\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "</catalogo>\n";
+        const char* DIBUJO_CNC =
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 200\">\n"
+            "  <rect x=\"0\" y=\"0\" width=\"400\" height=\"200\" fill=\"#cfd8dc\"/>\n"
+            "  <rect id=\"CAB\" x=\"20\" y=\"100\" width=\"30\" height=\"40\" fill=\"#455a64\"/>\n"
+            "  <rect id=\"MAL\" x=\"300\" y=\"20\" width=\"20\" height=\"20\" fill=\"#808080\"/>\n"
+            "  <rect id=\"FALTA\" x=\"340\" y=\"20\" width=\"20\" height=\"20\" fill=\"#808080\"/>\n"
+            "</svg>\n";
+        const PlacaGui p = placa_de(PLACA_CNC, CAT_CNC);
+        comprueba(p.tabla_de(QString()).size() == 3 &&
+                      p.tabla_de(QString())[0].vector == "2.5 0  0 -2.5",
+                  "la tabla trae el vector= de cada enlace, tal cual");
+        QString e;
+        std::unique_ptr<VistaPlaca> v(VistaPlaca::crea(p, QString(), DIBUJO_CNC, p.tabla_de(QString()), e));
+        comprueba(v != nullptr, "la vista se construye " + e.toStdString());
+        if (!v) return resultado();
+        v->resize(800, 400);
+        v->show();
+        espera([] { return false; }, 50);
+        const QString av = v->informe().avisos.join(" | ");
+        comprueba(v->efecto(0) == "desplaza" && v->efecto(1) == "ninguno" &&
+                      v->efecto(2) == "ninguno" &&
+                      av.contains("MAL: el efecto «desplaza» necesita") &&
+                      av.contains("FALTA: «desplaza» pide «y»"),
+                  "el cabezal se desplaza; el de un vector que no casa y el que pide un "
+                  "observable que no tiene, sin efecto, y se dice: " + av.toStdString());
+        comprueba(!v->etiqueta(0) && !v->etiqueta(1) && v->etiqueta(3),
+                  "x y z no llevan etiqueta -ya se ven-; las rpm, si");
+        QGraphicsSvgItem* cab = v->vivo(0);
+        const QPointF p0 = cab->pos();
+        v->pon_valor(0, 10.f);
+        comprueba(cab->pos() == p0,
+                  "con solo x, todavia no se mueve: espera a tener los dos");
+        v->pon_valor(1, -4.f);
+        comprueba(cab->pos() == QPointF(25, 10),
+                  "x = 10 mm y z = -4 mm: 25 a la derecha y 10 abajo (" +
+                      std::to_string(cab->pos().x()) + ", " + std::to_string(cab->pos().y()) + ")");
+        v->pon_valor(0, 100.f);
+        v->pon_valor(1, 0.f);
+        const QRectF en_escena = cab->sceneBoundingRect();
+        comprueba(cab->pos() == QPointF(250, 0) && std::abs(en_escena.left() - 270) < 0.01,
+                  "x = 100 mm: 250 a la derecha, y el elemento esta ahi en la escena");
+        v->pon_valor(2, 1.f);
+        QGraphicsRectItem* contorno = nullptr;
+        for (QGraphicsItem* h : cab->parentItem()->childItems())
+            if (auto* r = dynamic_cast<QGraphicsRectItem*>(h))
+                if (r->isVisible() && r->pen().color() == QColor(0xc6, 0x28, 0x28)) contorno = r;
+        comprueba(contorno && contorno->pos() == QPointF(250, 0) &&
+                      contorno->sceneBoundingRect().contains(en_escena),
+                  "y su contorno de alarma va con el: rodea el elemento donde esta ahora");
     }
 
     return resultado();

@@ -1061,6 +1061,49 @@ void VistaPlaca::prepara(Capa& cp)
                 }
             }
         }
+        // El desplazamiento: cada numérico, con su vector
+        if (w.efecto == QLatin1String("desplaza")) {
+            const QStringList pedidos =
+                e.observable.split(QRegularExpression(QStringLiteral("\\s+")),
+                                   Qt::SkipEmptyParts);
+            const QStringList nums =
+                e.vector.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+            QVector<double> v;
+            bool ok = true;
+            for (const QString& n : nums) {
+                bool b = false;
+                v.push_back(n.toDouble(&b));
+                ok = ok && b && std::isfinite(v.back());
+            }
+            QStringList faltan;
+            for (const QString& n : pedidos) {
+                int id = -1;
+                for (const ObservableGui& o : pz.observables)
+                    if (o.nombre == n && !o.alarma && !es_01(o)) { id = o.id_obs; break; }
+                if (id >= 0) w.desplaza.push_back(id);
+                else faltan << n;
+            }
+            if (!faltan.isEmpty())
+                cp.informe.avisos << QObject::tr("%1: «desplaza» pide «%2», que la pieza no "
+                                               "tiene (o no son numéricos)")
+                                         .arg(pz.id_local, faltan.join(QStringLiteral(", ")));
+            if (pedidos.isEmpty() || !faltan.isEmpty() || !ok ||
+                v.size() != 2 * pedidos.size()) {
+                if (faltan.isEmpty())
+                    cp.informe.avisos << QObject::tr("%1: el efecto «desplaza» necesita "
+                                                   "observable= y vector=, dos números por "
+                                                   "observable; se queda sin efecto")
+                                             .arg(pz.id_local);
+                w.desplaza.clear();
+                w.efecto = QStringLiteral("ninguno");
+            } else {
+                for (int k = 0; k < w.desplaza.size(); ++k) {
+                    w.vectores.push_back(QPointF(v[2 * k], v[2 * k + 1]));
+                    const int id = w.desplaza[k];
+                    rotulos.removeIf([&](const ObservableGui* o) { return o->id_obs == id; });
+                }
+            }
+        }
         // Una pieza que enseña una imagen la enseña, si la tabla no dice otra cosa
         if (w.efecto.isEmpty() && !pz.imagenes.isEmpty()) w.efecto = QStringLiteral("pantalla");
         if (w.efecto == QLatin1String("pantalla") && pz.imagenes.isEmpty()) {
@@ -1075,6 +1118,7 @@ void VistaPlaca::prepara(Capa& cp)
                                    w.efecto != QLatin1String("pantalla") &&
                                    w.efecto != QLatin1String("angulo") &&
                                    w.efecto != QLatin1String("display") &&
+                                   w.efecto != QLatin1String("desplaza") &&
                                    w.efecto != QLatin1String("ninguno"))) {
             if (!e.efecto.isEmpty())
                 cp.informe.avisos << QObject::tr("%1: el efecto «%2» no existe; se usa el que "
@@ -1151,9 +1195,19 @@ void VistaPlaca::prepara(Capa& cp)
 
 // El texto de una fila de un display: cuatro cifras, con su unidad; los mA
 // que pasan de 1000, en A. Las cifras salen de la escala que declara el
-// observable, como en un aparato, que no cambia de decimales a cada lectura
+// observable, como en un aparato, que no cambia de decimales a cada lectura.
+// Una COTA -en mm, la posicion de un carro de una fresadora- lleva su signo
+// siempre y una cifra mas: +123.45 mm, como el display de un control numerico
 QString VistaPlaca::texto_display(const ObservableGui& o, float valor)
 {
+    if (o.unidad == QLatin1String("mm")) {
+        const double m = std::max(std::abs(o.min), std::abs(o.max));
+        int dec = 4;
+        if (m >= 1.0) dec = std::clamp(4 - int(std::floor(std::log10(m))), 0, 4);
+        QString t = QString::number(double(valor), 'f', dec);
+        if (!t.startsWith(QLatin1Char('-'))) t.prepend(QLatin1Char('+'));
+        return t + QStringLiteral(" mm");
+    }
     double v = double(valor), m = std::max(std::abs(o.min), std::abs(o.max));
     QString u = o.unidad;
     if (u == QLatin1String("mA") && m >= 1000.0) {
@@ -1327,6 +1381,23 @@ void VistaPlaca::repinta(Viva& w)
         const double v = std::clamp(double(w.valores.value(quint16(w.giro))), w.g_min, w.g_max);
         const double ang = 360.0 * (v - w.g_min) / (w.g_max - w.g_min + 1.0);
         if (w.item->rotation() != ang) w.item->setRotation(ang);
+    }
+    // El desplazamiento: la suma de cada numérico por su vector. Con el
+    // elemento van su halo y su contorno
+    if (!w.desplaza.isEmpty()) {
+        QPointF d(0, 0);
+        bool todos = true;
+        for (int k = 0; k < w.desplaza.size(); ++k) {
+            const quint16 id = quint16(w.desplaza[k]);
+            if (!w.valores.contains(id)) { todos = false; continue; }
+            const double x = double(w.valores.value(id));
+            if (std::isfinite(x)) d += w.vectores[k] * x;
+        }
+        if (todos && w.item->pos() != d) {
+            w.item->setPos(d);
+            if (w.halo) w.halo->setPos(d);
+            if (w.contorno) w.contorno->setPos(d);
+        }
     }
     // La alarma
     bool alarma = false;
