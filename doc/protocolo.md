@@ -1,7 +1,7 @@
 # El protocolo entre `mcu-sim` y `mcu-sim-gui`
 
-Versión **1**. La definición ejecutable está en `src/protocolo.h`; esto es lo
-que ese fichero no puede decir: el porqué, la máquina de estados y qué pasa
+Versión **2** (la 1 se sigue hablando: §3). La definición ejecutable está en
+`src/protocolo.h`; esto es lo que ese fichero no puede decir: el porqué, la máquina de estados y qué pasa
 cuando algo va mal.
 
 > **Las copias vendidas.** `mcu-sim` lleva su propia copia de `src/protocolo.h`
@@ -165,6 +165,14 @@ existía —no por añadir un mensaje, que se salta por longitud—:
 | :--- | :--- |
 | 1 | La primera |
 | 2 | (2026-10-05) `T_PLACA` puede traer un `<sistema>`: varias placas enchufadas entre sí |
+
+Y lo que se ha añadido **sin subir la versión**, porque una ventana o un
+`mcu-sim` anteriores lo ignoran o no lo piden:
+
+| Cuándo | Qué |
+| :--- | :--- |
+| 2026-10-31 | `T_IMAGEN_RECT`, los trozos de una imagen, solo para una GUI que dice `imagen_parcial=1` en `T_VERSION` (§4.1) |
+| 2026-11-03 | `<vista3d>` en `T_PLACA`, la forma en 3D de una placa, y la imagen `alturas` de una `Pieza` (abajo) |
 
 Las dos se hablan: una ventana de la 2 con un `mcu-sim` de la 1 elige la 1, y
 un `mcu-sim` de la 2 con una ventana de la 1 le manda un sistema con la raíz

@@ -16,7 +16,7 @@ microcontroladores. Son **dos programas**:
   firmware dentro;
 * **`mcu-sim-gui`** lo lanza, lo enseña —un panel con cada pieza y una
   ilustración de las placas, con los LEDs que se encienden y los botones que
-  se pulsan— y deja tocarlo.
+  se pulsan, y si la placa lo declara, una vista 3D— y deja tocarlo.
 
 Hacen falta los dos. Se descargan de sus propias *Releases* —cada paquete
 dice cómo arrancarlo en [`notas_release.md`](notas_release.md)— o se
@@ -83,6 +83,12 @@ ejemplo están en `placas/` de `mcu-sim`:
 | `stm32f3discovery_d.xml` | La misma, de la revisión D: otros sensores, el mismo firmware | el mismo |
 | `dos_f3discovery.xml` | Dos F3DISCOVERY cableadas, para los ejemplos de ST de dos placas | el que dice el XML |
 | `stm32f3discovery_boot0.xml` | La F3DISCOVERY con BOOT0 a VDD —arranca el cargador de sistema— y un adaptador FT232RL en la USART1, para `stm32flash` | ninguno: se carga por el cargador |
+| `msp_exp432p401r.xml` | La LaunchPad MSP-EXP432P401R de Texas Instruments | `verif/fw/msp432p4/p4_demo/p4_demo.out`, el ELF de Code Composer Studio |
+| `msp_exp432p401r_edumkii.xml` y `msp_exp432e401y_edumkii.xml` | Las LaunchPad del MSP432P401R y del MSP432E401Y con la BoosterPack EDUMKII: joystick, pantalla, RGB, zumbador... | el que dice el XML |
+| `nucleo_f446re_encoder_lcd_servo_2xmcc.xml` | La Nucleo con el servo, el encoder y la pantalla, y además un L298N con dos motorreductores con su encoder y una fuente de laboratorio, que enseña en su display lo que gastan | el que dice el XML |
+| `cnc_3020.xml` | **La fresadora CNC 3020** entera: la Nucleo, la CNC Shield, tres drivers A4988, los motores, los husillos, los carros, el cabezal y la pieza (abajo) | el que dice el XML: `verif/fw/cnc/cnc.bin` |
+| `nucleo_ihm07m1_db42.xml` | La Nucleo con la X-NUCLEO-IHM07M1 y un motor BLDC: seis pasos, senoidal o FOC, mandados por el puerto serie | el que dice el XML |
+| `eje_canopen.xml` | Un eje de fresadora con su controlador por CANopen, y la Nucleo de maestro | el que dice el XML |
 
 **La postura de la STM32F3DISCOVERY.** La pieza `MOV` es, en el dibujo, la
 aguja de rumbo que hay entre U5 y U3 —gira con el rumbo: marca hacia dónde
@@ -100,6 +106,19 @@ ejemplo `BSP` de ST: B1 cuando acabe la vuelta de la rosa y, al inclinar la
 placa, se enciende el LED del lado que baja; B1 dos veces más, lo mismo con el
 giróscopo, mientras se mueve.
 
+**La fresadora 3020** se maneja con **G-code por su puerto serie** (§6): el
+firmware de ejemplo habla como un GRBL, así que vale un terminal o un
+programa como Candle, UGS o CNCjs. Por ejemplo:
+* `$H` lleva los ejes a casa;
+* `G0 X50 Y30` va ahí en rápido, y `G1 X80 F600`, a 600 mm/min;
+* `M3 S1000` enciende el cabezal y `M5` lo apaga;
+* `?` dice el estado.
+
+En la ilustración se ve en planta y en alzado, con los carros que se mueven,
+las cotas en sus displays y lo que la fresa va quitando de la pieza; y en tres
+dimensiones, en la vista 3D (§4.4). Lo que entiende el firmware, al principio
+de `verif/fw/cnc/main.c` de `mcu-sim`.
+
 Para un montaje propio se copia uno parecido y se cambia: el formato está en
 `doc/parts.md` de `mcu-sim` ([anexo B](#anexo-b-el-resto-de-la-documentación)).
 
@@ -107,7 +126,9 @@ Para un montaje propio se copia uno parecido y se cambia: el formato está en
 
 Es **la imagen binaria** que el compilador genera para el chip: un `.bin`
 —o un Intel HEX, `.hex`— que se carga a partir del principio de la Flash
-(0x08000000). En STM32CubeIDE se genera solo con *Project ▸ Properties ▸
+(0x08000000 en un STM32). También valen el **ELF** que deja el IDE —el `.out`
+de Code Composer Studio, el `.elf` de STM32CubeIDE—, que dice él mismo dónde
+va cada cosa, y el TI-TXT (`.txt`) de las herramientas de TI. En STM32CubeIDE se genera solo con *Project ▸ Properties ▸
 C/C++ Build ▸ Settings ▸ MCU Post build outputs ▸ Convert to binary file*, y
 sale junto al `.elf`, en `Debug/`.
 
@@ -155,10 +176,15 @@ vista mientras se trabaja en el IDE.
 ### 4.3 La ilustración
 
 *Vista ▸ Ilustración* (**Ctrl+I**) la abre en **su propia ventana**: cada
-placa con su dibujo, y sobre él los LEDs que brillan, los botones que se
-hunden al pulsarlos, el mando del encoder —que gira con la rueda del ratón—,
-el aspa del servo y la imagen de la pantalla. Ctrl+rueda acerca o aleja, y
-«Ajustar» vuelve a enseñarlo todo.
+placa con su dibujo, y sobre él lo que pasa:
+* los LEDs que brillan y los botones que se hunden al pulsarlos;
+* el mando del encoder, que gira con la rueda del ratón, y el aspa del servo;
+* la imagen de la pantalla;
+* los displays de los aparatos —lo que gasta la fuente de laboratorio, las
+  cotas de la fresadora—, escritos dentro;
+* los carros de la fresadora, que se mueven, y la pieza, con lo mecanizado.
+
+Ctrl+rueda acerca o aleja, y «Ajustar» vuelve a enseñarlo todo.
 
 En un sistema, las **líneas entre placas** —un conector enchufado, un
 hilo— nacen escondidas: el botón **«Conexiones»** de cada placa enseña las
@@ -196,8 +222,10 @@ se piden con la ventana abierta: cerrada, no cuestan nada.
 
 La vista 3D usa **Qt Quick 3D**, y la ventana puede compilarse sin ella
 (`MCU_SIM_GUI_3D=OFF`, en el `README.md`): entonces la ventana 3D dice que esa
-compilación no la lleva. Si no hay con qué dibujar en 3D —una máquina sin
-OpenGL—, lo dice también.
+compilación no la lleva. Dibujarla depende de la tarjeta gráfica de cada
+máquina —OpenGL en Linux, Direct3D 11 en Windows, Metal en macOS—: en una sin
+nada de eso, la ventana 3D se queda en blanco o, con el Qt 6.4 de Linux, el
+programa puede cerrarse al abrirla.
 
 Los paquetes de las *Releases* la llevan, en las tres plataformas, con todo
 lo que necesita dentro. `mcu-sim-gui --comprueba-3d` dice si se puede cargar
@@ -273,6 +301,8 @@ problemas típicos y cómo añadir un puente a una placa propia están en
 | Un LED parpadea demasiado deprisa para verlo | El ritmo: *tiempo real* o *a la mitad* |
 | El terminal no recibe lo primero que imprime el programa | `--espera-terminal` (§6) |
 | No se puede mover ninguna placa en la ilustración | Hay que arrancar la ventana con `--edit` (§4.3) |
+| *Vista ▸ Vista 3D* está apagado | La placa no declara su forma en 3D: hoy solo la lleva la fresadora (§4.4) |
+| La ventana 3D dice que no puede cargar su escena | `mcu-sim-gui --comprueba-3d` dice qué falta y dónde lo ha buscado (§4.4); o esa compilación no lleva la vista 3D |
 
 ---
 
@@ -282,6 +312,7 @@ problemas típicos y cómo añadir un puente a una placa propia están en
 
 ```
 mcu-sim-gui [--config FICHERO] [--puerto N] [--lanza] [--edit]
+mcu-sim-gui --comprueba-3d
 ```
 
 | Opción | Qué hace |
@@ -290,6 +321,7 @@ mcu-sim-gui [--config FICHERO] [--puerto N] [--lanza] [--edit]
 | `--puerto N` | Dónde escucha la ventana, por encima de la configuración; 3344 por omisión. Si está cogido, escucha en otro sin decir nada y se lo pasa a `mcu-sim` |
 | `--lanza` | Lanza `mcu-sim` nada más abrir, con la configuración, sin diálogo |
 | `--edit` | Deja **editar la ilustración**: colocar, girar y escalar las placas, el lienzo, las líneas en tramos rectos, guardarlo en el XML y abrir otro dibujo. Sin ella, solo se enseñan y se esconden las conexiones |
+| `--comprueba-3d` | Carga la vista 3D, sin abrir la ventana, dice si se puede y de dónde saca sus módulos de QML, y sale: 0 si se carga, 1 si no, 3 si esta compilación no la lleva (§4.4) |
 | `-h`, `--help` | La ayuda; `--help-all`, también las opciones de Qt |
 | `-v`, `--version` | La versión |
 
@@ -316,10 +348,18 @@ se use. Las de hoy:
 | `--mcu TIPO` | El MCU, si la placa no lo dice; si lo dice, manda sobre él |
 | `--gdb` | El servidor de GDB, por los pines SWD (§5) |
 | `--gdb-dap` | El servidor de GDB, directo al núcleo: más rápido (§5) |
-| `--port N` | El puerto del servidor de GDB; 3333 por omisión |
+| `--openocd` | Una sonda SWD para OpenOCD (`remote_bitbang`) en los pines; puerto 3335 si no se dice `--port` |
+| `--cmsis-dap` | Una sonda CMSIS-DAP por TCP para OpenOCD (`cmsis-dap tcp`); puerto 4441 si no se dice `--port` |
+| `--port N` | El puerto del servidor de GDB o de la sonda; 3333 por omisión |
 | `--traza-gdb` | Escribe cada paquete que llega del depurador: para ver qué pasa cuando no conecta |
 | `--serie ID=DESTINO` | Adónde da cada puente serie (§6); varios, separados por «;» |
 | `--espera-terminal` | No arranca el MCU hasta que haya un terminal en cada puente serie por red |
+| `--usb [ID=]DESTINO` | El USB de un MSP432E4 o de un STM32F303 como dispositivo: un PC que enumera el puerto serie USB del firmware y lo lleva a un puerto, como `--serie` |
+| `--swo DESTINO` y `--swo-bitrate N` | Adónde va la traza SWO de la sonda XDS110 de la placa, y a cuántos bit/s |
+| `--rom [ID=]VALOR` | La ROM de DriverLib de un MSP432: la sustituta (`r1`, por omisión), `ninguna`, o la de TI de un fichero |
+| `--bsl [ID=]VALOR` | El cargador de arranque de un MSP432P4: el sustituto, ninguno o el de TI |
+| `--tlv [ID=]FICHERO` | La tabla TLV de calibración de un MSP432P4, volcada de una placa |
+| `--eth [ID=]DESTINO` | El Ethernet de un MSP432E4: en memoria, o hacia un servidor con el protocolo de red de QEMU |
 | `--valida` | Solo comprueba el circuito, sin simular |
 | `--ondas` | Con la onda cuadrada de los relojes internos |
 
@@ -356,6 +396,9 @@ ritmo lo dice ella—. Lo que no esté, en **A mano**. La referencia completa:
 * [`src/cubeide/README.md`](../../mcu-sim/src/cubeide/README.md): depurar con
   STM32CubeIDE, paso a paso y error a error;
 * [`doc/multi_mcu.md`](../../mcu-sim/doc/multi_mcu.md): placas con varios MCUs;
+* [`doc/analisis_cnc.md`](../../mcu-sim/doc/analisis_cnc.md): la fresadora
+  CNC, fase a fase: los motores, sus drivers, la mecánica, el firmware, la
+  pieza y la vista 3D;
 * [`doc/compilacion.md`](../../mcu-sim/doc/compilacion.md) y
   [`doc/ejecutables.md`](../../mcu-sim/doc/ejecutables.md): compilarlo y sus
   paquetes.

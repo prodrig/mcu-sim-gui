@@ -15,6 +15,12 @@
 > `mcu-sim` (`T_ILUSTRACION`) y la tabla de enlaces llega en `T_PLACA`.
 > Después (plan §27), la ilustración dejó de ser una pestaña junto al panel:
 > va en **su propia ventana**, para aprovechar mejor la pantalla.
+>
+> **Hoy (2026-11-03)** la tabla de enlaces admite, además de los efectos de
+> las fases, `display` y `desplaza`, y una `pantalla` que se desplaza
+> (§8; plan §49 y §50). La **vista 3D** de la fresadora no es una
+> ilustración: va en otra ventana, con Qt Quick 3D, y la declara el
+> `<vista3d>` de la placa (plan §51).
 
 ## 1. La pregunta
 
