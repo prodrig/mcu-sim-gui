@@ -217,6 +217,33 @@ Si CMake no encuentra Qt, se le dice dónde está:
 cmake -B build -DCMAKE_PREFIX_PATH=/ruta/a/Qt/6.7.0/gcc_64
 ```
 
+**La vista 3D** (*Vista ▸ Vista 3D*, la fresadora de `mcu-sim` en tres
+dimensiones) usa además **Qt Quick 3D**:
+* los módulos `Quick`, `QuickWidgets` y `Quick3D`;
+* en tiempo de ejecución, los módulos de QML `QtQuick3D` y
+  `QtQuick3D.Helpers`.
+
+En Ubuntu son los paquetes `qt6-declarative-dev`, `qt6-quick3d-dev`,
+`qt6-shadertools-dev`, `qml6-module-quick3d`, `qml6-module-quick3d-helpers`,
+`qml6-module-qtquick` y `qml6-module-qtquick-window`.
+
+La opción `MCU_SIM_GUI_3D` dice qué se hace:
+
+| Valor | Qué hace |
+| :--- | :--- |
+| `AUTO` (por omisión) | La compila si encuentra Qt Quick 3D |
+| `ON` | La exige |
+| `OFF` | No la compila |
+
+Sin ella, todo lo demás es igual:
+
+```bash
+cmake -B build -DMCU_SIM_GUI_3D=OFF
+```
+
+Los paquetes de Windows y de macOS se hacen todavía sin ella: falta que lleven
+los módulos de QML.
+
 ### En Windows con MSYS2: tres trampas, y la tercera es la que muerde
 
 Las tres están comprobadas a base de tropezar con ellas. Van en el orden en que

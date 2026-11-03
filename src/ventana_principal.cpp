@@ -28,6 +28,10 @@
 #include <QWidget>
 
 #include "dialogo_lanzamiento.h"
+#include "escena3d.h"
+#ifdef MCU_SIM_GUI_3D
+#include "vista3d.h"
+#endif
 #include "panel.h"
 
 namespace mcusim {
@@ -165,6 +169,13 @@ void VentanaPrincipal::construye()
     act_ver_ilus_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
     act_ver_ilus_->setEnabled(false);
     connect(act_ver_ilus_, &QAction::toggled, this, [this](bool si) { ver_ilustracion(si); });
+    act_ver_3d_ = vista->addAction(tr("Vista &3D"));
+    act_ver_3d_->setObjectName(QStringLiteral("ver_3d"));
+    act_ver_3d_->setCheckable(true);
+    act_ver_3d_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_3));
+    act_ver_3d_->setEnabled(false);
+    act_ver_3d_->setToolTip(tr("La maquina en 3D, si la placa la declara (<vista3d>)"));
+    connect(act_ver_3d_, &QAction::toggled, this, [this](bool si) { ver_3d(si); });
     act_dibujo_ = vista->addAction(tr("Abrir &dibujo de la placa..."), this,
                                    [this] { elige_dibujo(); });
     act_dibujo_->setObjectName(QStringLiteral("abrir_dibujo"));
@@ -248,11 +259,13 @@ void VentanaPrincipal::construye()
     connect(&ses_, &Sesion::muestra, this, [this](quint16 id, float v) {
         if (panel_) panel_->pon_valor(id, v);
         if (ilus_) ilus_->pon_valor(id, v);
+        if (escena3d_) escena3d_->pon_valor(id, v);
     });
     connect(&ses_, &Sesion::imagen, this,
             [this](quint16 id, quint64, int an, int al, const QByteArray& rgb, float b) {
                 if (panel_) panel_->pon_imagen(id, an, al, rgb, b);
                 if (ilus_) ilus_->pon_imagen(id, an, al, rgb, b);
+                if (escena3d_) escena3d_->pon_imagen(id, an, al, rgb);
             });
     connect(&ses_, &Sesion::aviso, this, &VentanaPrincipal::pon_aviso);
     connect(&ses_, &Sesion::estado_modelo, this, [this](quint32, quint64 t, double p, quint64 d) {
@@ -455,6 +468,12 @@ bool VentanaPrincipal::eventFilter(QObject* o, QEvent* e)
         act_ver_ilus_->setChecked(false);
         return true;
     }
+    // Y la de la vista 3D, igual
+    if (o == ventana3d_ && e->type() == QEvent::Close) {
+        e->ignore();
+        act_ver_3d_->setChecked(false);
+        return true;
+    }
     return QMainWindow::eventFilter(o, e);
 }
 
@@ -589,6 +608,66 @@ void VentanaPrincipal::pon_placa()
     // Con un dibujo de verdad, la ventana se abre sola (`pon_dibujos`); sin
     // él, se queda como estuviera: abierta, con el generado, si se abrió
     if (ilus_->hay_dibujo()) act_ver_ilus_->setChecked(true);
+
+    // La vista 3D: la escena, si la placa declara una. Su ventana no se abre
+    // sola -dibujar en 3D cuesta, y más sin tarjeta gráfica-: Vista ▸ Vista 3D
+    const bool estaba = act_ver_3d_->isChecked();
+    act_ver_3d_->setChecked(false);
+    delete ventana3d_;
+    ventana3d_ = nullptr;
+    delete escena3d_;
+    escena3d_ = nullptr;
+    if (!p.vistas3d.isEmpty()) {
+        escena3d_ = new Escena3d(p, this);
+        for (const QString& a : escena3d_->avisos) pon_aviso(proto::N_AVISO, 0, tr("3D"), a);
+        if (escena3d_->vacia()) {
+            delete escena3d_;
+            escena3d_ = nullptr;
+        }
+    }
+    act_ver_3d_->setEnabled(escena3d_ != nullptr);
+    if (escena3d_) {
+        statusBar()->showMessage(tr("Esta placa tiene vista 3D: Vista > Vista 3D (Ctrl+3)"));
+        if (estaba) act_ver_3d_->setChecked(true);
+    }
+}
+
+void VentanaPrincipal::ver_3d(bool si)
+{
+    if (!escena3d_) return;
+    if (!si) {
+        if (ventana3d_) ventana3d_->hide();
+        suscribe();                        // sin pedir ya las imágenes de alturas
+        return;
+    }
+    if (!ventana3d_) {
+        ventana3d_ = new QWidget(this, Qt::Window);
+        ventana3d_->setObjectName(QStringLiteral("ventana_3d"));
+        ventana3d_->setWindowTitle(tr("Vista 3D — %1").arg(ses_.placa().nombre));
+        auto* c = new QVBoxLayout(ventana3d_);
+        c->setContentsMargins(0, 0, 0, 0);
+        ventana3d_->installEventFilter(this);
+        if (cfg_.siempre_encima) ventana3d_->setWindowFlag(Qt::WindowStaysOnTopHint, true);
+#ifdef MCU_SIM_GUI_3D
+        auto* v = new Vista3d(escena3d_, ventana3d_);
+        c->addWidget(v);
+        if (!v->error().isEmpty()) pon_aviso(proto::N_AVISO, 0, tr("3D"), v->error());
+        ventana3d_->resize(v->sizeHint());
+#else
+        auto* l = new QLabel(tr("Esta mcu-sim-gui se ha compilado sin Qt Quick 3D, y no "
+                                "tiene la vista 3D. Se construye con ella si CMake encuentra "
+                                "los modulos Quick, QuickWidgets y Quick3D "
+                                "(MCU_SIM_GUI_3D, CMakeLists.txt)."),
+                             ventana3d_);
+        l->setWordWrap(true);
+        l->setMargin(20);
+        c->addWidget(l);
+        ventana3d_->resize(480, 160);
+#endif
+    }
+    ventana3d_->show();
+    ventana3d_->raise();
+    suscribe();                            // ahora, con las imágenes de alturas
 }
 
 void VentanaPrincipal::pon_editable(bool si)
@@ -713,6 +792,11 @@ void VentanaPrincipal::suscribe()
     if (panel_) ids = panel_->pintados();
     if (ilus_)
         for (quint16 id : ilus_->observados())
+            if (!ids.contains(id)) ids.push_back(id);
+    // La vista 3D: lo que mueve sus sólidos siempre -son números, y así la
+    // escena está al día al abrirla-, y sus imágenes de alturas solo si se ve
+    if (escena3d_)
+        for (quint16 id : escena3d_->observados(ventana3d_ && ventana3d_->isVisible()))
             if (!ids.contains(id)) ids.push_back(id);
     if (!ids.isEmpty()) ses_.suscribe(quint64(cfg_.periodo_ms * 1e6 + 0.5), ids);
 }

@@ -167,6 +167,7 @@ bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
     bool raiz = false;
     int  actual = -1;                       // la pieza del <componente> abierto
     int  sub = -1;                          // la <placa id> abierta de un sistema
+    int  v3d = -1;                          // la <vista3d> abierta
     // La placa de un nombre cualificado (`N/CN5` -> `N`)
     auto placa_de = [](const QString& n) {
         const int b = n.indexOf(QLatin1Char('/'));
@@ -183,6 +184,10 @@ bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
         }
         if (t == QXmlStreamReader::EndElement && r.name() == QLatin1String("placa")) {
             sub = -1;
+            continue;
+        }
+        if (t == QXmlStreamReader::EndElement && r.name() == QLatin1String("vista3d")) {
+            v3d = -1;
             continue;
         }
         if (t != QXmlStreamReader::StartElement) continue;
@@ -204,6 +209,20 @@ bool junta_placa(const QByteArray& xml, const QVector<PiezaGui>& catalogo,
             EnlaceTabla e{texto(a, "pieza"), texto(a, "elemento"), texto(a, "efecto"),
                           texto(a, "observable"), texto(a, "vector")};
             (sub >= 0 ? placa.placas[sub].tabla : placa.tabla).push_back(e);
+        } else if (r.name() == QLatin1String("vista3d")) {
+            Vista3dGui v;
+            v.placa = sub >= 0 ? placa.placas[sub].id : QString();
+            v.camara = texto(a, "camara");
+            v.mira = texto(a, "mira");
+            placa.vistas3d.push_back(v);
+            v3d = int(placa.vistas3d.size()) - 1;
+        } else if (v3d >= 0 && (r.name() == QLatin1String("solido") ||
+                                r.name() == QLatin1String("superficie"))) {
+            Elemento3dGui e;
+            e.etiqueta = r.name().toString();
+            for (const QXmlStreamAttribute& x : a)
+                e.attrs.insert(x.name().toString(), x.value().toString());
+            placa.vistas3d[v3d].elementos.push_back(e);
         } else if (r.name() == QLatin1String("placa")) {
             // Una placa DENTRO de un <sistema>, con lo que la describe dentro
             SubPlacaGui s;

@@ -176,6 +176,29 @@ recuerda la próxima vez. Sin `--edit`, la ilustración solo se mira. Cómo se
 edita, en `analisis_disposicion_ilustracion.md`
 ([anexo B](#anexo-b-el-resto-de-la-documentación)).
 
+### 4.4 La vista 3D
+
+Una placa que declara su forma en tres dimensiones —la fresadora 3020 de
+`mcu-sim`, `placas/cnc_3020.xml`— enciende *Vista ▸ Vista 3D* (**Ctrl+3**),
+que la abre en **su propia ventana**:
+* la máquina en cajas y cilindros, con los carros que se mueven y los
+  husillos que giran;
+* la pieza como una superficie, con lo que la fresa va comiendo, del mismo
+  color que en la ilustración.
+
+La cámara se mueve con el ratón:
+* arrastrar gira alrededor de adonde se mira;
+* la rueda acerca y aleja;
+* arrastrar con el botón derecho desplaza.
+
+**«Vista inicial»** vuelve a donde dice la placa. Las alturas de la pieza solo
+se piden con la ventana abierta: cerrada, no cuestan nada.
+
+La vista 3D usa **Qt Quick 3D**, y la ventana puede compilarse sin ella
+(`MCU_SIM_GUI_3D=OFF`, en el `README.md`): entonces la ventana 3D dice que esa
+compilación no la lleva. Si no hay con qué dibujar en 3D —una máquina sin
+OpenGL—, lo dice también.
+
 ## 5. Depurar con GDB o con STM32CubeIDE
 
 `mcu-sim` lleva dentro **un servidor de GDB**: el depurador se conecta a él

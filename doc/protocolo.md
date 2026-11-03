@@ -358,6 +358,24 @@ por observable; si no casa, la ventana deja la pieza sin efecto y lo dice. Una
 ventana anterior no conoce el efecto y le pone el que toca; un `mcu-sim`
 anterior no lo acepta.
 
+**La vista 3D** (fase F8 de la CNC de `mcu-sim`). Junto a su `<ilustracion>`,
+una `<placa>` puede traer un **`<vista3d>`**, como se escribe en la placa
+(`doc/parts.md` §2.6 de `mcu-sim`):
+* `<solido>`: cajas y cilindros;
+* `<superficie>`: la imagen de alturas de una pieza;
+* cada uno, movido por observables con un vector de tres números.
+
+`mcu-sim` lo ha validado ya; que las piezas tengan esos observables y esas
+imágenes lo mira la ventana. La superficie es una imagen más del catálogo,
+`alturas` de una `Pieza`, y llega como las otras (`T_IMAGEN` y
+`T_IMAGEN_RECT`):
+* la altura en centésimas de mm, con el byte alto en el rojo y el bajo en el
+  verde;
+* en el azul, 255 donde la fresa pasó por encima.
+
+Una ventana anterior ignora el elemento; un `mcu-sim` anterior no lo acepta en
+la placa.
+
 **`T_LISTO`** — sin cuerpo. Quiere decir: *la placa está construida, el catálogo
 es el que has recibido, y estoy parado esperándote.*
 
