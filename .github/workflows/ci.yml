@@ -26,6 +26,13 @@
 # paquete lleva sus modulos de QML: el script de cada plataforma los mete y lo
 # comprueba con `mcu-sim-gui --comprueba-3d`, desde el paquete. En Linux,
 # ademas, `prueba_vista3d` la dibuja en una pantalla virtual (xvfb).
+#
+# Y CON UNA ETIQUETA, DOS PAQUETES POR PLATAFORMA: el de siempre, con la vista
+# 3D, y otro SIN ELLA (`-sin-3d`, -DMCU_SIM_GUI_3D=OFF), mas pequeno y sin Qt
+# Quick 3D, para quien no la necesite o no tenga con que dibujarla. Se
+# compila aparte, con sus pruebas, y se comprueba que de verdad no la lleva
+# (`--comprueba-3d` sale con 3). En un push normal solo se hace el primero;
+# para probar los dos sin etiquetar, el CI se lanza a mano (workflow_dispatch).
 # =============================================================================
 name: ci
 
@@ -70,7 +77,7 @@ jobs:
   linux:
     name: Linux (Qt del sistema)
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
 
@@ -133,6 +140,24 @@ jobs:
           name: mcu-sim-gui-linux-x86_64
           path: mcu-sim-gui-linux-x86_64.tar.gz
 
+      - name: Sin la vista 3D (con una etiqueta, o a mano)
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        run: |
+          cmake -G Ninja -B build-sin-3d -DCMAKE_BUILD_TYPE=Release -DMCU_SIM_GUI_3D=OFF \
+                -DMCU_SIM_GUI_VERSION="${VERSION#v}"
+          cmake --build build-sin-3d
+          ctest --test-dir build-sin-3d --output-on-failure
+          rc=0
+          QT_QPA_PLATFORM=offscreen ./build-sin-3d/mcu-sim-gui --comprueba-3d || rc=$?
+          [ "$rc" = 3 ] || { echo "  [FALLO] el de sin 3D dice $rc, no 3"; exit 1; }
+          bash ci/empaqueta-linux.sh build-sin-3d mcu-sim-gui-linux-x86_64-sin-3d.tar.gz
+
+      - uses: actions/upload-artifact@v6
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        with:
+          name: mcu-sim-gui-linux-x86_64-sin-3d
+          path: mcu-sim-gui-linux-x86_64-sin-3d.tar.gz
+
   # ---------------------------------------------------------------------------
   # Windows, con MSYS2 y MinGW-w64: la misma cadena que se usa para `mcu-sim`
   # en Windows (su `doc/compilacion.md` §5), con el Qt que empaqueta MSYS2.
@@ -140,7 +165,7 @@ jobs:
   windows:
     name: Windows (MSYS2 / MinGW-w64)
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         shell: msys2 {0}
@@ -203,6 +228,25 @@ jobs:
           name: mcu-sim-gui-windows-x86_64
           path: mcu-sim-gui-windows-x86_64.zip
 
+      - name: Sin la vista 3D (con una etiqueta, o a mano)
+        # Despues de lo de arriba: el script rehace paquete/
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        run: |
+          cmake -G Ninja -B build-sin-3d -DCMAKE_BUILD_TYPE=Release -DMCU_SIM_GUI_3D=OFF \
+                -DMCU_SIM_GUI_VERSION="${VERSION#v}"
+          cmake --build build-sin-3d
+          ctest --test-dir build-sin-3d --output-on-failure
+          rc=0
+          ./build-sin-3d/mcu-sim-gui.exe --comprueba-3d || rc=$?
+          [ "$rc" = 3 ] || { echo "  [FALLO] el de sin 3D dice $rc, no 3"; exit 1; }
+          bash ci/empaqueta-windows.sh build-sin-3d mcu-sim-gui-windows-x86_64-sin-3d.zip
+
+      - uses: actions/upload-artifact@v6
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        with:
+          name: mcu-sim-gui-windows-x86_64-sin-3d
+          path: mcu-sim-gui-windows-x86_64-sin-3d.zip
+
   # ---------------------------------------------------------------------------
   # macOS, con el Qt de Homebrew. Las dos arquitecturas, con los mismos
   # runners que mcu-sim: aqui no hay codigo que dependa de ella, pero un
@@ -211,7 +255,7 @@ jobs:
   macos:
     name: macOS ${{ matrix.arq }} (Qt de Homebrew)
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -248,6 +292,25 @@ jobs:
           name: mcu-sim-gui-macos-${{ matrix.arq }}
           path: mcu-sim-gui-macos-${{ matrix.arq }}.zip
 
+      - name: Sin la vista 3D (con una etiqueta, o a mano)
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        run: |
+          cmake -G Ninja -B build-sin-3d -DCMAKE_BUILD_TYPE=Release -DMCU_SIM_GUI_3D=OFF \
+                -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" \
+                -DMCU_SIM_GUI_VERSION="${VERSION#v}"
+          cmake --build build-sin-3d
+          ctest --test-dir build-sin-3d --output-on-failure
+          rc=0
+          ./build-sin-3d/mcu-sim-gui.app/Contents/MacOS/mcu-sim-gui --comprueba-3d || rc=$?
+          [ "$rc" = 3 ] || { echo "  [FALLO] el de sin 3D dice $rc, no 3"; exit 1; }
+          bash ci/empaqueta-macos.sh build-sin-3d mcu-sim-gui-macos-${{ matrix.arq }}-sin-3d.zip
+
+      - uses: actions/upload-artifact@v6
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        with:
+          name: mcu-sim-gui-macos-${{ matrix.arq }}-sin-3d
+          path: mcu-sim-gui-macos-${{ matrix.arq }}-sin-3d.zip
+
   # ---------------------------------------------------------------------------
   # PUBLICAR. Solo cuando se empuja una etiqueta `v*`, y solo si TODO lo de
   # arriba esta en verde. `gh release create` con el GITHUB_TOKEN del propio
@@ -269,16 +332,16 @@ jobs:
           path: paquetes
           merge-multiple: true
 
-      - name: Que estan los cuatro
+      - name: Que estan los ocho
+        # Cuatro plataformas, cada una con y sin la vista 3D
         run: |
           ls -la paquetes
-          for f in mcu-sim-gui-linux-x86_64.tar.gz \
-                   mcu-sim-gui-windows-x86_64.zip \
-                   mcu-sim-gui-macos-arm64.zip \
-                   mcu-sim-gui-macos-x86_64.zip; do
-            [ -f "paquetes/$f" ] || { echo "  [FALLO] falta $f"; exit 1; }
+          for p in linux-x86_64.tar.gz windows-x86_64.zip macos-arm64.zip macos-x86_64.zip; do
+            for f in "mcu-sim-gui-$p" "mcu-sim-gui-${p%%.*}-sin-3d.${p#*.}"; do
+              [ -f "paquetes/$f" ] || { echo "  [FALLO] falta $f"; exit 1; }
+            done
           done
-          echo "  [OK  ] los cuatro paquetes"
+          echo "  [OK  ] los ocho paquetes"
           (cd paquetes && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
 
       - name: Crear la Release

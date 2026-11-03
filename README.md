@@ -257,6 +257,15 @@ Cada script lo comprueba cargando la vista 3D desde el paquete, con
 * con el código de salida, 0 si sí, 1 si no, y 3 si esa compilación no lleva
   la vista 3D.
 
+Con una etiqueta, el CI hace además, en cada plataforma, el mismo paquete
+**sin la vista 3D**, y la Release publica los dos:
+* se compila con `-DMCU_SIM_GUI_3D=OFF`, y `--comprueba-3d` confirma con un 3
+  que no la lleva;
+* sus ficheros terminan en `-sin-3d`.
+
+Para probar los dos sin etiquetar, el CI se lanza a mano (*Actions ▸ ci ▸ Run
+workflow*).
+
 Para compilar con Qt Quick 3D en MSYS2 hacen falta, además,
 `mingw-w64-x86_64-qt6-declarative`, `mingw-w64-x86_64-qt6-quick3d` y
 `mingw-w64-x86_64-qt6-shadertools`. En Homebrew, `qt` ya los trae.
