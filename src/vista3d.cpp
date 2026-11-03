@@ -20,6 +20,7 @@
 #include <cstring>
 
 #include "escena3d.h"
+#include "placa.h"
 
 namespace mcusim {
 
@@ -276,6 +277,36 @@ void Vista3d::rehaz_superficies()
 QImage Vista3d::captura()
 {
     return qw_ ? qw_->grabFramebuffer() : QImage();
+}
+
+// -----------------------------------------------------------------------------
+// LA COMPROBACIÓN DE LOS PAQUETES: lo que falta en un paquete -un módulo de
+// QML, la biblioteca de Qt Quick 3D o la de sus sombreadores- solo se nota al
+// abrir la ventana 3D. Esto carga su escena con un cubo, sin mcu-sim.
+bool Vista3d::comprueba(QString& informe)
+{
+    PlacaGui p;
+    Vista3dGui v;
+    v.camara = QStringLiteral("300 -300 250");
+    v.mira = QStringLiteral("0 0 50");
+    Elemento3dGui e;
+    e.etiqueta = QStringLiteral("solido");
+    e.attrs.insert(QStringLiteral("forma"), QStringLiteral("caja"));
+    e.attrs.insert(QStringLiteral("tam"), QStringLiteral("100 100 100"));
+    e.attrs.insert(QStringLiteral("en"), QStringLiteral("0 0 50"));
+    e.attrs.insert(QStringLiteral("color"), QStringLiteral("#e53935"));
+    v.elementos.push_back(e);
+    p.vistas3d.push_back(v);
+    Escena3d esc(p);
+    Vista3d w(&esc);                    // la carga, sin ensenarla
+    const QString rutas = w.qw_ && w.qw_->engine()
+                              ? w.qw_->engine()->importPathList().join(QStringLiteral(", "))
+                              : QString();
+    const bool ok = w.error().isEmpty();
+    informe = (ok ? QStringLiteral("Qt Quick 3D cargado (QtQuick3D y QtQuick3D.Helpers)")
+                  : w.error()) +
+              QStringLiteral("\nrutas de QML: ") + rutas;
+    return ok;
 }
 
 } // namespace mcusim

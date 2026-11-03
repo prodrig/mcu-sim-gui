@@ -11,7 +11,8 @@
 //   D3  la imagen de alturas: centésimas de mm en el rojo y el verde, la fila
 //       de arriba la de más Y, y la fresa en vacío en el azul
 //   D4  con Qt Quick 3D, la escena dibujada: una imagen que no es un color
-//       liso. Si no hay con qué dibujar -sin OpenGL-, se dice y se salta
+//       liso. Si no hay con qué dibujar -sin OpenGL-, se dice y se salta. Y
+//       `Vista3d::comprueba`, la de `--comprueba-3d`
 //   D5  con MCU_SIM y MCU_SIM_SRC, la fresadora 3020 de verdad, con la ventana
 //       entera: un bolsillo de 20 x 10 x 2 mm, y la superficie de la vista 3D
 //       con su hueco, donde va y tan hondo como es
@@ -203,6 +204,14 @@ int main(int argc, char** argv)
     // -------------------------------------------------------------------------
     std::printf("D4 La escena, dibujada con Qt Quick 3D\n");
 #ifdef MCU_SIM_GUI_3D
+#ifndef Q_OS_LINUX
+    // Con `offscreen` fuera de Linux no hay con qué dibujar, y el Qt de
+    // algunas versiones se cae al intentarlo (rhiFlush sin QRhi): el CI de
+    // Windows y de macOS la abre desde el paquete, con `--comprueba-3d`
+    if (QGuiApplication::platformName() == QLatin1String("offscreen")) {
+        std::printf("  [SALTA] con offscreen, fuera de Linux\n");
+    } else
+#endif
     {
         Vista3d v(&esc);
         v.resize(800, 600);
@@ -220,6 +229,13 @@ int main(int argc, char** argv)
                       "la escena se ve: " + std::to_string(colores(img)) + " colores");
             if (!capturas.isEmpty()) img.save(QDir(capturas).filePath("vista3d_prueba.png"));
         }
+    }
+    {
+        QString informe;
+        comprueba(Vista3d::comprueba(informe) && informe.contains("QtQuick3D") &&
+                      informe.contains("rutas de QML"),
+                  "y --comprueba-3d, la prueba de los paquetes: la escena se carga, y dice "
+                  "de donde saca los modulos de QML");
     }
 #else
     std::printf("  [SALTA] compilada sin Qt Quick 3D\n");

@@ -225,7 +225,8 @@ dimensiones) usa además **Qt Quick 3D**:
 
 En Ubuntu son los paquetes `qt6-declarative-dev`, `qt6-quick3d-dev`,
 `qt6-shadertools-dev`, `qml6-module-quick3d`, `qml6-module-quick3d-helpers`,
-`qml6-module-qtquick` y `qml6-module-qtquick-window`.
+`qml6-module-qtquick` y `qml6-module-qtquick-window`. Para empaquetar, además,
+`qt6-declarative-dev-tools` (`qmlimportscanner`) y `qt6-wayland`.
 
 La opción `MCU_SIM_GUI_3D` dice qué se hace:
 
@@ -241,8 +242,24 @@ Sin ella, todo lo demás es igual:
 cmake -B build -DMCU_SIM_GUI_3D=OFF
 ```
 
-Los paquetes de Windows y de macOS se hacen todavía sin ella: falta que lleven
-los módulos de QML.
+Los paquetes de las tres plataformas (`ci/empaqueta-*.sh`) la llevan, con sus
+módulos de QML dentro:
+
+| Plataforma | Cómo se meten | Dónde van |
+| :--- | :--- | :--- |
+| Linux | `linuxdeploy-plugin-qt`, con `QML_SOURCES_PATHS=src` | `usr/qml` del AppImage |
+| Windows | `windeployqt6 --qmldir src`, y un `qt.conf` | `qml/`, junto al `.exe` |
+| macOS | A mano, con `qmlimportscanner`: con el Qt de Homebrew partido en fórmulas, `macdeployqt -qmldir` no los encuentra | `Contents/Resources/qml`, con un `qt.conf` |
+
+Cada script lo comprueba cargando la vista 3D desde el paquete, con
+`mcu-sim-gui --comprueba-3d`. Esa opción dice:
+* si Qt Quick 3D y sus módulos de QML se cargan, y de dónde;
+* con el código de salida, 0 si sí, 1 si no, y 3 si esa compilación no lleva
+  la vista 3D.
+
+Para compilar con Qt Quick 3D en MSYS2 hacen falta, además,
+`mingw-w64-x86_64-qt6-declarative`, `mingw-w64-x86_64-qt6-quick3d` y
+`mingw-w64-x86_64-qt6-shadertools`. En Homebrew, `qt` ya los trae.
 
 ### En Windows con MSYS2: tres trampas, y la tercera es la que muerde
 

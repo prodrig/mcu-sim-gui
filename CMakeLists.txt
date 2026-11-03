@@ -64,9 +64,9 @@ find_package(Qt6 6.3 REQUIRED COMPONENTS Core Widgets Network Svg SvgWidgets)
 
 # LA VISTA 3D (F8 de la CNC de mcu-sim), con Qt Quick 3D, si esta: Quick,
 # QuickWidgets y Quick3D, que no son de qtbase. AUTO -lo de omision- la
-# construye si los encuentra; ON exige que esten; OFF no la construye -la
-# integracion continua de Windows y de macOS, mientras sus paquetes no lleven
-# los modulos de QML que necesita-. Sin ella, la ventana dice que no la lleva.
+# construye si los encuentra; ON exige que esten -la integracion continua de
+# las tres plataformas, cuyos paquetes llevan sus modulos de QML-; OFF no la
+# construye. Sin ella, la ventana dice que no la lleva.
 set(MCU_SIM_GUI_3D "AUTO" CACHE STRING "Vista 3D con Qt Quick 3D: AUTO, ON u OFF")
 set_property(CACHE MCU_SIM_GUI_3D PROPERTY STRINGS AUTO ON OFF)
 set(CON_3D OFF)

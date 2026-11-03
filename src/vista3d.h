@@ -47,6 +47,14 @@ public:
     void vista_inicial();
     QSize sizeHint() const override { return QSize(900, 650); }
 
+    // Para los paquetes (`mcu-sim-gui --comprueba-3d`, ci/empaqueta-*.sh):
+    // carga una escena con un cubo, sin enseñarla, y dice en `informe` si Qt
+    // Quick 3D y sus módulos de QML se han podido cargar -con sus complementos
+    // y las bibliotecas de estos- y de dónde. No la dibuja: eso depende del
+    // OpenGL, Direct3D o Metal de la máquina, no del paquete. true si se ha
+    // cargado
+    static bool comprueba(QString& informe);
+
 private:
     void construye();
     void mueve();

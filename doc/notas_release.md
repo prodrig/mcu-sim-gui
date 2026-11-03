@@ -4,7 +4,10 @@ Estos paquetes los ha construido la integración continua a partir del commit
 etiquetado, y **cada uno se publica solo si en su plataforma pasaron las
 pruebas y el paquete arrancó** —en Windows, con un `PATH` sin MSYS2, que es como
 lo va a ejecutar quien lo descargue—. **Llevan Qt dentro**: no hay que
-instalarlo.
+instalarlo. También Qt Quick 3D y sus módulos de QML, los de la **vista 3D**
+(*Vista ▸ Vista 3D*): cada paquete se comprueba cargándola desde dentro de él
+(`mcu-sim-gui --comprueba-3d`). Dibujarla ya depende de la tarjeta gráfica de
+cada máquina —OpenGL en Linux, Direct3D 11 en Windows, Metal en macOS—.
 
 | Tu máquina | Fichero | Qué es |
 | :--- | :--- | :--- |

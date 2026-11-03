@@ -199,6 +199,11 @@ La vista 3D usa **Qt Quick 3D**, y la ventana puede compilarse sin ella
 compilación no la lleva. Si no hay con qué dibujar en 3D —una máquina sin
 OpenGL—, lo dice también.
 
+Los paquetes de las *Releases* la llevan, en las tres plataformas, con todo
+lo que necesita dentro. `mcu-sim-gui --comprueba-3d` dice si se puede cargar
+y de dónde saca sus módulos de QML: es lo primero que mirar si la ventana 3D
+dice que no puede cargar su escena.
+
 ## 5. Depurar con GDB o con STM32CubeIDE
 
 `mcu-sim` lleva dentro **un servidor de GDB**: el depurador se conecta a él

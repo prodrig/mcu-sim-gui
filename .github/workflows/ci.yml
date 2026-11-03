@@ -21,10 +21,11 @@
 # de la ejecucion-, y una etiqueta `v*` los publica como Release. Con `needs`:
 # un paquete no se publica si su plataforma no paso las pruebas.
 #
-# LA VISTA 3D (F8 de la CNC de mcu-sim), con Qt Quick 3D, se compila y se
-# prueba solo en Linux, en una compilacion aparte y con una pantalla virtual
-# (xvfb) para dibujarla. Lo que se empaqueta va sin ella (-DMCU_SIM_GUI_3D=OFF)
-# en las tres plataformas: los paquetes aun no llevan los modulos de QML.
+# LA VISTA 3D (F8 de la CNC de mcu-sim), con Qt Quick 3D, va en las tres
+# (-DMCU_SIM_GUI_3D=ON: si falta Qt Quick 3D, falla la configuracion), y cada
+# paquete lleva sus modulos de QML: el script de cada plataforma los mete y lo
+# comprueba con `mcu-sim-gui --comprueba-3d`, desde el paquete. En Linux,
+# ademas, `prueba_vista3d` la dibuja en una pantalla virtual (xvfb).
 # =============================================================================
 name: ci
 
@@ -79,28 +80,32 @@ jobs:
           sudo apt-get install -y qt6-base-dev qt6-svg-dev cmake ninja-build
           dpkg -l qt6-base-dev qt6-svg-dev | tail -2
 
+      - name: Qt Quick 3D y sus modulos de QML
+        # qt6-declarative-dev-tools trae qmlimportscanner, con el que el
+        # empaquetado sabe que modulos de QML meter; qt6-wayland, lo que el
+        # AppImage necesita para el OpenGL en Wayland
+        run: |
+          sudo apt-get install -y qt6-declarative-dev qt6-declarative-dev-tools \
+               qt6-quick3d-dev qt6-quick3d-dev-tools qt6-shadertools-dev libxkbcommon-dev \
+               qml6-module-quick3d qml6-module-quick3d-helpers qml6-module-qtquick \
+               qml6-module-qtquick-window qml6-module-qtqml-workerscript qt6-wayland xvfb
+          dpkg -l qt6-quick3d-dev qml6-module-quick3d | tail -2
+
       - name: Compilar
         run: |
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release -DMCU_SIM_GUI_3D=OFF \
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release -DMCU_SIM_GUI_3D=ON \
                 -DMCU_SIM_GUI_VERSION="${VERSION#v}"
           cmake --build build
 
       - name: Las pruebas
         run: ctest --test-dir build --output-on-failure
 
-      - name: La vista 3D, con Qt Quick 3D
-        # Otra compilacion, con la vista 3D exigida, y sus pruebas en una
-        # pantalla virtual con el OpenGL de Mesa: `prueba_vista3d` la dibuja
+      - name: La vista 3D, dibujada
+        # En una pantalla virtual con el OpenGL de Mesa: `prueba_vista3d` la
+        # dibuja (en `ctest`, con offscreen, solo la carga)
         run: |
-          sudo apt-get install -y qt6-declarative-dev qt6-quick3d-dev qt6-quick3d-dev-tools \
-               qt6-shadertools-dev libxkbcommon-dev qml6-module-quick3d \
-               qml6-module-quick3d-helpers qml6-module-qtquick qml6-module-qtquick-window \
-               qml6-module-qtqml-workerscript xvfb
-          cmake -G Ninja -B build3d -DCMAKE_BUILD_TYPE=Release -DMCU_SIM_GUI_3D=ON
-          cmake --build build3d
           xvfb-run -a -s "-screen 0 1280x1024x24" \
-            env QT_QPA_PLATFORM=xcb ./build3d/prueba_vista3d
-          ctest --test-dir build3d --output-on-failure
+            env QT_QPA_PLATFORM=xcb ./build/prueba_vista3d
 
       - name: La ventana abre y no se cae
         # Tres segundos con la plataforma `offscreen`, que no necesita pantalla.
@@ -146,12 +151,14 @@ jobs:
         with:
           msystem: MINGW64
           update: true
-          pacboy: toolchain:p cmake:p ninja:p qt6-base:p qt6-svg:p
+          pacboy: >-
+            toolchain:p cmake:p ninja:p qt6-base:p qt6-svg:p
+            qt6-declarative:p qt6-quick3d:p qt6-shadertools:p
           install: zip unzip
 
       - name: Compilar
         run: |
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release -DMCU_SIM_GUI_3D=OFF \
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release -DMCU_SIM_GUI_3D=ON \
                 -DMCU_SIM_GUI_VERSION="${VERSION#v}"
           cmake --build build
 
@@ -217,13 +224,15 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Qt 6 y Ninja
+        # La formula `qt` trae todos los modulos, cada uno en su formula:
+        # qtdeclarative, qtquick3d y qtshadertools entre ellos
         run: |
           brew install qt ninja
           brew list --versions qt
 
       - name: Compilar
         run: |
-          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release -DMCU_SIM_GUI_3D=OFF \
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release -DMCU_SIM_GUI_3D=ON \
                 -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" \
                 -DMCU_SIM_GUI_VERSION="${VERSION#v}"
           cmake --build build
