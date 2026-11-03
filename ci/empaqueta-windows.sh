@@ -18,6 +18,14 @@
 #      con `ldd` sobre todo lo que ya hay, y se repite hasta que no falte nada;
 #   3. y se COMPRUEBA con un PATH que no tenga MSYS2, que es la unica prueba
 #      que vale: la de la maquina del alumno.
+#
+# LA VISTA 3D, si el ejecutable la lleva (Qt Quick 3D, MCU_SIM_GUI_3D): sus
+# MODULOS DE QML -QtQuick3D, QtQuick3D.Helpers y los de QtQuick que piden- los
+# pone `windeployqt6` si se le dice donde estan los .qml (`--qmldir src`), en
+# `qml/`; sus DLL las busca el paso 2 como las demas, y un `qt.conf` le dice a
+# Qt que los busque ahi -sin el, los buscaria en el MSYS2 de quien compilo-.
+# Se COMPRUEBA con `--comprueba-3d`, con el mismo PATH sin MSYS2, y mirando que
+# las rutas de QML que dice son las del paquete.
 # =============================================================================
 set -euo pipefail
 
@@ -33,8 +41,25 @@ cp "$EXE" paquete/
 # --- 1. Qt --------------------------------------------------------------------
 DEPLOY=$(command -v windeployqt6 || command -v windeployqt || true)
 [ -n "$DEPLOY" ] || { echo "  [FALLO] no hay windeployqt6 (mingw-w64-x86_64-qt6-base)"; exit 1; }
+# Con la vista 3D, si el ejecutable carga Qt6Quick3D.dll. La DLL que compila
+# los sombreadores en Direct3D, d3dcompiler_47.dll, la tiene Windows 10 y
+# posteriores: --no-system-d3d-compiler se queda
+CON_3D=0
+ldd "$EXE" | grep -qi 'Qt6Quick3D\.dll' && CON_3D=1
+qml=()
+[ "$CON_3D" = 1 ] && qml=(--qmldir src)
 "$DEPLOY" --release --no-translations --no-system-d3d-compiler --no-opengl-sw \
-          --compiler-runtime paquete/mcu-sim-gui.exe
+          --compiler-runtime "${qml[@]}" paquete/mcu-sim-gui.exe
+if [ "$CON_3D" = 1 ]; then
+    for m in QtQuick3D QtQuick3D/Helpers QtQuick; do
+        [ -f "paquete/qml/$m/qmldir" ] ||
+            { echo "  [FALLO] windeployqt no ha puesto el modulo de QML $m en qml/"; exit 1; }
+    done
+    # Que Qt busque los modulos de QML en el paquete, y no en el prefijo con
+    # el que se compilo (C:/msys64/mingw64/share/qt6/qml)
+    printf '[Paths]\nPrefix = .\nPlugins = .\nQmlImports = qml\n' > paquete/qt.conf
+    echo "  [OK  ] con la vista 3D: los modulos de QML en qml/, y un qt.conf que lo dice"
+fi
 
 # --- 2. Lo que Qt arrastra en MSYS2 ---------------------------------------------
 # `ldd` de MSYS2 da la ruta de cada DLL que carga. Lo que venga de /mingw64/bin
@@ -69,6 +94,22 @@ if echo "$deps" | grep -Ei 'mingw64|not found|\?\?\?'; then
     exit 1
 fi
 echo "  [OK  ] con un PATH sin MSYS2, todo lo que carga esta en el paquete o en Windows"
+
+# La vista 3D, cargada de verdad con ese mismo PATH: lo que falte -un modulo de
+# QML, la DLL de un complemento de QML- solo se nota al cargar su escena
+if [ "$CON_3D" = 1 ]; then
+    rc=0
+    # env y timeout por su ruta: con ese PATH no se encontrarian
+    out=$(cd paquete && PATH="$sistema" /usr/bin/env -u QML2_IMPORT_PATH -u QML_IMPORT_PATH \
+          /usr/bin/timeout 60 ./mcu-sim-gui.exe --comprueba-3d 2>&1) || rc=$?
+    echo "$out"
+    [ "$rc" = 0 ] || { echo "  [FALLO] la vista 3D no se carga desde el paquete ($rc)"; exit 1; }
+    if echo "$out" | grep -i '^rutas de QML' | grep -Eiq 'msys64|mingw64'; then
+        echo "  [FALLO] la vista 3D busca modulos de QML fuera del paquete"
+        exit 1
+    fi
+    echo "  [OK  ] la vista 3D se carga con los modulos de QML del paquete"
+fi
 
 # --- El paquete --------------------------------------------------------------------
 cp README.md LICENSE TERCEROS.md config.ejemplo.json paquete/

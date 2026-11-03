@@ -14,6 +14,13 @@
 # mcu-sim: el zip de upload-artifact, y muchas descargas, PIERDEN EL BIT DE
 # EJECUCION, y un AppImage sin el no arranca.
 #
+# LA VISTA 3D, si el ejecutable la lleva (Qt Quick 3D, MCU_SIM_GUI_3D): el
+# complemento de Qt mete sus bibliotecas al ver que el ejecutable las usa, pero
+# los MODULOS DE QML -QtQuick3D, QtQuick3D.Helpers y los de QtQuick que piden-
+# solo si se le dice donde estan los .qml, con QML_SOURCES_PATHS: entonces
+# pasa `qmlimportscanner` por ellos. Sin eso el AppImage arranca, y la ventana
+# 3D dice que no puede cargar su escena. Se COMPRUEBA con `--comprueba-3d`.
+#
 # Lo que NO lleva es glibc: un binario de Linux funciona hacia adelante, no
 # hacia atras, y el suelo es la distribucion donde se construye. Este script
 # lo dice al final.
@@ -48,8 +55,26 @@ export QMAKE=${QMAKE:-$(command -v qmake6 || command -v qmake)}
 # xcb es el que usa casi todo el mundo y el que el complemento mete solo; con
 # wayland arranca de forma nativa en un escritorio Wayland, y offscreen es para
 # poder comprobar aqui, sin pantalla, que el AppImage arranca.
-export EXTRA_PLATFORM_PLUGINS="libqwayland-generic.so;libqoffscreen.so"
+export EXTRA_PLATFORM_PLUGINS="libqwayland-generic.so;libqwayland-egl.so;libqoffscreen.so"
+# En Wayland, el OpenGL -el de la vista 3D, el de QQuickWidget- va por el
+# complemento wayland-egl de wayland-graphics-integration-client, que el
+# complemento de Qt solo mete con el modulo waylandcompositor
+export EXTRA_QT_MODULES="waylandcompositor" EXTRA_QT_PLUGINS="waylandcompositor"
 export OUTPUT=$APPIMAGE LDAI_OUTPUT=$APPIMAGE
+
+# La vista 3D: los modulos de QML que importa src/escena3d.qml. El complemento
+# busca `qmlimportscanner` en el PATH: en Ubuntu esta en libexec
+# (qt6-declarative-dev-tools)
+CON_3D=0
+if ldd "$BUILD/mcu-sim-gui" | grep -q 'libQt6Quick3D'; then
+    CON_3D=1
+    export QML_SOURCES_PATHS="$PWD/src"
+    LIBEXEC=$("$QMAKE" -query QT_INSTALL_LIBEXECS)
+    [ -x "$LIBEXEC/qmlimportscanner" ] && export PATH="$PATH:$LIBEXEC"
+    command -v qmlimportscanner >/dev/null ||
+        { echo "  [FALLO] no hay qmlimportscanner (qt6-declarative-dev-tools)"; exit 1; }
+    echo "  con la vista 3D: los modulos de QML de src/*.qml, con $(command -v qmlimportscanner)"
+fi
 
 rm -rf AppDir "$APPIMAGE"
 linuxdeploy-x86_64.AppImage --appdir AppDir \
@@ -70,6 +95,25 @@ rc=0
 QT_QPA_PLATFORM=offscreen timeout 3 "./$APPIMAGE" || rc=$?
 [ "$rc" = 124 ] || { echo "  [FALLO] el AppImage termino solo con codigo $rc"; exit 1; }
 echo "  [OK  ] el AppImage arranca y sigue abierto"
+
+# La vista 3D, con lo que lleva DENTRO: QML2_IMPORT_PATH y QML_IMPORT_PATH
+# vacios, para que no valga el Qt del sistema
+if [ "$CON_3D" = 1 ]; then
+    for m in QtQuick3D QtQuick3D/Helpers QtQuick; do
+        [ -f "AppDir/usr/qml/$m/qmldir" ] ||
+            { echo "  [FALLO] el AppImage no lleva el modulo de QML $m"; exit 1; }
+    done
+    rc=0
+    out=$(env -u QML2_IMPORT_PATH -u QML_IMPORT_PATH QT_QPA_PLATFORM=offscreen \
+          timeout 30 "./$APPIMAGE" --comprueba-3d 2>&1) || rc=$?
+    echo "$out"
+    [ "$rc" = 0 ] || { echo "  [FALLO] la vista 3D no se carga desde el AppImage ($rc)"; exit 1; }
+    if echo "$out" | grep '^rutas de QML' | grep -q '/usr/lib'; then
+        echo "  [FALLO] la vista 3D busca modulos de QML fuera del AppImage"
+        exit 1
+    fi
+    echo "  [OK  ] la vista 3D se carga con los modulos de QML del AppImage"
+fi
 
 # --- El suelo de glibc ----------------------------------------------------------
 # `|| true`: con pipefail, un fichero que objdump no entiende tumbaria el paso

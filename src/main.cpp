@@ -6,6 +6,7 @@
 // con «Simulacion > Lanzar mcu-sim» (Ctrl+L):
 //
 //   mcu-sim-gui [--config FICHERO] [--puerto N] [--lanza] [--edit]
+//   mcu-sim-gui --comprueba-3d
 //
 //   --config   la configuracion (JSON; la plantilla es `config.ejemplo.json`).
 //              Por omision, `config.json` en el directorio actual si lo hay, y
@@ -20,6 +21,13 @@
 //              se mira: se ensenan y se esconden las conexiones, y se acerca o
 //              se aleja (plan §45). Lo colocado, de la configuracion o del XML,
 //              se ve igual.
+//   --comprueba-3d  carga la escena de la vista 3D con un cubo, sin
+//              ensenarla, dice si Qt Quick 3D y sus modulos de QML se han
+//              podido cargar y de donde, y sale: 0 si si, 1 si no, 3 si esta
+//              compilacion no lleva la vista 3D. Es la prueba de los paquetes
+//              (ci/empaqueta-*.sh): lo que les falte solo se notaria al abrir
+//              la ventana 3D. No la dibuja, porque eso depende de la maquina
+//              -su OpenGL, Direct3D o Metal- y no del paquete.
 //
 // Y lanzarlo desde otra consola sigue valiendo:
 //
@@ -33,6 +41,9 @@
 
 #include "configuracion.h"
 #include "ventana_principal.h"
+#ifdef MCU_SIM_GUI_3D
+#include "vista3d.h"
+#endif
 
 int main(int argc, char** argv)
 {
@@ -63,11 +74,30 @@ int main(int argc, char** argv)
                                              "enrutar las lineas y abrir otro dibujo. Sin "
                                              "ella, solo se ensenan y se esconden las "
                                              "conexiones."));
+    QCommandLineOption comprueba3d(QStringLiteral("comprueba-3d"),
+                                   QStringLiteral("Comprueba que la vista 3D se puede cargar "
+                                                  "(Qt Quick 3D y sus modulos de QML) y sale: "
+                                                  "0 si, 1 no, 3 sin vista 3D."));
     args.addOption(config);
     args.addOption(puerto);
     args.addOption(lanza);
     args.addOption(editar);
+    args.addOption(comprueba3d);
     args.process(app);
+
+    if (args.isSet(comprueba3d)) {
+#ifdef MCU_SIM_GUI_3D
+        QString informe;
+        const bool ok = mcusim::Vista3d::comprueba(informe);
+        std::printf("%s\n%s\n", ok ? "vista 3D: bien" : "vista 3D: MAL", qPrintable(informe));
+        std::fflush(stdout);
+        return ok ? 0 : 1;
+#else
+        std::printf("vista 3D: esta compilacion no la lleva (MCU_SIM_GUI_3D)\n");
+        std::fflush(stdout);
+        return 3;
+#endif
+    }
 
     mcusim::Configuracion c;
     QString error;

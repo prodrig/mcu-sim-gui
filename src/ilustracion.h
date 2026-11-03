@@ -38,7 +38,8 @@
 //   * y la ayuda emergente del elemento dice TODOS sus valores.
 //
 // La tabla de enlaces puede cambiar el efecto de una pieza: `brillo`,
-// `hundido`, `giro`, `pantalla`, `angulo`, `display` o `ninguno`. El color del halo es el
+// `hundido`, `giro`, `pantalla`, `angulo`, `display`, `desplaza` o `ninguno`.
+// El color del halo es el
 // del elemento: se pinta en una imagen pequeña y se promedian sus píxeles, una
 // vez, al cargar.
 //
@@ -64,6 +65,18 @@
 // separados por blancos- o, sin él, los que la pieza sugiere. Cuatro cifras,
 // de un color de display sobre el fondo del dibujo, y los mA que pasan de
 // 1000, en A. Esos ya no llevan etiqueta. Sin ninguno, se queda sin efecto, y
+// se dice.
+//
+// `desplaza` solo lo pone la tabla, y es el `angulo` lineal: TRASLADA el
+// elemento. Lo mueven uno o varios numéricos -`observable=`, separados por
+// blancos-, cada uno con su vector -`vector=`, x e y por cada uno-, en
+// unidades del dibujo (las de su viewBox) por unidad del observable: con
+// `observable="x z" vector="2.5 0  0 -2.5"`, el cabezal de una fresadora va
+// 2,5 a la derecha por cada mm de x y 2,5 arriba por cada mm de z. Así un
+// elemento se mueve con dos ejes sin componer grupos anidados (análisis de la
+// CNC de mcu-sim, §9). Con él van su halo y su contorno; los numéricos que lo
+// mueven no llevan etiqueta. Sin observables, sin vector, con un vector que
+// no casa o con un observable que la pieza no tiene, se queda sin efecto, y
 // se dice.
 //
 // `pantalla` es el de una pieza que enseña una IMAGEN -un TFT-, y es el que
@@ -496,6 +509,9 @@ private:
         // Con `display`: lo que se escribe en cada fila, y su texto
         QVector<int>                      display;
         QVector<QGraphicsSimpleTextItem*> cifras;
+        // Con `desplaza`: los que lo mueven, y cuánto cada uno por unidad
+        QVector<int>     desplaza;
+        QVector<QPointF> vectores;
         double  g_min = 0, g_max = 0;        // sus posiciones: una vuelta son max-min+1
         // Fase 3: sus mandos, lo último que se ha ordenado de cada uno y, de
         // los de tipo boton, el dedo y el «switch»

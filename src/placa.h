@@ -25,6 +25,7 @@
 #define MCU_SIM_GUI_PLACA_H
 
 #include <QByteArray>
+#include <QHash>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -96,8 +97,10 @@ struct PiezaGui {
 struct EnlaceTabla {
     QString pieza;            // el nombre en la placa: "LD2", no "N/LD2"
     QString elemento;         // el id en el SVG
-    QString efecto;           // "", "brillo", "hundido", "giro", "pantalla", "angulo", "ninguno"
+    QString efecto;           // "", "brillo", "hundido", "giro", "pantalla", "angulo",
+                              // "display", "desplaza", "ninguno"
     QString observable;       // el que mueve el giro o el ángulo, si no es el primero (S8)
+    QString vector;           // con `desplaza`: x e y por unidad de cada observable
 };
 
 // UNA PLACA DE UN <sistema>, descrita entera: es lo que hace falta para
@@ -152,6 +155,19 @@ struct EnlaceGui {
     QString por;              // "N/CN5 ⇄ S/J5", o "hilo N/CN9.2 - S/J9.1"
 };
 
+// LA VISTA 3D de una placa (F8 de la CNC de mcu-sim, su doc/analisis_cnc.md
+// §9): el <vista3d> de T_PLACA, tal cual -los atributos de cada <solido> y
+// cada <superficie>-. Lo interpreta `escena3d.h`.
+struct Elemento3dGui {
+    QString etiqueta;                 // "solido" o "superficie"
+    QHash<QString, QString> attrs;
+};
+struct Vista3dGui {
+    QString placa;                    // su id en el sistema, o vacío
+    QString camara, mira;             // "x y z", en mm; vacíos si no se dicen
+    QVector<Elemento3dGui> elementos;
+};
+
 struct PlacaGui {
     QString           nombre;
     // Vacías en una placa suelta: es como se sabe que esto es un sistema.
@@ -170,6 +186,8 @@ struct PlacaGui {
     bool                 lienzo_fijo = false;
     double               lienzo[4] = {0, 0, 0, 0};    // x, y, ancho, alto, en mm
     QVector<RutaGui>     rutas;
+    // Las vistas 3D: una por placa que la declare
+    QVector<Vista3dGui>  vistas3d;
     // La tabla de una placa: su id en el sistema, o vacío si no lo es
     QVector<EnlaceTabla> tabla_de(const QString& placa_id) const;
     bool es_sistema() const { return !placas.isEmpty(); }

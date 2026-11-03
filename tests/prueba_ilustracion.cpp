@@ -50,7 +50,9 @@
 //       de una pieza con imagen, que la pinta encima de su elemento -girada a
 //       la izquierda si el elemento es apaisado- y con su luz; en el panel, a
 //       su tamaño; un T_IMAGEN que no mide lo que dice; y en un dibujo
-//       generado, su vidrio.
+//       generado, su vidrio. Y los TROZOS: la ventana dice imagen_parcial=1 en
+//       T_VERSION y pega cada T_IMAGEN_RECT en la última imagen; uno que se
+//       sale, o sin la entera antes, se ignora y se dice.
 //   I12 (plan §29) el mando de un encoder: el efecto `giro` -el anillo gira
 //       con la posición, sobre su centro, una vuelta cada max - min + 1-; sin
 //       numérico que lo mueva se dice y se queda sin efecto; y con el
@@ -62,7 +64,18 @@
 //       tabla escribe dentro del elemento, una por fila, la tension y la
 //       corriente que pide `observable=`, con cuatro cifras -los mA, en A-,
 //       pegadas a la derecha, sin etiqueta debajo; lo que la pieza no tiene,
-//       se dice; y sin nada que ensenar, se queda sin efecto.
+//       se dice; y sin nada que ensenar, se queda sin efecto. Una cota en mm,
+//       con su signo siempre y una cifra mas.
+//   I27 el CABEZAL de una fresadora: el efecto `desplaza` de la tabla traslada
+//       el elemento, cada observable de `observable=` por su vector de
+//       `vector=` -en unidades del dibujo por unidad-, sumados; con el van su
+//       halo y su contorno, y lo que lo mueve no lleva etiqueta; sin un
+//       vector que case, o con un observable que la pieza no tiene, se dice y
+//       se queda sin efecto.
+//   I28 la PIEZA de una fresadora: una `pantalla` con `observable=` y `vector=`
+//       se desplaza como `desplaza`, y su imagen va con ella -la de la pieza
+//       mecanizada, con la mesa-. Y los elementos vivos se apilan en el orden
+//       del DIBUJO: el carro X, declarado antes que la pieza, va encima.
 //   I14 (plan §32) el aspa de un servo: el efecto `angulo`, el de omisión de
 //       una pieza que sugiere un numérico en grados -gira tantos grados como
 //       diga, a la derecha los positivos, sobre el centro de su caja, que un
@@ -1692,6 +1705,35 @@ int main(int argc, char** argv)
         comprueba(lab && lab->pixmap().toImage().pixel(64, 2) == qRgb(255, 0, 0) &&
                       w.statusBar()->currentMessage().contains("no mide lo que dice"),
                   "un T_IMAGEN que no mide lo que dice se ignora, y se dice");
+
+        // Los TROZOS (T_IMAGEN_RECT, la pieza de una fresadora): la ventana
+        // dice en T_VERSION que los sabe pegar, y un trozo cambia solo lo suyo
+        comprueba(m.leido[0].cuerpo.contains("imagen_parcial=1"),
+                  "T_VERSION dice imagen_parcial=1: esta ventana sabe pegar trozos");
+        std::string tr = bytes(CabImagenRect{9000000ull, 3, FMT_RGB888, 128, 160, 30, 40, 10, 10,
+                                             1.f, 0});
+        tr += std::string(10 * 10 * 3, char(0xff));
+        m.manda(T_IMAGEN_RECT, tr);
+        comprueba(lab && espera([&] { return lab->pixmap().toImage().pixel(35, 45) ==
+                                             qRgb(255, 255, 255); }) &&
+                      lab->pixmap().toImage().pixel(64, 2) == qRgb(255, 0, 0) &&
+                      lab->pixmap().toImage().pixel(2, 80) == qRgb(0, 255, 0) &&
+                      lab->pixmap().toImage().pixel(29, 45) != qRgb(255, 255, 255) &&
+                      w.sesion().trozos() == 1,
+                  "un trozo de 10x10 en (30, 40) se pega en la ultima imagen: blanco ahi, y la "
+                  "fila de arriba sigue roja y la columna izquierda verde");
+        std::string fuera = bytes(CabImagenRect{9500000ull, 3, FMT_RGB888, 128, 160, 125, 0, 10,
+                                                1, 1.f, 0}) + std::string(30, char(0));
+        m.manda(T_IMAGEN_RECT, fuera);
+        std::string otra = bytes(CabImagenRect{9600000ull, 7, FMT_RGB888, 128, 160, 0, 0, 1, 1,
+                                               1.f, 0}) + std::string(3, char(0));
+        m.manda(T_IMAGEN_RECT, otra);
+        espera([] { return false; }, 200);
+        comprueba(w.sesion().trozos() == 1 &&
+                      lab->pixmap().toImage().pixel(126, 0) == qRgb(255, 0, 0) &&
+                      w.statusBar()->currentMessage().contains("sin la imagen entera antes"),
+                  "un trozo que se sale de la imagen, o de una imagen que no ha llegado entera, "
+                  "se ignora y se dice");
     }
 
     // -------------------------------------------------------------------------
@@ -3141,6 +3183,161 @@ int main(int argc, char** argv)
         o.max = 375;
         comprueba(VistaPlaca::texto_display(o, 243.27f) == "243.3 rpm",
                   "las cifras salen de la escala: hasta 375 rpm, una decimal");
+        // Una cota: la posicion de un carro, con su signo y una cifra mas
+        ObservableGui c;
+        c.unidad = "mm";
+        c.min = -300;
+        c.max = 300;
+        comprueba(VistaPlaca::texto_display(c, 123.456f) == "+123.46 mm" &&
+                      VistaPlaca::texto_display(c, -7.5f) == "-7.50 mm" &&
+                      VistaPlaca::texto_display(c, 0.0f) == "+0.00 mm",
+                  "una cota en mm lleva su signo siempre y una cifra mas: " +
+                      VistaPlaca::texto_display(c, 123.456f).toStdString() + ", " +
+                      VistaPlaca::texto_display(c, -7.5f).toStdString());
+    }
+
+    // -------------------------------------------------------------------------
+    // I27: el cabezal de una fresadora, que se desplaza con dos ejes
+    // -------------------------------------------------------------------------
+    std::printf("I27 El cabezal de una fresadora: el efecto desplaza\n");
+    {
+        const char* PLACA_CNC =
+            "<placa nombre=\"cnc\">\n"
+            "  <componente tipo=\"Eje\" id=\"CAB\"><pin nombre=\"pin\" nodo=\"PA0\"/></componente>\n"
+            "  <componente tipo=\"Eje\" id=\"MAL\"><pin nombre=\"pin\" nodo=\"PA1\"/></componente>\n"
+            "  <componente tipo=\"Eje\" id=\"FALTA\"><pin nombre=\"pin\" nodo=\"PA2\"/></componente>\n"
+            "  <ilustracion>\n"
+            "    <enlace pieza=\"CAB\" elemento=\"CAB\" efecto=\"desplaza\" observable=\"x z\" "
+            "vector=\"2.5 0  0 -2.5\"/>\n"
+            "    <enlace pieza=\"MAL\" elemento=\"MAL\" efecto=\"desplaza\" observable=\"x\" "
+            "vector=\"1 2 3\"/>\n"
+            "    <enlace pieza=\"FALTA\" elemento=\"FALTA\" efecto=\"desplaza\" observable=\"y\" "
+            "vector=\"0 1\"/>\n"
+            "  </ilustracion>\n"
+            "</placa>\n";
+        const char* CAT_CNC =
+            "<catalogo>\n"
+            "  <pieza idx=\"0\" id=\"CAB\" tipo=\"Eje\">\n"
+            "    <observable idx=\"0\" id_obs=\"0\" nombre=\"x\" unidad=\"mm\" min=\"0\" max=\"300\" interesante=\"si\"/>\n"
+            "    <observable idx=\"1\" id_obs=\"1\" nombre=\"z\" unidad=\"mm\" min=\"-72\" max=\"0\" interesante=\"si\"/>\n"
+            "    <observable idx=\"2\" id_obs=\"2\" nombre=\"tope\" unidad=\"\" min=\"0\" max=\"1\" interesante=\"si\" alarma=\"si\"/>\n"
+            "    <observable idx=\"3\" id_obs=\"3\" nombre=\"rpm\" unidad=\"rpm\" min=\"-600\" max=\"600\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "  <pieza idx=\"1\" id=\"MAL\" tipo=\"Eje\">\n"
+            "    <observable idx=\"0\" id_obs=\"4\" nombre=\"x\" unidad=\"mm\" min=\"0\" max=\"300\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "  <pieza idx=\"2\" id=\"FALTA\" tipo=\"Eje\">\n"
+            "    <observable idx=\"0\" id_obs=\"5\" nombre=\"x\" unidad=\"mm\" min=\"0\" max=\"300\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "</catalogo>\n";
+        const char* DIBUJO_CNC =
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 200\">\n"
+            "  <rect x=\"0\" y=\"0\" width=\"400\" height=\"200\" fill=\"#cfd8dc\"/>\n"
+            "  <rect id=\"CAB\" x=\"20\" y=\"100\" width=\"30\" height=\"40\" fill=\"#455a64\"/>\n"
+            "  <rect id=\"MAL\" x=\"300\" y=\"20\" width=\"20\" height=\"20\" fill=\"#808080\"/>\n"
+            "  <rect id=\"FALTA\" x=\"340\" y=\"20\" width=\"20\" height=\"20\" fill=\"#808080\"/>\n"
+            "</svg>\n";
+        const PlacaGui p = placa_de(PLACA_CNC, CAT_CNC);
+        comprueba(p.tabla_de(QString()).size() == 3 &&
+                      p.tabla_de(QString())[0].vector == "2.5 0  0 -2.5",
+                  "la tabla trae el vector= de cada enlace, tal cual");
+        QString e;
+        std::unique_ptr<VistaPlaca> v(VistaPlaca::crea(p, QString(), DIBUJO_CNC, p.tabla_de(QString()), e));
+        comprueba(v != nullptr, "la vista se construye " + e.toStdString());
+        if (!v) return resultado();
+        v->resize(800, 400);
+        v->show();
+        espera([] { return false; }, 50);
+        const QString av = v->informe().avisos.join(" | ");
+        comprueba(v->efecto(0) == "desplaza" && v->efecto(1) == "ninguno" &&
+                      v->efecto(2) == "ninguno" &&
+                      av.contains("MAL: el efecto «desplaza» necesita") &&
+                      av.contains("FALTA: «desplaza» pide «y»"),
+                  "el cabezal se desplaza; el de un vector que no casa y el que pide un "
+                  "observable que no tiene, sin efecto, y se dice: " + av.toStdString());
+        comprueba(!v->etiqueta(0) && !v->etiqueta(1) && v->etiqueta(3),
+                  "x y z no llevan etiqueta -ya se ven-; las rpm, si");
+        QGraphicsSvgItem* cab = v->vivo(0);
+        const QPointF p0 = cab->pos();
+        v->pon_valor(0, 10.f);
+        comprueba(cab->pos() == p0,
+                  "con solo x, todavia no se mueve: espera a tener los dos");
+        v->pon_valor(1, -4.f);
+        comprueba(cab->pos() == QPointF(25, 10),
+                  "x = 10 mm y z = -4 mm: 25 a la derecha y 10 abajo (" +
+                      std::to_string(cab->pos().x()) + ", " + std::to_string(cab->pos().y()) + ")");
+        v->pon_valor(0, 100.f);
+        v->pon_valor(1, 0.f);
+        const QRectF en_escena = cab->sceneBoundingRect();
+        comprueba(cab->pos() == QPointF(250, 0) && std::abs(en_escena.left() - 270) < 0.01,
+                  "x = 100 mm: 250 a la derecha, y el elemento esta ahi en la escena");
+        v->pon_valor(2, 1.f);
+        QGraphicsRectItem* contorno = nullptr;
+        for (QGraphicsItem* h : cab->parentItem()->childItems())
+            if (auto* r = dynamic_cast<QGraphicsRectItem*>(h))
+                if (r->isVisible() && r->pen().color() == QColor(0xc6, 0x28, 0x28)) contorno = r;
+        comprueba(contorno && contorno->pos() == QPointF(250, 0) &&
+                      contorno->sceneBoundingRect().contains(en_escena),
+                  "y su contorno de alarma va con el: rodea el elemento donde esta ahora");
+    }
+
+    // -------------------------------------------------------------------------
+    // I28: la pieza mecanizada de una fresadora, una pantalla que va con la mesa
+    // -------------------------------------------------------------------------
+    std::printf("I28 La pieza de una fresadora: una pantalla que se desplaza\n");
+    {
+        const char* PLACA_PZA =
+            "<placa nombre=\"pieza\">\n"
+            "  <componente tipo=\"Carro\" id=\"CX\"><pin nombre=\"pin\" nodo=\"PA1\"/></componente>\n"
+            "  <componente tipo=\"Pieza\" id=\"PZA\"><pin nombre=\"pin\" nodo=\"PA0\"/></componente>\n"
+            "  <ilustracion>\n"
+            "    <enlace pieza=\"CX\" elemento=\"CX\" efecto=\"desplaza\" observable=\"posicion\" "
+            "vector=\"1.5 0\"/>\n"
+            "    <enlace pieza=\"PZA\" elemento=\"PZA\" efecto=\"pantalla\" observable=\"mesa\" "
+            "vector=\"0 -1.5\"/>\n"
+            "  </ilustracion>\n"
+            "</placa>\n";
+        const char* CAT_PZA =
+            "<catalogo>\n"
+            "  <pieza idx=\"0\" id=\"CX\" tipo=\"Carro\">\n"
+            "    <observable idx=\"0\" id_obs=\"0\" nombre=\"posicion\" unidad=\"mm\" min=\"-300\" max=\"300\" interesante=\"si\"/>\n"
+            "  </pieza>\n"
+            "  <pieza idx=\"1\" id=\"PZA\" tipo=\"Pieza\">\n"
+            "    <observable idx=\"0\" id_obs=\"1\" nombre=\"hondo\" unidad=\"mm\" min=\"0\" max=\"12\" interesante=\"si\"/>\n"
+            "    <observable idx=\"1\" id_obs=\"2\" nombre=\"mesa\" unidad=\"mm\" min=\"-1000\" max=\"1000\" interesante=\"no\"/>\n"
+            "    <imagen idx=\"0\" id_obs=\"3\" nombre=\"pieza\" ancho=\"40\" alto=\"20\" formato=\"rgb888\"/>\n"
+            "  </pieza>\n"
+            "</catalogo>\n";
+        const char* DIBUJO_PZA =
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 200\">\n"
+            "  <rect x=\"0\" y=\"0\" width=\"200\" height=\"200\" fill=\"#cfd8dc\"/>\n"
+            "  <rect id=\"PZA\" x=\"20\" y=\"100\" width=\"80\" height=\"40\" fill=\"#c4a476\"/>\n"
+            "  <rect id=\"CX\" x=\"10\" y=\"60\" width=\"30\" height=\"30\" fill=\"#263238\"/>\n"
+            "</svg>\n";
+        const PlacaGui p = placa_de(PLACA_PZA, CAT_PZA);
+        QString e;
+        std::unique_ptr<VistaPlaca> v(VistaPlaca::crea(p, QString(), DIBUJO_PZA, p.tabla_de(QString()), e));
+        comprueba(v != nullptr, "la vista se construye " + e.toStdString());
+        if (!v) return resultado();
+        v->resize(400, 400);
+        v->show();
+        espera([] { return false; }, 50);
+        comprueba(v->efecto(1) == "pantalla" && v->informe().avisos.isEmpty(),
+                  "una pantalla con observable= y vector= sigue siendo una pantalla, sin avisos");
+        QByteArray rgb(40 * 20 * 3, char(0x40));
+        v->pon_imagen(3, 40, 20, rgb, 1.f);
+        QGraphicsSvgItem* pz = v->vivo(1);
+        QGraphicsPixmapItem* im = v->pantalla(1);
+        comprueba(v->vivo(0) && pz && v->vivo(0)->zValue() > pz->zValue(),
+                  "los elementos vivos, unos encima de otros en el orden del dibujo y no en el "
+                  "de las piezas: el carro X, declarado antes pero dibujado despues, va encima "
+                  "de la pieza que recorre");
+        const QRectF antes = im ? im->sceneBoundingRect() : QRectF();
+        v->pon_valor(2, 10.f);
+        comprueba(im && im->isVisible() && pz->pos() == QPointF(0, -15) &&
+                      std::abs(im->sceneBoundingRect().top() - (antes.top() - 15)) < 0.01 &&
+                      std::abs(im->sceneBoundingRect().left() - antes.left()) < 0.01,
+                  "mesa = 10 mm: el elemento sube 15 y la imagen con el, encima");
     }
 
     return resultado();

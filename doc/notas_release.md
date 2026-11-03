@@ -6,12 +6,23 @@ pruebas y el paquete arrancó** —en Windows, con un `PATH` sin MSYS2, que es c
 lo va a ejecutar quien lo descargue—. **Llevan Qt dentro**: no hay que
 instalarlo.
 
-| Tu máquina | Fichero | Qué es |
-| :--- | :--- | :--- |
-| Windows 10/11 x64 | `mcu-sim-gui-windows-x86_64.zip` | una carpeta: `mcu-sim-gui.exe` y sus DLL |
-| Linux x86-64 (glibc 2.38 o posterior: Ubuntu 24.04, Debian 13, Fedora 39...) | `mcu-sim-gui-linux-x86_64.tar.gz` | un AppImage |
-| Mac Apple Silicon | `mcu-sim-gui-macos-arm64.zip` | `mcu-sim-gui.app` |
-| Mac Intel | `mcu-sim-gui-macos-x86_64.zip` | `mcu-sim-gui.app` |
+**Hay dos paquetes por máquina**, y basta con uno:
+
+* **Con la vista 3D** (*Vista ▸ Vista 3D*, la fresadora de mcu-sim en tres
+  dimensiones). Lleva además Qt Quick 3D y sus módulos de QML, y cada paquete
+  se comprueba cargándola desde dentro de él (`mcu-sim-gui --comprueba-3d`).
+  Dibujarla depende de la tarjeta gráfica de cada máquina: OpenGL en Linux,
+  Direct3D 11 en Windows, Metal en macOS.
+* **Sin ella** (`-sin-3d`): todo lo demás igual, unos 9 MB menos y sin Qt
+  Quick 3D. Es para quien no la vaya a usar, o para una máquina donde la vista
+  3D no funcione. La ventana 3D dice que esa versión no la lleva.
+
+| Tu máquina | Con la vista 3D | Sin ella | Qué es |
+| :--- | :--- | :--- | :--- |
+| Windows 10/11 x64 | `mcu-sim-gui-windows-x86_64.zip` | `mcu-sim-gui-windows-x86_64-sin-3d.zip` | una carpeta: `mcu-sim-gui.exe` y sus DLL |
+| Linux x86-64 (glibc 2.38 o posterior: Ubuntu 24.04, Debian 13, Fedora 39...) | `mcu-sim-gui-linux-x86_64.tar.gz` | `mcu-sim-gui-linux-x86_64-sin-3d.tar.gz` | un AppImage |
+| Mac Apple Silicon | `mcu-sim-gui-macos-arm64.zip` | `mcu-sim-gui-macos-arm64-sin-3d.zip` | `mcu-sim-gui.app` |
+| Mac Intel | `mcu-sim-gui-macos-x86_64.zip` | `mcu-sim-gui-macos-x86_64-sin-3d.zip` | `mcu-sim-gui.app` |
 
 **mcu-sim va aparte**, de sus propias Release: esta ventana lo lanza, pero no
 lo lleva. Con los dos descargados, en la ventana *Simulación ▸ Lanzar mcu-sim*
@@ -25,7 +36,7 @@ lo recuerda en su `config.json`; `config.ejemplo.json` es la plantilla.
   justo eso lo que evita el «no se encuentra el punto de entrada» de otras
   copias de Qt en el `PATH`—. **SmartScreen avisa** porque no está firmado:
   *Más información* → *Ejecutar de todas formas*.
-- **Linux**: `tar xzf mcu-sim-gui-linux-x86_64.tar.gz` y
+- **Linux**: `tar xzf mcu-sim-gui-linux-x86_64.tar.gz` (o el `-sin-3d`) y
   `./mcu-sim-gui-x86_64.AppImage`. Si dice que falta FUSE, o
   `sudo apt install fuse3`, o `./mcu-sim-gui-x86_64.AppImage
   --appimage-extract-and-run`.
