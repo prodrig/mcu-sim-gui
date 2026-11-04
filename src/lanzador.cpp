@@ -152,6 +152,20 @@ QByteArray Lanzador::mcus_de(const QString& ejecutable, const QString& directori
                    plazo_ms);
 }
 
+QByteArray Lanzador::memorias_de(const QString& ejecutable, const QString& directorio,
+                                 const QString& placa, const QStringList& extra,
+                                 QString& error, int plazo_ms)
+{
+    const QString exe = resuelve(ejecutable);
+    if (exe.isEmpty()) {
+        error = tr("no hay ningun ejecutable en '%1'").arg(ejecutable);
+        return {};
+    }
+    return ejecuta(exe, directorio, QStringList{placa, QStringLiteral("--memorias")} + extra,
+                   QStringLiteral("%1 %2 --memorias").arg(QFileInfo(exe).fileName(), placa),
+                   error, plazo_ms);
+}
+
 QByteArray Lanzador::argumentos_de(const QString& ejecutable, const QString& directorio,
                                    QString& error, int plazo_ms)
 {

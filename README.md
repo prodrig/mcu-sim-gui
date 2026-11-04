@@ -431,7 +431,11 @@ buscado y dónde la guardará al lanzar. Si la encontró, de qué fichero la ley
 El firmware va **por chip**: el diálogo le pregunta a `mcu-sim placa --mcus`
 qué MCUs lleva la placa y pone una fila por cada uno, con su fichero —vacío, el
 del XML— y una casilla «sin firmware» (plan §42; en la configuración,
-`firmware:N/u0` y `sin-firmware:N/u0`). El puerto es una
+`firmware:N/u0` y `sin-firmware:N/u0`). Igual con `mcu-sim placa --memorias`:
+una fila por memoria no volátil —la Flash de cada MCU, una `I2cEeprom`...—
+con el fichero Intel HEX de su contenido, que se carga al arrancar y se guarda
+al acabar; vacío, el del XML (plan §53; en la configuración,
+`contenido:N/U5`). El puerto es una
 preferencia: si está cogido, la ventana escucha en otro y se lo pasa al hijo,
 sin decir nada.
 

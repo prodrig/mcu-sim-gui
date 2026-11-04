@@ -25,17 +25,26 @@
 //       `prueba_argumentos` G5;
 //   L7  el firmware de cada MCU (plan §42): `mcu-sim placa --mcus` de un
 //       sistema y de una placa con dos, el diálogo que se los pide al abrirse y
-//       al cambiar de placa, y lanzar el sistema del servo sin su firmware.
+//       al cambiar de placa, y lanzar el sistema del servo sin su firmware;
+//   L8  el contenido de cada memoria no volatil: `mcu-sim placa --memorias`,
+//       el dialogo con una fila por memoria, y lanzar con el contenido de la
+//       Flash elegido: «Detener mcu-sim» pide parar (T_PARA) y la Flash queda
+//       guardada en su fichero.
 //
 // Como `cruzada`, necesita MCU_SIM (el ejecutable) y MCU_SIM_SRC (su src/).
 // Sin ellas, código 77: saltada.
 // =============================================================================
+#include <algorithm>
+
 #include <QApplication>
 #include <QComboBox>
 #include <QLineEdit>
 #include <QCheckBox>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
+#include <QTemporaryDir>
+#include <QAction>
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -327,6 +336,57 @@ int main(int argc, char** argv)
                       espera([&] { return consola(v).contains("mcu N/u0: sin firmware"); }, 5000),
                   "y la ventana lanza el sistema del servo sin su firmware: --sin-firmware, y "
                   "mcu-sim lo dice");
+        v.close();
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("L8 El contenido de cada memoria no volatil, con el mcu-sim de verdad\n");
+    {
+        QString e;
+        QVector<MemoriaCli> m;
+        const QByteArray s = Lanzador::memorias_de(g_sim, g_src, "placas/banco.xml", {}, e);
+        comprueba(!s.isEmpty() && lee_memorias(s, m, e) && m.size() == 3 &&
+                      std::any_of(m.begin(), m.end(),
+                                  [](const MemoriaCli& x) {
+                                      return x.id == "eeprom" && x.clase == "pieza" &&
+                                             x.tipo == "I2cEeprom";
+                                  }),
+                  "mcu-sim placa --memorias: la EEPROM, la SD y la NAND del banco de piezas: " +
+                      e.toStdString());
+        QVector<MemoriaCli> m2;
+        const QByteArray s2 = Lanzador::memorias_de(g_sim, g_src, "placas/discovery_min.xml", {}, e);
+        comprueba(lee_memorias(s2, m2, e) && m2.size() == 1 && m2[0].id == "u0" &&
+                      m2[0].clase == "mcu" && m2[0].que == "Flash",
+                  "y la Flash del chip de discovery_min.xml");
+
+        QTemporaryDir tmp;
+        const QString hex = tmp.filePath("flash.hex");
+        Configuracion c = configuracion();
+        c.argumentos.insert("contenido:u0", hex);
+        DialogoLanzamiento d(c, "127.0.0.1:1");
+        auto* f = d.findChild<QLineEdit*>("arg:contenido:u0");
+        comprueba(d.memorias().size() == 1 && f && f->text() == hex &&
+                      d.linea().contains("--contenido=u0=" + hex),
+                  "el dialogo se las pide al abrirse: la fila de la Flash, con su fichero");
+
+        VentanaPrincipal v(c);
+        v.show();
+        auto* arrancar = v.findChild<QPushButton*>("arrancar");
+        comprueba(v.lanza() && espera([&] { return arrancar->isEnabled(); }, 20000) &&
+                      consola(v).contains("--contenido=u0="),
+                  "la ventana lanza con --contenido");
+        arrancar->click();
+        espera([] { return false; }, 300);
+        QAction* detener = nullptr;
+        for (QAction* a : v.findChildren<QAction*>())
+            if (a->text().contains("Detener")) detener = a;
+        if (detener) detener->trigger();
+        comprueba(detener && espera([&] { return !v.lanzador().corriendo(); }, 10000),
+                  "«Detener mcu-sim» lo para");
+        QFile fh(hex);
+        const QByteArray dentro = fh.open(QIODevice::ReadOnly) ? fh.readAll() : QByteArray();
+        comprueba(dentro.startsWith(":020000040800") && dentro.trimmed().endsWith(":00000001FF"),
+                  "y como se le pidio parar, guardo la Flash en su fichero, en Intel HEX");
         v.close();
     }
 

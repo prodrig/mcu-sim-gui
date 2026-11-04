@@ -96,6 +96,34 @@ bool lee_mcus(const QByteArray& salida, QVector<McuCli>& mcus, QString& error)
     return false;
 }
 
+bool lee_memorias(const QByteArray& salida, QVector<MemoriaCli>& memorias, QString& error)
+{
+    memorias.clear();
+    const int i = salida.indexOf("<memorias");
+    if (i < 0) {
+        error = QStringLiteral("no contesta con la lista de sus memorias no volatiles: es un "
+                               "mcu-sim anterior a --memorias");
+        return false;
+    }
+    QXmlStreamReader x(salida.mid(i));
+    while (!x.atEnd()) {
+        x.readNext();
+        if (x.isStartElement() && x.name() == QLatin1String("memoria")) {
+            const auto at = x.attributes();
+            memorias.push_back({at.value(QLatin1String("id")).toString(),
+                                at.value(QLatin1String("tipo")).toString(),
+                                at.value(QLatin1String("clase")).toString(),
+                                at.value(QLatin1String("que")).toString(),
+                                at.value(QLatin1String("contenido")).toString()});
+        } else if (x.isEndElement() && x.name() == QLatin1String("memorias")) {
+            return true;
+        }
+    }
+    error = QStringLiteral("la lista de memorias no es XML valido: %1").arg(x.errorString());
+    memorias.clear();
+    return false;
+}
+
 QStringList trocea(const QString& texto)
 {
     QStringList r;
@@ -124,7 +152,8 @@ QStringList trocea(const QString& texto)
 
 QStringList linea_de_ordenes(const ArgumentosCli& a, const ValoresCli& v,
                              const QString& a_mano, QString* error,
-                             const QVector<McuCli>& mcus)
+                             const QVector<McuCli>& mcus,
+                             const QVector<MemoriaCli>& memorias)
 {
     // Plan §42: con un chip, sin firmware quita el posicional; con varios, el
     // posicional no se usa
@@ -167,6 +196,11 @@ QStringList linea_de_ordenes(const ArgumentosCli& a, const ValoresCli& v,
             const QString f = v.value(QStringLiteral("firmware:") + m.id).trimmed();
             if (!f.isEmpty()) r << QStringLiteral("--firmware=%1=%2").arg(m.id, f);
         }
+    // El contenido elegido de cada memoria no volatil; sin eleccion, el del XML
+    for (const MemoriaCli& m : memorias) {
+        const QString f = v.value(QStringLiteral("contenido:") + m.id).trimmed();
+        if (!f.isEmpty()) r << QStringLiteral("--contenido=%1=%2").arg(m.id, f);
+    }
     for (const OpcionCli& o : a.opciones) {
         if (o.forma == QLatin1String("accion")) continue;
         const QString val = v.value(o.nombre).trimmed();

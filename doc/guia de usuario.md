@@ -54,6 +54,7 @@ lanzar se guarda todo**, y la próxima vez el diálogo sale relleno.
 | **Directorio** | Desde dónde se lanza: el `src/` de `mcu-sim`, donde están `placas/` y `verif/`. **La placa y el firmware se buscan aquí** |
 | **placa** | El circuito (§3.1) |
 | **firmware** | Lo que se carga en la Flash (§3.2) |
+| **contenido** de cada memoria | El fichero de donde se carga y donde se guarda lo que guarda cada memoria no volátil (§3.3) |
 | las demás | Las opciones de `mcu-sim`: depuración (§5), puerto serie (§6)... Cada una explica lo que hace al pasar el ratón por encima. La lista entera, en el [anexo A.2](#a2-las-opciones-de-mcu-sim-en-el-diálogo) |
 | **A mano** | Cualquier otro argumento, tal cual, para lo que el diálogo no ofrezca |
 
@@ -62,7 +63,9 @@ ejecuta; abajo, en la pestaña **mcu-sim**, sale todo lo que el simulador
 escribe —el arranque, los avisos, un error si algo no le gusta—.
 
 *Simulación ▸ Lanzar otra vez* (**Ctrl+R**) repite el último lanzamiento sin
-diálogo, y *Detener mcu-sim* lo para.
+diálogo, y *Detener mcu-sim* lo para: primero le pide que termine, como
+**Parar**, para que guarde sus memorias (§3.3), y si en tres segundos no lo ha
+hecho, lo mata.
 
 ### 3.1 Elegir el circuito
 
@@ -143,6 +146,32 @@ se lo pregunta a `mcu-sim` al escribir la placa:
 * **Con varios MCUs**, una fila **por cada uno**, con lo mismo.
 
 Las rutas son relativas al **Directorio**; el botón «…» las pone así solo.
+
+### 3.3 Lo que guardan las memorias no volátiles
+
+La Flash de un MCU, la EEPROM del MSP432E4, una EEPROM I2C (`I2cEeprom`), una
+tarjeta SD (`SdCard`) o una NAND (`ExtNand`) guardan lo que tienen aunque se
+quite la alimentación. Para que eso pase también **de una simulación a la
+siguiente**, cada una puede tener un fichero **`contenido`**, en **Intel
+HEX** (`.hex`): se carga al arrancar y se escribe al acabar. Si el fichero aún
+no existe, la memoria arranca como siempre y el fichero se crea al acabar.
+Sin fichero, la memoria se pierde al acabar, como siempre.
+
+El diálogo le pregunta a `mcu-sim` qué memorias no volátiles lleva el circuito
+y pone, bajo **«El contenido de cada memoria no volátil»**, una fila por cada
+una —«N/u0 (STM32F446RE): Flash», «N/U5 (I2cEeprom): EEPROM de 64 bytes»—,
+con su fichero y su botón «…», que deja escribir el nombre de uno que todavía
+no existe. **Vacía, se usa el que diga el XML** —el atributo `contenido` del
+`<mcu>` o del `<componente>`, y si el sistema lo dice, el del sistema—, que sale
+en gris de muestra. **Lo que se ponga aquí manda sobre los dos.**
+
+Con la Flash de un MCU, primero se carga el contenido y **después el
+firmware encima**: lo que el programa haya guardado en otras páginas se
+conserva. Si no hay firmware, el MCU arranca con lo que traiga el contenido.
+
+El contenido **solo se guarda si la simulación acaba bien**: con **Parar**,
+con su `--ms`, cerrando la ventana o con *Detener mcu-sim*. Si el proceso
+muere de golpe —matado desde fuera—, el fichero se queda como estaba.
 
 ## 4. Durante la simulación
 
@@ -344,6 +373,7 @@ se use. Las de hoy:
 | `firmware` | La imagen para la Flash (§3.2) |
 | `--firmware ID=FICHERO` | El firmware de un MCU concreto —`N/u0`—, también con varios; lo escriben las filas del firmware |
 | `--sin-firmware[=ID]` | Ese MCU —sin ID, todos— sin firmware; lo escribe la casilla «sin firmware» |
+| `--contenido ID=FICHERO` | El fichero Intel HEX de la memoria no volátil `ID` —`N/u0`, `N/U5`—; lo escriben las filas del contenido (§3.3) |
 | `--ms` | Cuánto tiempo simular, en ms. Con la ventana, sin decirlo no hay fin: se para con **Parar** |
 | `--mcu TIPO` | El MCU, si la placa no lo dice; si lo dice, manda sobre él |
 | `--gdb` | El servidor de GDB, por los pines SWD (§5) |

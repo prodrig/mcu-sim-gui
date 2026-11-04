@@ -5,6 +5,7 @@
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QTimer>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -146,7 +147,16 @@ void VentanaPrincipal::construye()
     act_otra_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
     act_detener_ = m->addAction(tr("&Detener mcu-sim"), this, [this] {
         consola(tr("— se pide a mcu-sim que termine —"), QStringLiteral("gray"));
-        lanz_.detiene();
+        // Primero, el final ordenado -T_PARA-: así guarda el contenido de sus
+        // memorias no volatiles. Si no lo hay o en tres segundos no ha
+        // terminado, se le mata
+        if (!ses_.para()) {
+            lanz_.detiene();
+            return;
+        }
+        QTimer::singleShot(3000, this, [this] {
+            if (lanz_.corriendo()) lanz_.detiene();
+        });
     });
     m->addSeparator();
     m->addAction(tr("&Salir"), this, &QWidget::close)->setShortcut(QKeySequence::Quit);
@@ -348,6 +358,7 @@ bool VentanaPrincipal::lanza()
     // Plan §42: los MCUs de la placa, para el firmware de cada uno. Un
     // mcu-sim que no sabe decirlos se lanza como siempre
     QVector<McuCli> mcus;
+    QVector<MemoriaCli> memorias;
     const QString placa = cfg_.argumentos.value(QStringLiteral("placa")).trimmed();
     if (!args_.vacio() && !placa.isEmpty()) {
         QString e;
@@ -356,9 +367,12 @@ bool VentanaPrincipal::lanza()
         if (!mcu.isEmpty()) extra << QStringLiteral("--mcu=") + mcu;
         const QByteArray s = Lanzador::mcus_de(exe, dir, placa, extra, e);
         if (s.isEmpty() || !lee_mcus(s, mcus, e)) mcus.clear();
+        // Y sus memorias no volatiles, para el contenido elegido de cada una
+        const QByteArray sm = Lanzador::memorias_de(exe, dir, placa, extra, e);
+        if (sm.isEmpty() || !lee_memorias(sm, memorias, e)) memorias.clear();
     }
     QString error;
-    QStringList a = linea_de_ordenes(args_, cfg_.argumentos, cfg_.a_mano, &error, mcus);
+    QStringList a = linea_de_ordenes(args_, cfg_.argumentos, cfg_.a_mano, &error, mcus, memorias);
     if (!error.isEmpty()) {
         statusBar()->showMessage(tr("no se puede lanzar: %1").arg(error));
         return false;

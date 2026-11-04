@@ -26,9 +26,11 @@ namespace mcusim {
 namespace {
 
 // Un campo de texto con un botón «…» que abre un selector de fichero (o de
-// directorio, si `filtro` es nulo).
+// directorio, con `directorio`). Con `nuevo`, el fichero puede no existir aún
+// -el `contenido` de una memoria se crea al acabar la simulación-.
 QWidget* con_examinar(QLineEdit* e, QWidget* padre, const QString& filtro,
-                      std::function<QString()> base, bool directorio = false)
+                      std::function<QString()> base, bool directorio = false,
+                      bool nuevo = false)
 {
     auto* w = new QWidget(padre);
     auto* h = new QHBoxLayout(w);
@@ -41,7 +43,9 @@ QWidget* con_examinar(QLineEdit* e, QWidget* padre, const QString& filtro,
         const QString ini = base();
         const QString r = directorio
             ? QFileDialog::getExistingDirectory(w, QString(), ini)
-            : QFileDialog::getOpenFileName(w, QString(), ini, filtro);
+            : nuevo ? QFileDialog::getSaveFileName(w, QString(), ini, filtro, nullptr,
+                                                   QFileDialog::DontConfirmOverwrite)
+                    : QFileDialog::getOpenFileName(w, QString(), ini, filtro);
         if (r.isEmpty()) return;
         // Relativa a la base si cuelga de ella: así la configuración viaja
         const QDir d(ini);
@@ -202,6 +206,35 @@ bool DialogoLanzamiento::pide_mcus()
     return true;
 }
 
+// `mcu-sim placa --memorias`, con el mismo --mcu. Si no sabe contestar, no
+// hay filas de contenido: se lanza con lo que diga el XML
+bool DialogoLanzamiento::pide_memorias()
+{
+    memorias_.clear();
+    const QString exe = exe_->text().trimmed();
+    const QString placa = cfg_.argumentos.value(QStringLiteral("placa")).trimmed();
+    if (exe.isEmpty() || placa.isEmpty()) return false;
+    QStringList extra;
+    const QString mcu = cfg_.argumentos.value(QStringLiteral("--mcu"));
+    if (!mcu.isEmpty()) extra << QStringLiteral("--mcu=") + mcu;
+    QString e;
+    const QByteArray s = Lanzador::memorias_de(cfg_.absoluta(exe),
+                                               cfg_.absoluta(dir_->text().trimmed()), placa,
+                                               extra, e);
+    if (s.isEmpty() || !lee_memorias(s, memorias_, e)) {
+        memorias_.clear();
+        return false;
+    }
+    return true;
+}
+
+void DialogoLanzamiento::pon_memorias(const QVector<MemoriaCli>& m)
+{
+    if (!w_.isEmpty()) cfg_.argumentos = configuracion().argumentos;
+    memorias_ = m;
+    construye();
+}
+
 void DialogoLanzamiento::pon_mcus(const QVector<McuCli>& m)
 {
     if (!w_.isEmpty()) cfg_.argumentos = configuracion().argumentos;
@@ -214,6 +247,7 @@ void DialogoLanzamiento::relee_mcus()
 {
     if (!w_.isEmpty()) cfg_.argumentos = configuracion().argumentos;
     pide_mcus();
+    pide_memorias();
     construye();
 }
 
@@ -232,6 +266,7 @@ void DialogoLanzamiento::relee()
         aviso_ = e;
     }
     pide_mcus();
+    pide_memorias();
     construye();
 }
 
@@ -290,10 +325,41 @@ void DialogoLanzamiento::construye()
                        }));
     }
 
+    // El contenido de cada memoria no volatil: su fichero Intel HEX
+    if (!memorias_.isEmpty()) {
+        auto* t = new QLabel(tr("<b>El contenido de cada memoria no volatil</b>, en Intel HEX: se "
+                                "carga al arrancar y se guarda al acabar. Vacio, el que diga el "
+                                "XML"),
+                             campos_);
+        t->setObjectName(QStringLiteral("contenidos"));
+        t->setWordWrap(true);
+        forma_->addRow(t);
+        for (const MemoriaCli& m : memorias_) {
+            const QString clave = QStringLiteral("contenido:") + m.id;
+            auto* e = new QLineEdit(cfg_.argumentos.value(clave), campos_);
+            e->setObjectName(QStringLiteral("arg:") + clave);
+            e->setPlaceholderText(m.contenido.isEmpty()
+                                      ? tr("el XML no dice ninguno: se pierde al acabar")
+                                      : tr("el del XML: %1").arg(m.contenido));
+            e->setToolTip(tr("Fichero Intel HEX con el contenido de %1 de %2: se carga al "
+                             "arrancar -antes del firmware- y se guarda al acabar. Si aun no "
+                             "existe, se crea. Vacio, el que diga el XML")
+                              .arg(m.que, m.id));
+            connect(e, &QLineEdit::textChanged, this, &DialogoLanzamiento::actualiza);
+            w_.insert(clave, e);
+            forma_->addRow(QStringLiteral("%1 (%2): %3").arg(m.id, m.tipo, m.que),
+                           con_examinar(e, campos_, tr("Intel HEX (*.hex *.ihex);;* (*)"),
+                                        [this] { return cfg_.absoluta(dir_->text().trimmed()); },
+                                        false, true));
+        }
+    }
+
     for (const OpcionCli& o : args_.opciones) {
         if (!o.se_ofrece()) continue;
-        // Plan §42: esas dos las escriben las filas del firmware
-        if (o.nombre == QLatin1String("--firmware") || o.nombre == QLatin1String("--sin-firmware"))
+        // Plan §42: esas dos las escriben las filas del firmware; --contenido,
+        // las de las memorias
+        if (o.nombre == QLatin1String("--firmware") || o.nombre == QLatin1String("--sin-firmware") ||
+            o.nombre == QLatin1String("--contenido"))
             continue;
         const QString val = cfg_.argumentos.value(o.nombre);
         QWidget* w = nullptr;
@@ -398,7 +464,8 @@ Configuracion DialogoLanzamiento::configuracion() const
         const bool de_firmware = it.key() == QLatin1String("firmware") ||
                                  it.key() == QLatin1String("sin-firmware") ||
                                  it.key().startsWith(QLatin1String("firmware:")) ||
-                                 it.key().startsWith(QLatin1String("sin-firmware:"));
+                                 it.key().startsWith(QLatin1String("sin-firmware:")) ||
+                                 it.key().startsWith(QLatin1String("contenido:"));
         if (de_firmware && !w_.contains(it.key()) && !it.value().isEmpty())
             c.argumentos.insert(it.key(), it.value());
     }
@@ -408,7 +475,7 @@ Configuracion DialogoLanzamiento::configuracion() const
 QStringList DialogoLanzamiento::linea(QString* error) const
 {
     const Configuracion c = configuracion();
-    return linea_de_ordenes(args_, c.argumentos, c.a_mano, error, mcus_);
+    return linea_de_ordenes(args_, c.argumentos, c.a_mano, error, mcus_, memorias_);
 }
 
 QString DialogoLanzamiento::aviso() const { return aviso_; }

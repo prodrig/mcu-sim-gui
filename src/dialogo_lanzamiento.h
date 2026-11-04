@@ -26,8 +26,15 @@
 // vacío es el firmware que diga el XML, y el campo lo enseña de muestra. Si
 // `mcu-sim` no sabe contestar -uno anterior-, la fila de siempre.
 //
+// EL CONTENIDO DE CADA MEMORIA NO VOLATIL: igual, `mcu-sim placa --memorias`
+// dice cuales lleva -la Flash de cada MCU, una I2cEeprom, una SdCard...-, y
+// cada una tiene su fila con el fichero Intel HEX de donde se carga al
+// arrancar y donde se guarda al acabar. Vacio, el que diga el XML (el sistema
+// antes que la placa), que se enseña de muestra; lo elegido aqui pisa a los dos
+// (`--contenido=ID=FICHERO`). Si `mcu-sim` no sabe contestar, no hay filas.
+//
 // Cada campo lleva de `objectName` `arg:<nombre>` («arg:placa», «arg:--ms»,
-// «arg:firmware:N/u0», «arg:sin-firmware:N/u0»...): así lo encuentran las
+// «arg:firmware:N/u0», «arg:sin-firmware:N/u0», «arg:contenido:N/U5»...): así lo encuentran las
 // pruebas.
 // =============================================================================
 #ifndef MCU_SIM_GUI_DIALOGO_LANZAMIENTO_H
@@ -71,10 +78,15 @@ public:
     void pon_mcus(const QVector<McuCli>& m);
     void relee_mcus();
     const QVector<McuCli>& mcus() const { return mcus_; }
+    // Las memorias no volatiles, igual: `pon_memorias` sin preguntar (pruebas);
+    // se le piden a `mcu-sim` cada vez que se le piden los MCUs
+    void pon_memorias(const QVector<MemoriaCli>& m);
+    const QVector<MemoriaCli>& memorias() const { return memorias_; }
 
 private:
     void construye();
     bool pide_mcus();
+    bool pide_memorias();
     QWidget* fila_firmware(const QString& clave, const QString& clave_sin,
                            const QString& del_xml);
     QString valor(const QString& nombre) const;
@@ -86,6 +98,7 @@ private:
     QString             aviso_;
     QVector<McuCli>     mcus_;
     QString             aviso_mcus_;
+    QVector<MemoriaCli> memorias_;
     QLineEdit*          exe_ = nullptr;
     QLineEdit*          dir_ = nullptr;
     QLineEdit*          a_mano_ = nullptr;

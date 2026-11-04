@@ -3161,3 +3161,43 @@ sin etiquetar. En Linux, el de sin 3D pesa 35,6 MB y el otro, 44,4.
   El de sin 3D se empaqueta y arranca.
 * **⚠ SIN VERIFICAR**: los scripts de Windows y de macOS con la vista 3D, y
   los paquetes sin ella en esas dos plataformas, hasta su primer CI.
+
+## 53. El contenido de las memorias no volátiles
+
+Pedido por el uso: lo que guardaba una memoria no volátil —la Flash de un
+MCU, la EEPROM del MSP432E4, una `I2cEeprom`, una `SdCard`, una `ExtNand`— se
+perdía al acabar la simulación. `mcu-sim` tiene ahora el atributo
+`contenido="fichero.hex"` en el `<mcu>` y el `<componente>` de la placa, en el
+`<mcu ref>` y el nuevo `<memoria ref>` del sistema, y `--contenido ID=FICHERO`,
+por ese orden de menos a más; y `placa --memorias`, que las lista en XML (su
+`doc/parts.md` §2.7). La memoria se carga de ese fichero Intel HEX al
+arrancar —antes del firmware— y se guarda en él al acabar. En la ventana:
+
+1. **`Lanzador::memorias_de`** ejecuta `mcu-sim placa --memorias` —con el
+   `--mcu` elegido— y `lee_memorias` lo lee (`MemoriaCli`: id, tipo, clase
+   `mcu` o `pieza`, lo que es y el contenido del XML). Un `mcu-sim` anterior
+   no sabe, y entonces no hay filas.
+2. **El diálogo** se las pide cada vez que pide los MCUs (§42): al abrirse,
+   al acabar de escribir otra placa y al cambiar el directorio. Debajo del
+   firmware, **una fila por memoria** —«N/U5 (I2cEeprom): EEPROM de 64
+   bytes»— con su fichero en `contenido:<id>`, de muestra el del XML —o que
+   se pierde al acabar—, y un «…» que deja elegir un fichero que aún no
+   existe. `--contenido` no sale como opción suelta. Lo de las memorias que
+   ahora no están se sigue recordando.
+3. **La línea de órdenes** lleva un `--contenido=ID=FICHERO` por cada fila
+   escrita; una vacía no escribe nada, y vale el del XML. Al lanzar, la
+   ventana pregunta otra vez por las memorias, como por los chips.
+4. **Detener mcu-sim** ya no mata sin más: primero pide parar (`T_PARA`),
+   que es el final ordenado en el que `mcu-sim` guarda sus memorias, y solo
+   si en tres segundos no ha terminado —o no hay sesión— lo mata. En Windows,
+   `terminate()` no llega a un proceso de consola, y la memoria se habría
+   perdido siempre.
+
+**Cómo se ha comprobado**: `prueba_argumentos` 51 → **60** (G7): leer
+`--memorias`, y uno anterior; la línea con lo elegido, sin elección y con una
+memoria que ya no está; y el diálogo sin memorias, con dos, en otra placa y
+de vuelta, con lo que se recuerda. Y `prueba_lanzamiento` 23 → **29** (L8),
+con el `mcu-sim` de verdad: las memorias del banco de piezas y de
+`discovery_min.xml`, el diálogo con la fila de la Flash, y lanzar con
+`--contenido`: *Detener mcu-sim* lo para con `T_PARA` y la Flash queda en su
+fichero, en Intel HEX.
