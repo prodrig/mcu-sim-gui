@@ -3037,7 +3037,9 @@ grados, que es el que sugiere pintar, y sus mandos `bloquear` y `carga`.
 **Cómo se ha comprobado**:
 * `prueba_ilustracion` I26: el display, con sus cifras y sus filas.
 * `prueba_cruzada` G9, contra el `mcu-sim` de verdad:
-  * nueve placas y cuarenta y cuatro piezas, sin avisos;
+  * nueve placas y cuarenta y seis piezas, sin avisos —eran cuarenta y cuatro
+    hasta que la Nucleo llevó el pull-up de 4K7 de B1 y su resistencia en
+    serie, R30 y R29, que no se ven pero son piezas—;
   * los dos motores comparten dibujo, y el L298N llega sin los puentes de ENA
     y ENB;
   * diez clics del mando, mandados antes de arrancar, los ponen a toda

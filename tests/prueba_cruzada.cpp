@@ -599,14 +599,17 @@ int main(int argc, char** argv)
             todas = todas && x.en_placa;
         }
         auto tipo = [&](const char* id) { return pz.contains(id) ? pz[id]->tipo : QString(); };
-        comprueba(pl.placas.size() == 9 && pl.piezas.size() == 44 && todas &&
+        // 46: la Nucleo lleva desde mcu-sim 1c6ff79 el pull-up de 4K7 de B1 y su
+        // resistencia de 100 ohmios en serie (R30 y R29, visible="no"): no se
+        // dibujan, pero son piezas de la placa y llegan en T_PLACA
+        comprueba(pl.placas.size() == 9 && pl.piezas.size() == 46 && todas &&
                       pl.avisos.isEmpty() && tipo("MA/MOTOR") == "MotorCC" &&
                       tipo("MB/MOTOR") == "MotorCC" && tipo("L/U1") == "L298" &&
                       tipo("L/U2") == "Regulador" && tipo("K/ENC") == "Encoder" &&
                       tipo("F/U1") == "PuenteSerie" && tipo("PS/PSU") == "Fuente" &&
                       pz["PS/PSU"]->observables.size() == 3 &&
                       pz["PS/PSU"]->observables[2].nombre == "tension",
-                  "nueve placas y cuarenta y cuatro piezas, todas casadas y sin avisos: los dos "
+                  "nueve placas y cuarenta y seis piezas, todas casadas y sin avisos: los dos "
                   "MotorCC, el L298 y su Regulador, el encoder de mando, el FTDI y la fuente, "
                   "que deja ver su corriente y su tension");
         const PiezaGui* ma = pz.value("MA/MOTOR");
