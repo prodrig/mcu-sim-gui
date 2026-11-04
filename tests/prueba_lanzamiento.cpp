@@ -355,9 +355,12 @@ int main(int argc, char** argv)
                       e.toStdString());
         QVector<MemoriaCli> m2;
         const QByteArray s2 = Lanzador::memorias_de(g_sim, g_src, "placas/discovery_min.xml", {}, e);
-        comprueba(lee_memorias(s2, m2, e) && m2.size() == 1 && m2[0].id == "u0" &&
-                      m2[0].clase == "mcu" && m2[0].que == "Flash",
-                  "y la Flash del chip de discovery_min.xml");
+        // Primero se lee y luego se dice: los dos argumentos de comprueba() se
+        // evaluan en cualquier orden
+        const bool ok2 = lee_memorias(s2, m2, e) && m2.size() == 1 && m2[0].id == "u0" &&
+                         m2[0].clase == "mcu" && m2[0].que.startsWith("Flash");
+        comprueba(ok2, "y la memoria del chip de discovery_min.xml, que empieza por su Flash: \"" +
+                           (m2.isEmpty() ? e.toStdString() : m2[0].que.toStdString()) + "\"");
 
         QTemporaryDir tmp;
         const QString hex = tmp.filePath("flash.hex");

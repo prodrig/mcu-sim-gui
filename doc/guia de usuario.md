@@ -159,7 +159,8 @@ Sin fichero, la memoria se pierde al acabar, como siempre.
 
 El diálogo le pregunta a `mcu-sim` qué memorias no volátiles lleva el circuito
 y pone, bajo **«El contenido de cada memoria no volátil»**, una fila por cada
-una —«N/u0 (STM32F446RE): Flash», «N/U5 (I2cEeprom): EEPROM de 64 bytes»—,
+una —«N/u0 (STM32F446RE): Flash, OTP y bytes de opcion», «N/U5 (I2cEeprom):
+EEPROM de 64 bytes»—,
 con su fichero y su botón «…», que deja escribir el nombre de uno que todavía
 no existe. **Vacía, se usa el que diga el XML** —el atributo `contenido` del
 `<mcu>` o del `<componente>`, y si el sistema lo dice, el del sistema—, que sale
@@ -168,6 +169,14 @@ en gris de muestra. **Lo que se ponga aquí manda sobre los dos.**
 Con la Flash de un MCU, primero se carga el contenido y **después el
 firmware encima**: lo que el programa haya guardado en otras páginas se
 conserva. Si no hay firmware, el MCU arranca con lo que traiga el contenido.
+
+Con la memoria de un MCU va todo lo que guarda: en los STM32, también sus
+bytes de opción, y en el F4 su OTP; en el MSP432P401R, la Flash de
+información con su TLV y su BSL; en el MSP432E401Y, la EEPROM y los registros
+que el firmware fija (BOOTCFG, USER_REG, FMPRE y FMPPE). Lo que sigue como de
+fábrica no se escribe en el fichero. Si un STM32 queda con la lectura
+protegida (RDP en el nivel 1 o 2), la opción `--restore-rdp` del diálogo
+la devuelve a la de fábrica al arrancar (`mcu-sim`, `doc/parts.md` §2.7).
 
 El contenido **solo se guarda si la simulación acaba bien**: con **Parar**,
 con su `--ms`, cerrando la ventana o con *Detener mcu-sim*. Si el proceso
@@ -374,6 +383,7 @@ se use. Las de hoy:
 | `--firmware ID=FICHERO` | El firmware de un MCU concreto —`N/u0`—, también con varios; lo escriben las filas del firmware |
 | `--sin-firmware[=ID]` | Ese MCU —sin ID, todos— sin firmware; lo escribe la casilla «sin firmware» |
 | `--contenido ID=FICHERO` | El fichero Intel HEX de la memoria no volátil `ID` —`N/u0`, `N/U5`—; lo escriben las filas del contenido (§3.3) |
+| `--restore-rdp[=ID]` | El RDP de ese STM32 —sin ID, de todos— a su valor de fábrica tras cargar su contenido, aunque esté en el nivel 2 (§3.3) |
 | `--ms` | Cuánto tiempo simular, en ms. Con la ventana, sin decirlo no hay fin: se para con **Parar** |
 | `--mcu TIPO` | El MCU, si la placa no lo dice; si lo dice, manda sobre él |
 | `--gdb` | El servidor de GDB, por los pines SWD (§5) |
