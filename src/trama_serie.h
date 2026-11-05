@@ -1,0 +1,104 @@
+// =============================================================================
+// trama_serie.h — Lo que se teclea en la pestaña de un puente serie, hecho
+// bytes; y lo que llega, hecho texto
+//
+// La pestaña de cada PuenteSerie en memoria (`consola_serie.h`) manda lo que
+// se escribe en su entrada con T_SERIE_ENVIA. Esto es lo que hay entre las
+// dos cosas, sin un solo widget, para poder probarlo solo (`prueba_serie`, S1 y S2):
+//
+//   * LA ENTRADA es ASCII, con escapes intercalados donde se quiera:
+//
+//       \xNN                  UN byte: exactamente dos cifras hexadecimales.
+//                             Lo que siga ya es texto: `\x41BC` son tres
+//                             bytes, 0x41, 'B' y 'C'
+//       \x{NNMM...}           varios bytes: un número PAR de cifras entre
+//                             llaves, de dos en dos. `\x{0D0A}` es lo mismo
+//                             que `\x0D\x0A`, y `\x{41BC}` son 0x41 y 0xBC.
+//                             Dentro solo van cifras; vacías o con un número
+//                             impar de ellas, es un error
+//       \r \n \t \0 \\        los de C de siempre
+//
+//     Lo demás que no sea ASCII (una ñ, un €) es un error: el byte que se
+//     quiera va con \xNN.
+//
+//   * EL FINAL, en este orden: lo escrito, el CRC si se pide —calculado sobre
+//     lo escrito, solo eso—, CR (0x0D) si se pide y LF (0x0A) si se pide. CR
+//     y LF no entran nunca en el CRC.
+//
+//   * LOS CRC conocidos, con sus bytes:
+//
+//       Modbus RTU     CRC-16/MODBUS: polinomio 0x8005 reflejado (0xA001),
+//                      valor inicial 0xFFFF, sin XOR final. Dos bytes, el bajo
+//                      primero, como en la trama [Modbus over Serial Line
+//                      V1.02, §2.5.1.2 y §6.2.2]
+//       Modbus ASCII   LRC: el complemento a dos de la suma, módulo 256, de los
+//                      bytes que representan las parejas de cifras que van
+//                      después de ':' [§2.5.2.2 y §6.2.1]. Se añade como dos
+//                      caracteres ASCII en hexadecimal, en mayúsculas. Lo
+//                      escrito tiene que ser una trama ASCII: ':' (opcional) y
+//                      un número par de cifras hexadecimales
+//       Suma mód. 256  la suma de todos los bytes, módulo 256: un byte
+//
+//   * LO QUE LLEGA se enseña como texto (`legible`), con la misma notación
+//     que la entrada: lo imprimible tal cual, un salto de línea por cada CR,
+//     LF o CR+LF, un byte suelto que no se imprime como \xNN, y VARIOS
+//     seguidos juntos, como \x{NNMM...}, y la barra doblada, \\. Así, lo que
+//     se ve se puede copiar a la entrada y sale lo mismo (salvo CR y LF, que
+//     se ven como saltos).
+// =============================================================================
+#ifndef MCU_SIM_GUI_TRAMA_SERIE_H
+#define MCU_SIM_GUI_TRAMA_SERIE_H
+
+#include <QByteArray>
+#include <QString>
+#include <QVector>
+
+namespace mcusim {
+namespace trama {
+
+enum class Crc { ModbusRtu = 0, ModbusAscii = 1, Suma256 = 2 };
+
+struct CrcConocido {
+    Crc     id;
+    QString nombre;      // lo que sale en la lista
+    QString ayuda;       // la ayuda emergente
+};
+// Los de la lista, en su orden
+QVector<CrcConocido> crcs_conocidos();
+
+// Lo escrito, en bytes. false, con `error` diciendo qué y dónde (desde 1), si
+// algo no vale.
+bool desescapa(const QString& texto, QByteArray& out, QString* error = nullptr);
+
+// Los tres cálculos
+quint16 crc16_modbus(const QByteArray& d);
+quint8  lrc_modbus(const QByteArray& d);
+quint8  suma256(const QByteArray& d);
+
+// Los bytes que se añaden con ese CRC. false, con `error`, si no se puede
+// calcular (Modbus ASCII sobre algo que no es una trama ASCII).
+bool bytes_crc(Crc c, const QByteArray& datos, QByteArray& out, QString* error = nullptr);
+
+struct Opciones {
+    bool cr = false, lf = false, crc = false;
+    Crc  tipo = Crc::ModbusRtu;
+};
+// La trama entera: lo escrito, el CRC, CR y LF.
+bool construye(const QString& texto, const Opciones& o, QByteArray& trama,
+               QString* error = nullptr);
+
+// ¿Se enseña tal cual? Lo imprimible de ASCII y el tabulador. CR y LF no:
+// son saltos de línea
+bool imprimible(quint8 c);
+
+// Lo que llega, para la pantalla. `tras_cr` dice si lo anterior acabó en CR,
+// para que un CR+LF partido entre dos mensajes sea un salto y no dos. Si
+// `cola` no es nulo, dice cuántos bytes que no se imprimen hay al final de
+// `b`, seguidos: el que pinta sabe así qué grupo puede seguir en el próximo
+// mensaje, y juntarlos en un solo \x{...}.
+QString legible(const QByteArray& b, bool& tras_cr, int* cola = nullptr);
+
+} // namespace trama
+} // namespace mcusim
+
+#endif // MCU_SIM_GUI_TRAMA_SERIE_H
