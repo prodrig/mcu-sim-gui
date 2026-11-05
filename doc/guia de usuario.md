@@ -176,7 +176,11 @@ información con su TLV y su BSL; en el MSP432E401Y, la EEPROM y los registros
 que el firmware fija (BOOTCFG, USER_REG, FMPRE y FMPPE). Lo que sigue como de
 fábrica no se escribe en el fichero. Si un STM32 queda con la lectura
 protegida (RDP en el nivel 1 o 2), la opción `--restore-rdp` del diálogo
-la devuelve a la de fábrica al arrancar (`mcu-sim`, `doc/parts.md` §2.7).
+la devuelve a la de fábrica al arrancar. Y si un F4 tiene su OTP gastada
+—bloques programados o bloqueados—, la opción `--restore-otp` la deja de
+fábrica, todo a 0xFF, justo después de cargar su contenido: el chip de verdad
+no la borra nunca, así que solo vale con un fichero de contenido (`mcu-sim`,
+`doc/parts.md` §2.7).
 
 El contenido **solo se guarda si la simulación acaba bien**: con **Parar**,
 con su `--ms`, cerrando la ventana o con *Detener mcu-sim*. Si el proceso
@@ -383,6 +387,7 @@ se use. Las de hoy:
 | `--firmware ID=FICHERO` | El firmware de un MCU concreto —`N/u0`—, también con varios; lo escriben las filas del firmware |
 | `--sin-firmware[=ID]` | Ese MCU —sin ID, todos— sin firmware; lo escribe la casilla «sin firmware» |
 | `--contenido ID=FICHERO` | El fichero Intel HEX de la memoria no volátil `ID` —`N/u0`, `N/U5`—; lo escriben las filas del contenido (§3.3) |
+| `--restore-otp[=ID]` | La OTP de ese STM32F4 —sin ID, de todos los que tienen contenido— a la de fábrica, bloqueos incluidos, tras cargar su contenido. Sin contenido es un error (§3.3) |
 | `--restore-rdp[=ID]` | El RDP de ese STM32 —sin ID, de todos— a su valor de fábrica tras cargar su contenido, aunque esté en el nivel 2 (§3.3) |
 | `--ms` | Cuánto tiempo simular, en ms. Con la ventana, sin decirlo no hay fin: se para con **Parar** |
 | `--mcu TIPO` | El MCU, si la placa no lo dice; si lo dice, manda sobre él |
