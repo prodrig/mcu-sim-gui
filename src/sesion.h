@@ -27,6 +27,7 @@
 //   T_IMAGEN      -> `imagen()`, con los píxeles RGB888 y la luz (plan §30);
 //   T_SERIE       -> `serie()`, los bytes que ha mandado el MCU a un puente
 //                    serie en memoria; `envia_serie()` -> T_SERIE_ENVIA;
+//   T_IMAGEN_RECT -> `imagen()` también: el trozo, pegado en la última;
 //   `suscribe()`  -> T_SUSCRIBE.
 //
 // Y desde la fase 5, las órdenes (`doc/protocolo.md` §5):
@@ -150,7 +151,9 @@ signals:
     void aviso(quint32 nivel, quint64 t_sim_ns, const QString& origen, const QString& texto);
     void estado_modelo(quint32 fase, quint64 t_sim_ns, double t_pared_s, quint64 deltas);
     // Una imagen entera (T_IMAGEN): `rgb` son ancho x alto píxeles RGB888,
-    // por filas de arriba abajo, sin la luz; `brillo`, de 0 a 1, la luz.
+    // por filas de arriba abajo, sin la luz; `brillo`, de 0 a 1, la luz. Lo
+    // que llega a trozos (T_IMAGEN_RECT) se pega en la última y sale también
+    // por aquí, entera: quien la pinta no se entera de cómo llegó.
     void imagen(quint16 id_obs, quint64 t_sim_ns, int ancho, int alto, const QByteArray& rgb,
                 float brillo);
     // Lo que ha mandado el MCU por el puente serie en memoria de `pieza`
@@ -174,6 +177,15 @@ private:
     quint64                 ecos_ = 0;
     quint32                 ritmo_ = proto::RIT_REAL;
     quint32                 fase_ = proto::F_ESPERANDO;
+    // La última imagen de cada id_obs, para pegarle los trozos
+    struct UltimaImagen {
+        int        ancho = 0, alto = 0;
+        QByteArray rgb;
+    };
+    QHash<quint16, UltimaImagen> imagenes_;
+    quint64                 trozos_ = 0;
+public:
+    quint64 trozos() const { return trozos_; }   // T_IMAGEN_RECT aplicados
 };
 
 } // namespace mcusim

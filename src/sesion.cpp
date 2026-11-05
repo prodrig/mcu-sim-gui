@@ -21,6 +21,8 @@ Sesion::Sesion(QObject* padre) : QObject(padre)
         placa_xml_.clear();
         placa_ = PlacaGui();
         ilus_.clear();
+        imagenes_.clear();
+        trozos_ = 0;
         emit conectado();
     });
     connect(&cx_, &Conexion::mensaje, this, &Sesion::llega);
@@ -77,7 +79,8 @@ void Sesion::llega(quint16 tipo, const QByteArray& cuerpo)
         const QString gui = QCoreApplication::applicationVersion().isEmpty()
                                 ? QStringLiteral("0.1.0")
                                 : QCoreApplication::applicationVersion();
-        cx_.envia(T_VERSION, QStringLiteral("protocolo=%1\ngui=%2\n")
+        // imagen_parcial=1: esta ventana sabe pegar los trozos de T_IMAGEN_RECT
+        cx_.envia(T_VERSION, QStringLiteral("protocolo=%1\ngui=%2\nimagen_parcial=1\n")
                                  .arg(version_).arg(gui).toUtf8());
         if (version_ == 0) {
             emit problema(tr("el modelo ofrece el protocolo hasta la version '%1', y "
@@ -155,7 +158,36 @@ void Sesion::llega(quint16 tipo, const QByteArray& cuerpo)
                               .arg(cuerpo.size()));
             break;
         }
-        emit imagen(c.id, c.t_sim_ns, c.ancho, c.alto, cuerpo.mid(int(sizeof c)), c.brillo);
+        UltimaImagen& u = imagenes_[c.id];
+        u.ancho = c.ancho;
+        u.alto = c.alto;
+        u.rgb = cuerpo.mid(int(sizeof c));
+        emit imagen(c.id, c.t_sim_ns, c.ancho, c.alto, u.rgb, c.brillo);
+        break;
+    }
+    case T_IMAGEN_RECT: {
+        CabImagenRect c{};
+        if (cuerpo.size() < int(sizeof c)) break;
+        std::memcpy(&c, cuerpo.constData(), sizeof c);
+        const qint64 n = qint64(c.w) * c.h * 3;
+        const auto it = imagenes_.find(c.id);
+        if (c.formato != FMT_RGB888 || cuerpo.size() != qint64(sizeof c) + n ||
+            qint64(c.x) + c.w > c.ancho || qint64(c.y) + c.h > c.alto) {
+            emit problema(tr("un trozo de imagen de %1 bytes no mide lo que dice, se sale de "
+                             "la imagen o no es RGB888").arg(cuerpo.size()));
+            break;
+        }
+        if (it == imagenes_.end() || it->ancho != c.ancho || it->alto != c.alto) {
+            emit problema(tr("un trozo de la imagen %1 sin la imagen entera antes").arg(c.id));
+            break;
+        }
+        const char* p = cuerpo.constData() + sizeof c;
+        char* d = it->rgb.data();
+        for (int r = 0; r < c.h; ++r)
+            std::memcpy(d + (qint64(c.y + r) * c.ancho + c.x) * 3, p + qint64(r) * c.w * 3,
+                        size_t(c.w) * 3);
+        ++trozos_;
+        emit imagen(c.id, c.t_sim_ns, c.ancho, c.alto, it->rgb, c.brillo);
         break;
     }
     case T_SERIE: {

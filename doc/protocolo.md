@@ -1,7 +1,7 @@
 # El protocolo entre `mcu-sim` y `mcu-sim-gui`
 
-Versión **1**. La definición ejecutable está en `src/protocolo.h`; esto es lo
-que ese fichero no puede decir: el porqué, la máquina de estados y qué pasa
+Versión **2** (la 1 se sigue hablando: §3). La definición ejecutable está en
+`src/protocolo.h`; esto es lo que ese fichero no puede decir: el porqué, la máquina de estados y qué pasa
 cuando algo va mal.
 
 > **Las copias vendidas.** `mcu-sim` lleva su propia copia de `src/protocolo.h`
@@ -146,7 +146,12 @@ una `Gnd` y lo que cuelgue de ellas. La ventana dice entonces «sin MCU».
 ```
 protocolo=2
 gui=0.1.0
+imagen_parcial=1
 ```
+
+`imagen_parcial=1` (2026-10, sin subir la versión) dice que la GUI sabe pegar
+los TROZOS de una imagen, `T_IMAGEN_RECT` (§4.1). Una GUI que no lo dice no
+los recibe nunca: le siguen llegando las imágenes enteras.
 
 Si la GUI no sabe hablar ninguna versión que el modelo ofrezca, manda
 `protocolo=0` y cierra; el modelo lo dice por la salida de error y termina con
@@ -160,6 +165,14 @@ existía —no por añadir un mensaje, que se salta por longitud—:
 | :--- | :--- |
 | 1 | La primera |
 | 2 | (2026-10-05) `T_PLACA` puede traer un `<sistema>`: varias placas enchufadas entre sí |
+
+Y lo que se ha añadido **sin subir la versión**, porque una ventana o un
+`mcu-sim` anteriores lo ignoran o no lo piden:
+
+| Cuándo | Qué |
+| :--- | :--- |
+| 2026-10-31 | `T_IMAGEN_RECT`, los trozos de una imagen, solo para una GUI que dice `imagen_parcial=1` en `T_VERSION` (§4.1) |
+| 2026-11-03 | `<vista3d>` en `T_PLACA`, la forma en 3D de una placa, y la imagen `alturas` de una `Pieza` (abajo) |
 
 Las dos se hablan: una ventana de la 2 con un `mcu-sim` de la 1 elige la 1, y
 un `mcu-sim` de la 2 con una ventana de la 1 le manda un sistema con la raíz
@@ -356,6 +369,33 @@ cuando no es el que se elegiría solo (S8 del F303: la aguja de la Discovery
 sigue el `rumbo` de la `Postura`, que es su tercer ángulo y se mide en
 «grados»). Una ventana anterior lo ignora; un `mcu-sim` anterior no lo manda.
 
+Con `efecto="display"`, `observable=` son varios, separados por blancos: los
+que se escriben, uno por fila. Con `efecto="desplaza"` (fase F0 de la CNC de
+`mcu-sim`), varios también, y además `vector="..."`: dos números por
+observable, x e y, lo que se traslada el elemento por unidad de cada uno, en
+unidades del dibujo. `mcu-sim` ya ha comprobado que el vector tenga dos números
+por observable; si no casa, la ventana deja la pieza sin efecto y lo dice. Una
+ventana anterior no conoce el efecto y le pone el que toca; un `mcu-sim`
+anterior no lo acepta.
+
+**La vista 3D** (fase F8 de la CNC de `mcu-sim`). Junto a su `<ilustracion>`,
+una `<placa>` puede traer un **`<vista3d>`**, como se escribe en la placa
+(`doc/parts.md` §2.6 de `mcu-sim`):
+* `<solido>`: cajas y cilindros;
+* `<superficie>`: la imagen de alturas de una pieza;
+* cada uno, movido por observables con un vector de tres números.
+
+`mcu-sim` lo ha validado ya; que las piezas tengan esos observables y esas
+imágenes lo mira la ventana. La superficie es una imagen más del catálogo,
+`alturas` de una `Pieza`, y llega como las otras (`T_IMAGEN` y
+`T_IMAGEN_RECT`):
+* la altura en centésimas de mm, con el byte alto en el rojo y el bajo en el
+  verde;
+* en el azul, 255 donde la fresa pasó por encima.
+
+Una ventana anterior ignora el elemento; un `mcu-sim` anterior no lo acepta en
+la placa.
+
 **`T_LISTO`** — sin cuerpo. Quiere decir: *la placa está construida, el catálogo
 es el que has recibido, y estoy parado esperándote.*
 
@@ -449,6 +489,22 @@ del catálogo. `t_sim_ns` es el instante en que el enlace lo recoge —en cada
 vuelta, cada 100 µs simulados—, no el de cada byte. Van a trozos de 4 KiB como
 mucho, y con la salida atascada **no se tira nada**: se queda en el puente y
 sale cuando haya sitio.
+**`T_IMAGEN_RECT`** (`0x0016`, añadido el 2026-10-31 sin subir la versión, y
+solo para una GUI que dijo `imagen_parcial=1` en `T_VERSION`) —
+`CabImagenRect` + `w` x `h` píxeles RGB888, por filas: **el rectángulo que ha
+cambiado** desde la anterior que salió de esa imagen, entera o a trozos.
+`ancho` y `alto` son los de la imagen entera, para comprobar que es la que se
+tiene; `x`, `y`, `w` y `h`, los del trozo; un trozo vacío (0 x 0) cambia solo la
+luz. La primera tras una suscripción va siempre entera, en `T_IMAGEN`, y
+también la que cambia en más de media imagen. Como salen en el orden en que se
+tomaron, pegarlos uno detrás de otro sobre la última entera da siempre la de
+ahora, aunque la ventana vaya atrasada. Uno que se sale de la imagen, o de una
+imagen que no ha llegado entera, se ignora y se dice.
+
+Es lo que hace barata la pieza mecanizada de una fresadora
+(`parts/pieza.h` de `mcu-sim`): cada instantánea cambia unas pocas celdas de
+una imagen de 288 kB. Once segundos de una ranura con instantáneas cada 5 ms son
+196 MB en imágenes enteras y 319 kB a trozos.
 
 **`T_AVISO`** — `CabAviso` + el `id` de `SC_REPORT` + el texto. Es la tubería por
 la que sale todo lo que hoy va a la consola: los avisos de «esto no está

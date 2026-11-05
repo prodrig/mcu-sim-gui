@@ -62,6 +62,26 @@ endforeach()
 # dibujo de una placa y QGraphicsSvgItem para pintar cada pieza encima
 find_package(Qt6 6.3 REQUIRED COMPONENTS Core Widgets Network Svg SvgWidgets)
 
+# LA VISTA 3D (F8 de la CNC de mcu-sim), con Qt Quick 3D, si esta: Quick,
+# QuickWidgets y Quick3D, que no son de qtbase. AUTO -lo de omision- la
+# construye si los encuentra; ON exige que esten -la integracion continua de
+# las tres plataformas, cuyos paquetes llevan sus modulos de QML-; OFF no la
+# construye. Sin ella, la ventana dice que no la lleva.
+set(MCU_SIM_GUI_3D "AUTO" CACHE STRING "Vista 3D con Qt Quick 3D: AUTO, ON u OFF")
+set_property(CACHE MCU_SIM_GUI_3D PROPERTY STRINGS AUTO ON OFF)
+set(CON_3D OFF)
+if(NOT MCU_SIM_GUI_3D STREQUAL "OFF")
+    if(MCU_SIM_GUI_3D STREQUAL "ON")
+        find_package(Qt6 REQUIRED COMPONENTS Quick QuickWidgets Quick3D)
+    else()
+        find_package(Qt6 QUIET COMPONENTS Quick QuickWidgets Quick3D)
+    endif()
+    if(TARGET Qt6::Quick3D AND TARGET Qt6::QuickWidgets)
+        set(CON_3D ON)
+    endif()
+endif()
+message(STATUS "mcu-sim-gui: vista 3D ${CON_3D}")
+
 # La version que dice `mcu-sim-gui --version`. La de `project()` con
 # «-desarrollo» detras, salvo que alguien diga otra: la integracion continua,
 # al construir una etiqueta `v1.2.3`, pasa -DMCU_SIM_GUI_VERSION=1.2.3. Asi un
@@ -123,6 +143,8 @@ qt_add_library(sesion STATIC
     src/disposicion_xml.cpp
     src/trama_serie.h
     src/trama_serie.cpp
+    src/escena3d.h
+    src/escena3d.cpp
 )
 target_link_libraries(sesion PUBLIC transporte)
 
@@ -143,6 +165,19 @@ qt_add_library(pantalla STATIC
     src/consola_serie.cpp
 )
 target_link_libraries(pantalla PUBLIC sesion Qt6::Widgets Qt6::Svg Qt6::SvgWidgets)
+
+# La vista 3D, aparte: solo con Qt Quick 3D
+if(CON_3D)
+    qt_add_library(tresd STATIC
+        src/vista3d.h
+        src/vista3d.cpp
+    )
+    qt_add_resources(tresd "escena3d" PREFIX "/mcu-sim-gui" BASE src FILES src/escena3d.qml)
+    target_link_libraries(tresd PUBLIC sesion Qt6::Widgets Qt6::Quick Qt6::QuickWidgets
+                          Qt6::Quick3D)
+    target_link_libraries(pantalla PUBLIC tresd)
+    target_compile_definitions(pantalla PUBLIC MCU_SIM_GUI_3D=1)
+endif()
 
 qt_add_executable(mcu-sim-gui
     src/main.cpp
@@ -195,6 +230,7 @@ if(BUILD_TESTING)
     prueba(prueba_lanzamiento tests/prueba_lanzamiento.cpp pantalla)
     prueba(prueba_ilustracion tests/prueba_ilustracion.cpp pantalla)
     prueba(prueba_serie       tests/prueba_serie.cpp       pantalla)
+    prueba(prueba_vista3d tests/prueba_vista3d.cpp pantalla)
     # La plantilla de configuracion se lee de las fuentes
     target_compile_definitions(prueba_argumentos PRIVATE FUENTES="${CMAKE_SOURCE_DIR}")
 
@@ -216,4 +252,8 @@ if(BUILD_TESTING)
     # pestaña sola, y la ventana con un modelo falso que anuncia un puente
     add_test(NAME serie COMMAND prueba_serie)
     set_tests_properties(serie PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # La vista 3D: sin Qt Quick 3D, o sin con qué dibujar, se salta el dibujo;
+    # con MCU_SIM y MCU_SIM_SRC, además, la fresadora 3020 de verdad
+    add_test(NAME vista3d COMMAND prueba_vista3d)
+    set_tests_properties(vista3d PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 900)
 endif()

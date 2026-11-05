@@ -77,6 +77,18 @@ struct McuCli {
 // puede: un mcu-sim anterior no sabe hacerlo
 bool lee_mcus(const QByteArray& salida, QVector<McuCli>& mcus, QString& error);
 
+// Una memoria no volatil de la placa, como la cuenta `mcu-sim --memorias`: su
+// id -el del MCU, «u0», «N/u0», o el de la pieza, «U5», «N/U5»-, su tipo, si es
+// de un `mcu` o de una `pieza`, lo que es -«Flash», «EEPROM de 64 bytes»- y el
+// fichero `contenido` que le da el XML (vacio si no lo da)
+struct MemoriaCli {
+    QString id, tipo, clase, que, contenido;
+};
+
+// Lee la salida de `mcu-sim placa.xml --memorias`. false, con el porque, si no
+// se puede: un mcu-sim anterior no sabe hacerlo
+bool lee_memorias(const QByteArray& salida, QVector<MemoriaCli>& memorias, QString& error);
+
 // Lee la salida de `mcu-sim --argumentos`. Lo que haya antes de <argumentos>
 // —la cabecera de copyright de SystemC, que sale antes de que empiece el
 // programa— se salta. false, con el porqué, si no se puede leer.
@@ -89,10 +101,13 @@ bool lee_argumentos(const QByteArray& salida, ArgumentosCli& a, QString& error);
 // —si no se pudo leer— solo van los posicionales y lo escrito a mano.
 //
 // Con `mcus`, el firmware de cada chip como dice arriba; sin ellos, el
-// posicional de siempre.
+// posicional de siempre. Con `memorias`, un `--contenido=ID=FICHERO` por cada
+// una a la que se le ha elegido fichero (`contenido:<id>`): la eleccion pisa la
+// del XML; sin ella, vale la del XML.
 QStringList linea_de_ordenes(const ArgumentosCli& a, const ValoresCli& v,
                              const QString& a_mano, QString* error = nullptr,
-                             const QVector<McuCli>& mcus = {});
+                             const QVector<McuCli>& mcus = {},
+                             const QVector<MemoriaCli>& memorias = {});
 
 // Trocea como una consola: por espacios, con comillas simples o dobles para
 // lo que lleva espacios dentro.

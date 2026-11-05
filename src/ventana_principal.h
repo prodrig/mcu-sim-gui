@@ -117,6 +117,8 @@ class QSplitter;
 
 namespace mcusim {
 
+class Escena3d;
+
 class VentanaPrincipal : public QMainWindow {
     Q_OBJECT
 public:
@@ -201,6 +203,9 @@ private:
     // La ventana de la ilustración: se crea la primera vez que hace falta, y
     // se enseña -la primera vez, al lado de esta, si cabe- o se esconde
     void ver_ilustracion(bool si);
+    // La vista 3D (F8 de la CNC): su ventana, que se crea al abrirla la
+    // primera vez, con la escena de la placa (`escena3d.h`)
+    void ver_3d(bool si);
     void pon_encima(QWidget* w, bool si);
     bool eventFilter(QObject* o, QEvent* e) override;
 
@@ -230,6 +235,14 @@ private:
     bool          ilus_colocada_ = false;     // ya se ha enseñado una vez
     VistaIlustracion* ilus_  = nullptr;
     QAction*      act_ver_ilus_ = nullptr;    // Vista ▸ Ilustración
+    QAction*      act_ver_3d_ = nullptr;      // Vista ▸ 3D
+    Escena3d*     escena3d_ = nullptr;      // la de la placa, si declara una
+    QWidget*      ventana3d_ = nullptr;       // su ventana, con la Vista3d dentro
+public:
+    // Para las pruebas: la escena 3D y su ventana, si las hay
+    Escena3d* escena3d() const { return escena3d_; }
+    QWidget*  ventana3d() const { return ventana3d_; }
+private:
     QAction*      act_dibujo_ = nullptr;
     // Los dibujos abiertos a mano, por el NOMBRE de la placa (`nucleo-f446re`)
     QHash<QString, QByteArray> dibujos_;

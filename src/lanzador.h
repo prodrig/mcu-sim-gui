@@ -22,7 +22,8 @@
 // Y `argumentos_de()`, que ejecuta `mcu-sim --argumentos` y espera: es lo que
 // usa el diálogo de lanzamiento para saber qué opciones ofrecer. `mcus_de()`,
 // lo mismo con `mcu-sim placa --mcus`: qué chips lleva la placa, para una fila
-// de firmware por chip (plan §42).
+// de firmware por chip (plan §42). Y `memorias_de()`, con `--memorias`: qué
+// memorias no volátiles lleva, para una fila de `contenido` por memoria.
 //
 // QtCore solo: se prueba sin pantalla.
 // =============================================================================
@@ -65,6 +66,11 @@ public:
     static QByteArray mcus_de(const QString& ejecutable, const QString& directorio,
                               const QString& placa, const QStringList& extra,
                               QString& error, int plazo_ms = 10000);
+    // `ejecutable placa --memorias [extra]`: sus memorias no volátiles, en XML
+    // (`lee_memorias`)
+    static QByteArray memorias_de(const QString& ejecutable, const QString& directorio,
+                                  const QString& placa, const QStringList& extra,
+                                  QString& error, int plazo_ms = 10000);
 
 signals:
     void linea(const QString& texto, bool de_error);

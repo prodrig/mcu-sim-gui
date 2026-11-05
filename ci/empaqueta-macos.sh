@@ -17,6 +17,15 @@
 # hace es la firma AD HOC, que en Apple Silicon no es opcional: macdeployqt
 # modifica los binarios, eso invalida su firma, y un binario arm64 con la firma
 # rota no lo deja ni arrancar el sistema.
+#
+# LA VISTA 3D, si el ejecutable la lleva (Qt Quick 3D, MCU_SIM_GUI_3D): sus
+# MODULOS DE QML -QtQuick3D, QtQuick3D.Helpers y los de QtQuick que piden- se
+# ponen A MANO, como los complementos, y por lo mismo: con el Qt partido en
+# formulas, `macdeployqt -qmldir` busca `qmlimportscanner` y los modulos en la
+# formula de qtbase, donde no estan. Aqui `qmlimportscanner` dice cuales hacen
+# falta y donde estan, se copian en Contents/Resources/qml, sus complementos
+# pasan por macdeployqt como los demas (-executable=), y qt.conf le dice a Qt
+# que los busque ahi. Se COMPRUEBA con `--comprueba-3d`.
 # =============================================================================
 set -euo pipefail
 
@@ -45,12 +54,57 @@ mkdir -p "$APP/Contents/PlugIns/platforms" "$APP/Contents/PlugIns/styles"
 cp "$PLUG/platforms/libqcocoa.dylib" "$APP/Contents/PlugIns/platforms/"
 [ -f "$PLUG/styles/libqmacstyle.dylib" ] &&
     cp "$PLUG/styles/libqmacstyle.dylib" "$APP/Contents/PlugIns/styles/"
+# --- 1b. Los modulos de QML de la vista 3D, si la lleva ------------------------
+CON_3D=0
+otool -L "$APP/Contents/MacOS/mcu-sim-gui" | grep -q 'QtQuick3D\.framework' && CON_3D=1
+if [ "$CON_3D" = 1 ]; then
+    # Donde hay modulos de QML: el de la formula `qt`, el que diga qtpaths y
+    # el de cada formula de Homebrew que los tenga (qtdeclarative, qtquick3d...)
+    rutas=()
+    for d in "$("$QT/bin/qtpaths" --query QT_INSTALL_QML 2>/dev/null || true)" \
+             "$QT/share/qt/qml" "$(brew --prefix)"/opt/*/share/qt/qml; do
+        [ -n "$d" ] && [ -d "$d" ] && rutas+=(-importPath "$d")
+    done
+    ESCANER=""
+    for f in "$QT/share/qt/libexec/qmlimportscanner" \
+             "$(brew --prefix)"/opt/*/share/qt/libexec/qmlimportscanner; do
+        [ -x "$f" ] && { ESCANER=$f; break; }
+    done
+    [ -n "$ESCANER" ] || { echo "  [FALLO] no hay qmlimportscanner (formula qtdeclarative)"; exit 1; }
+    [ "${#rutas[@]}" -gt 0 ] || { echo "  [FALLO] no hay modulos de QML en Homebrew"; exit 1; }
+    echo "  modulos de QML con $ESCANER, en ${rutas[*]}"
+    "$ESCANER" -rootPath src "${rutas[@]}" > qml_imports.json
+    # Cada modulo, sus ficheros de arriba -sus submodulos son otras entradas-,
+    # en Resources/qml/<su ruta relativa>; -L, que en Homebrew son enlaces
+    QMLD="$APP/Contents/Resources/qml"
+    mkdir -p "$QMLD"
+    python3 - qml_imports.json <<'PY' > qml_modulos.txt
+import json, sys
+for m in json.load(open(sys.argv[1])):
+    if m.get("type") == "module" and m.get("path") and m.get("relativePath"):
+        print(m["relativePath"] + "\t" + m["path"])
+PY
+    while IFS=$'\t' read -r rel ruta; do
+        mkdir -p "$QMLD/$rel"
+        find "$ruta" -maxdepth 1 -type f -exec cp -L {} "$QMLD/$rel/" \;
+        find "$ruta" -maxdepth 1 -type l -exec cp -L {} "$QMLD/$rel/" \;
+        echo "    qml/$rel"
+    done < qml_modulos.txt
+    rm -f qml_imports.json qml_modulos.txt
+    for m in QtQuick3D QtQuick3D/Helpers QtQuick; do
+        [ -f "$QMLD/$m/qmldir" ] || { echo "  [FALLO] falta el modulo de QML $m"; exit 1; }
+    done
+    chmod -R u+w "$QMLD"
+fi
+
+mkdir -p "$APP/Contents/Resources"
 extra=()
 while IFS= read -r f; do extra+=("-executable=$f"); done \
-    < <(find "$APP/Contents/PlugIns" -name '*.dylib')
-# Sin qt.conf, Qt buscaria los complementos donde estaban al compilar
+    < <(find "$APP/Contents/PlugIns" "$APP/Contents/Resources" -name '*.dylib')
+# Sin qt.conf, Qt buscaria los complementos -y los modulos de QML- donde
+# estaban al compilar
 mkdir -p "$APP/Contents/Resources"
-printf '[Paths]\nPlugins = PlugIns\n' > "$APP/Contents/Resources/qt.conf"
+printf '[Paths]\nPlugins = PlugIns\nQmlImports = Resources/qml\n' > "$APP/Contents/Resources/qt.conf"
 
 "$QT/bin/macdeployqt" "$APP" -no-plugins -always-overwrite -verbose=1 "${extra[@]}"
 
@@ -89,6 +143,42 @@ dentro() {
     return 0
 }
 de_homebrew() { grep -E '^(/opt/homebrew|/usr/local)/' || true; }
+# Lo que macdeployqt no ha sabido traer -con el Qt partido en formulas no
+# resuelve los @rpath de lo que no enlaza el ejecutable: el framework de
+# QtQuick3DHelpers, que solo usa su complemento de QML-: se busca en Homebrew
+# y se copia en Frameworks, y se repite con lo que eso traiga, como el `ldd`
+# del paquete de Windows. Lo que no se encuentre lo caza la comprobacion 3
+BREW=$(brew --prefix)
+de_fuera() {   # las dependencias de un binario que no estan en Frameworks
+    otool -L "$1" | tail -n +2 | awk '{print $1}' | while IFS= read -r dep; do
+        case "$dep" in
+            @rpath/*|/opt/homebrew/*|/usr/local/*) [ -n "$(dentro "$dep")" ] || echo "$dep" ;;
+        esac
+    done
+}
+for _ in 1 2 3 4 5 6; do
+    nuevas=0
+    while IFS= read -r f; do
+        while IFS= read -r dep; do
+            case "$dep" in
+                *.framework/*) n=$(echo "$dep" | sed -E 's#^(.*/)?([^/]+\.framework)/.*$#\2#') ;;
+                *)             n=$(basename "$dep") ;;
+            esac
+            [ -e "$FW/$n" ] && continue
+            src=""
+            for c in "$BREW/lib/$n" "$BREW"/opt/*/lib/"$n"; do
+                [ -e "$c" ] && { src=$c; break; }
+            done
+            [ -n "$src" ] || continue
+            mkdir -p "$FW"
+            if [ -d "$src" ]; then ditto "$(cd "$src" && pwd -P)" "$FW/$n"; else cp -L "$src" "$FW/$n"; fi
+            chmod -R u+w "$FW/$n"
+            echo "    + Frameworks/$n (de $src)"
+            nuevas=1
+        done < <(de_fuera "$f")
+    done < <(macho)
+    [ "$nuevas" = 0 ] && break
+done
 # Lo que viene de Homebrew es de solo lectura, e install_name_tool escribe
 chmod -R u+w "$APP"
 while IFS= read -r f; do
@@ -109,6 +199,15 @@ while IFS= read -r f; do
             echo "    ${f#"$APP"/}: $dep -> @rpath/$rel"
         fi
     done < <(otool -L "$f" | tail -n +2 | awk '{print $1}' | de_homebrew)
+done < <(macho)
+# Y las rutas de busqueda (LC_RPATH) que apuntan a Homebrew, fuera: los
+# complementos de QML las traen, y en una maquina CON Homebrew -la del CI-
+# harian cargar su Qt ademas del de la .app
+while IFS= read -r f; do
+    while IFS= read -r rp; do
+        install_name_tool -delete_rpath "$rp" "$f" &&
+            echo "    ${f#"$APP"/}: sin el rpath $rp"
+    done < <(otool -l "$f" | awk '$1 == "path" {print $2}' | de_homebrew)
 done < <(macho)
 EXE="$APP/Contents/MacOS/mcu-sim-gui"
 otool -l "$EXE" | grep -q '@executable_path/../Frameworks' ||
@@ -136,7 +235,14 @@ echo "  [OK  ] nada dentro de la .app apunta fuera de ella"
 
 # --- 4. La firma -----------------------------------------------------------------
 # macdeployqt intenta firmar el mismo y, con lo de arriba, su firma ya no vale:
-# install_name_tool la rompe. Se firma al final, una vez, todo.
+# install_name_tool la rompe. Se firma al final, una vez, todo. Los
+# complementos de QML, uno a uno antes: estan en Resources, y --deep solo
+# firma lo que hay en los sitios de codigo (Frameworks, PlugIns, MacOS)
+if [ -d "$APP/Contents/Resources/qml" ]; then
+    while IFS= read -r f; do
+        case "$(file -b "$f")" in *Mach-O*) codesign --force --sign - "$f" ;; esac
+    done < <(find "$APP/Contents/Resources/qml" -type f)
+fi
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep "$APP"
 echo "  [OK  ] firmada ad hoc, y la firma se verifica"
@@ -152,6 +258,22 @@ if ! kill -0 "$pid" 2>/dev/null; then
 fi
 kill "$pid"; wait "$pid" 2>/dev/null || true
 echo "  [OK  ] la .app arranca y sigue abierta"
+
+# La vista 3D, cargada de verdad: lo que falte -un modulo de QML, un framework
+# de un complemento de QML- solo se nota al cargar su escena. Y que los
+# modulos los busca dentro de la .app, no en Homebrew
+if [ "$CON_3D" = 1 ]; then
+    rc=0
+    out=$(env -u QML2_IMPORT_PATH -u QML_IMPORT_PATH \
+          "$APP/Contents/MacOS/mcu-sim-gui" --comprueba-3d 2>&1) || rc=$?
+    echo "$out"
+    [ "$rc" = 0 ] || { echo "  [FALLO] la vista 3D no se carga desde la .app ($rc)"; exit 1; }
+    if echo "$out" | grep '^rutas de QML' | grep -Eq '/opt/homebrew|/usr/local'; then
+        echo "  [FALLO] la vista 3D busca modulos de QML fuera de la .app"
+        exit 1
+    fi
+    echo "  [OK  ] la vista 3D se carga con los modulos de QML de la .app"
+fi
 
 # --- El paquete --------------------------------------------------------------------
 # `ditto` y no `zip`: conserva los enlaces simbolicos de los frameworks y los

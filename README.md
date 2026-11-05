@@ -8,36 +8,44 @@ La **contraparte de visualización gráfica de
 > el circuito y el firmware, lanzar, depurar con GDB y el puerto serie, y
 > todas las opciones de la línea de órdenes—.
 
-> **Estado: fase 7.** La ventana escucha, `mcu-sim --gui` se conecta, se
-> saludan, y la ventana **se construye sola** a partir de la placa y el
-> catálogo que le manda el modelo: un recuadro por pieza, con sus patillas, un
-> indicador por cada cosa que la pieza sugiere mirar y un control por mando.
-> El modelo no simula hasta que se pulsa «Arrancar», y **con la simulación en
-> marcha los indicadores enseñan lo que pasa**: el LED se enciende y se apaga,
-> arriba van los dos relojes, y abajo los avisos —los de la placa, antes de
-> arrancar, y los del modelo—. **Y los controles mandan**: el botón de B1
-> pulsa mientras está hundido, y lo que se toque antes de arrancar se aplica
-> en t = 0. Cada orden vuelve con su eco, y las que el modelo no puede aplicar
-> lo dicen en la lista de avisos. **Y la ventana lleva la simulación**: el
-> ritmo se elige antes de arrancar —tiempo real, a la mitad, libre o a
-> demanda—, y en marcha hay Pausa / Sigue, Paso a demanda y Parar. **Y la
-> ventana lanza el modelo ella misma**: *Simulación ▸ Lanzar mcu-sim* (Ctrl+L)
-> abre un diálogo construido con lo que dice `mcu-sim --argumentos`, y abajo,
-> en la pestaña *mcu-sim*, sale todo lo que el simulador escribe. **Y se
-> puede depurar con un botón pulsado**: cada botón lleva al lado un
-> «switch» que lo deja hundido hasta que se vuelva a tocar, y *Vista ▸
-> Siempre encima* (Ctrl+T) deja la ventana a la vista mientras se trabaja
-> en el IDE; los pulsadores del modelo rebotan, y en marcha se ajusta
-> cuánto dura el rebote —un deslizador que enseña su valor— y cuántas veces
-> rebota —un desplegable— (plan §16). **Y una placa puede no llevar MCU**:
-> una `Fuente` y una `Gnd` de `mcu-sim`, con su límite de corriente, se ven
-> aquí con la corriente en mA y la **sobrecorriente como alarma** —«⚠ SI» en
-> rojo, y el título de la pieza también—; arriba, «sin MCU» (plan §18). **Y
-> varias placas enchufadas** —una Nucleo con un shield encima, un `<sistema>`
-> de `mcu-sim`— se ven en un recuadro por placa, cada conector diciendo con
-> qué está enchufado (plan §19, protocolo v2), también en pila, como en
-> PC/104; y la ventana sabe ya todo lo necesario para dibujar el sistema
-> algún día (plan §20). Lo que falta: grabar y reproducir sesiones (fase 8).
+> **Estado (2026-11-03).** Las **fases 0 a 7** del plan están hechas, y
+> **de la 9, los ejecutables**; falta la **8**, grabar y reproducir sesiones.
+> Lo que hay hoy:
+>
+> * **La ventana se construye sola** con la placa y el catálogo que le manda
+>   `mcu-sim`: un recuadro por pieza, con sus patillas, sus indicadores y un
+>   control por mando. **Nada simula hasta pulsar «Arrancar»**, y con la
+>   simulación en marcha los indicadores enseñan lo que pasa: los LED, los
+>   dos relojes, y abajo los avisos de la placa y del modelo.
+> * **Los controles mandan**: un botón pulsa mientras está hundido —o hasta
+>   volver a tocarlo, con el «switch» de al lado—, lo tocado antes de
+>   arrancar se aplica en t = 0, y cada orden vuelve con su eco. Los
+>   pulsadores rebotan, y el rebote se ajusta en marcha (plan §16).
+> * **La ventana lleva la simulación**: el ritmo —tiempo real, a la mitad,
+>   libre o a demanda—, Pausa / Sigue, Paso y Parar.
+> * **Y lanza el modelo ella misma**: *Simulación ▸ Lanzar mcu-sim* (Ctrl+L)
+>   abre un diálogo construido con lo que dice `mcu-sim --argumentos`, con el
+>   firmware de cada MCU; lo que el simulador escribe sale en la pestaña
+>   *mcu-sim*.
+> * **Placas sin MCU**, con la sobrecorriente como alarma (plan §18), y
+>   **varias placas enchufadas** —un `<sistema>`—, también en pila
+>   (plan §19 y §20).
+> * **La ilustración** (plan §21 a §46): cada placa con su dibujo, y sobre él
+>   lo que pasa. Se ven:
+>   * los LED que brillan y los botones que se hunden;
+>   * los mandos que giran y el aspa de un servo;
+>   * las pantallas;
+>   * los displays —el de una fuente de laboratorio, las cotas de una
+>     fresadora—;
+>   * los carros que se desplazan y la pieza mecanizada.
+>
+>   Con `--edit`, además, se colocan las placas y se guarda en el XML.
+> * **Otros chips**: los MSP432 de Texas Instruments y los STM32F3 de ST se
+>   ven sin código nuevo en la ventana (plan §47 y §48).
+> * **La fresadora CNC** de `mcu-sim` (plan §50 a §52): en la ilustración, en
+>   planta y alzado; y en la **vista 3D** (*Vista ▸ Vista 3D*, Ctrl+3), con
+>   Qt Quick 3D, que es opcional al compilar y va en los paquetes de las tres
+>   plataformas.
 >
 > Para verlo, con las dos cosas compiladas y una al lado de la otra:
 >
@@ -58,9 +66,11 @@ La **contraparte de visualización gráfica de
 `mcu-sim` es un simulador didáctico para quien desarrolla en el IDE de su
 microcontrolador —STM32CubeIDE, Code Composer Studio— y no tiene la tarjeta
 delante: se compila el firmware igual que para el chip y se ejecuta contra el
-modelo igual que contra una placa. Hoy tiene **tres familias, de dos
-fabricantes, y 30 referencias**, y todo lo que se ve de él es texto en una
-consola.
+modelo igual que contra una placa. Hoy modela **46 referencias**:
+* de ST, los STM32F405/407, F415/417 y F446, y los STM32F302/303/358;
+* de Texas Instruments, el MSP432P401R y el MSP432E401Y.
+
+Todo lo que se ve de él, sin esta ventana, es texto en una consola.
 
 Lo que falta es lo que un alumno espera ver: **el LED encendiéndose**. Eso es
 esto.
@@ -153,20 +163,21 @@ la hace aparecer aquí **sin recompilar esto**.
 ## El plan
 
 **[`doc/plan_dos_procesos.md`](doc/plan_dos_procesos.md)**: nueve fases, cada
-una con qué deja hecho, cómo se comprueba y qué NO entra.
+una con qué deja hecho, cómo se comprueba y qué NO entra; y después, una
+sección por cada cosa que se ha añadido a la ventana.
 
-| | Fase | Dónde toca |
-| :--- | :--- | :--- |
-| 0 | Los dos esqueletos y la cadena de herramientas | los dos |
-| 1 | `Observable` / `Mando`, instantánea y cola de órdenes | `mcu-sim` |
-| 2 | La capa de transporte, probada sin SystemC | los dos |
-| 3 | El saludo y el arranque diferido | los dos |
-| 4 | Instantáneas, avisos y estado en marcha | los dos |
-| 5 | Las órdenes | los dos |
-| 6 | El control de la simulación | los dos |
-| 7 | La ventana de verdad y el lanzamiento automático | `mcu-sim-gui` |
-| 8 | Grabación y reproducción de sesiones | los dos |
-| 9 | Que el precio de los dos procesos no lo pague el alumno | los dos |
+| | Fase | Dónde toca | Estado |
+| :--- | :--- | :--- | :--- |
+| 0 | Los dos esqueletos y la cadena de herramientas | los dos | Hecha |
+| 1 | `Observable` / `Mando`, instantánea y cola de órdenes | `mcu-sim` | Hecha |
+| 2 | La capa de transporte, probada sin SystemC | los dos | Hecha |
+| 3 | El saludo y el arranque diferido | los dos | Hecha |
+| 4 | Instantáneas, avisos y estado en marcha | los dos | Hecha |
+| 5 | Las órdenes | los dos | Hecha |
+| 6 | El control de la simulación | los dos | Hecha |
+| 7 | La ventana de verdad y el lanzamiento automático | `mcu-sim-gui` | Hecha |
+| 8 | Grabación y reproducción de sesiones | los dos | Pendiente |
+| 9 | Que el precio de los dos procesos no lo pague el alumno | los dos | En parte: los ejecutables, con Qt dentro (plan §17); faltan la firma, un instalador con los dos programas y `--gui-escucha` |
 
 Y, aparte del plan, **las ilustraciones**
 ([`doc/analisis-uso-ilustraciones.md`](doc/analisis-uso-ilustraciones.md), plan
@@ -194,6 +205,27 @@ ventana lanzó `mcu-sim` (plan §38;
 **su propia ventana** (Vista ▸ Ilustración, Ctrl+I; plan §27), para ponerla
 donde se quiera; el panel de siempre se queda en la principal.
 
+Sobre el dibujo, además, la tabla de enlaces de la placa puede pedir efectos
+que no salen solos (plan §49 y §50):
+
+| Efecto | Qué hace | Dónde se usa |
+| :--- | :--- | :--- |
+| `display` | Escribe los valores de la pieza dentro del elemento, uno por fila, en cifras rojas | La fuente de laboratorio; las cotas de una fresadora, en mm con su signo |
+| `desplaza` | Traslada el elemento con uno o varios observables, cada uno con su vector | Los carros de una fresadora, en planta y alzado |
+
+Una pantalla también se puede desplazar: la pieza mecanizada va con la mesa. Y
+su imagen llega a trozos (`T_IMAGEN_RECT`), solo lo que cambió.
+
+Y **la vista 3D** (plan §51 y §52): una placa que declara su forma con un
+`<vista3d>` —la fresadora 3020 de `mcu-sim`— se ve en tres dimensiones, en
+otra ventana (Vista ▸ Vista 3D, Ctrl+3):
+* la máquina en cajas y cilindros, con los carros que se mueven y los
+  husillos que giran;
+* la pieza como una superficie, con lo que la fresa va comiendo.
+
+La cámara gira, se acerca y se desplaza con el ratón. Usa Qt Quick 3D, y se
+puede compilar sin ella (abajo).
+
 ---
 
 ## Compilar
@@ -216,6 +248,59 @@ Si CMake no encuentra Qt, se le dice dónde está:
 ```bash
 cmake -B build -DCMAKE_PREFIX_PATH=/ruta/a/Qt/6.7.0/gcc_64
 ```
+
+**La vista 3D** (*Vista ▸ Vista 3D*, la fresadora de `mcu-sim` en tres
+dimensiones) usa además **Qt Quick 3D**:
+* los módulos `Quick`, `QuickWidgets` y `Quick3D`;
+* en tiempo de ejecución, los módulos de QML `QtQuick3D` y
+  `QtQuick3D.Helpers`.
+
+En Ubuntu son los paquetes `qt6-declarative-dev`, `qt6-quick3d-dev`,
+`qt6-shadertools-dev`, `qml6-module-quick3d`, `qml6-module-quick3d-helpers`,
+`qml6-module-qtquick` y `qml6-module-qtquick-window`. Para empaquetar, además,
+`qt6-declarative-dev-tools` (`qmlimportscanner`) y `qt6-wayland`.
+
+La opción `MCU_SIM_GUI_3D` dice qué se hace:
+
+| Valor | Qué hace |
+| :--- | :--- |
+| `AUTO` (por omisión) | La compila si encuentra Qt Quick 3D |
+| `ON` | La exige |
+| `OFF` | No la compila |
+
+Sin ella, todo lo demás es igual:
+
+```bash
+cmake -B build -DMCU_SIM_GUI_3D=OFF
+```
+
+Los paquetes de las tres plataformas (`ci/empaqueta-*.sh`) la llevan, con sus
+módulos de QML dentro:
+
+| Plataforma | Cómo se meten | Dónde van |
+| :--- | :--- | :--- |
+| Linux | `linuxdeploy-plugin-qt`, con `QML_SOURCES_PATHS=src` | `usr/qml` del AppImage |
+| Windows | `windeployqt6 --qmldir src`, y un `qt.conf` | `qml/`, junto al `.exe` |
+| macOS | A mano, con `qmlimportscanner`: con el Qt de Homebrew partido en fórmulas, `macdeployqt -qmldir` no los encuentra | `Contents/Resources/qml`, con un `qt.conf` |
+
+Cada script lo comprueba cargando la vista 3D desde el paquete, con
+`mcu-sim-gui --comprueba-3d`. Esa opción dice:
+* si Qt Quick 3D y sus módulos de QML se cargan, y de dónde;
+* con el código de salida, 0 si sí, 1 si no, y 3 si esa compilación no lleva
+  la vista 3D.
+
+Con una etiqueta, el CI hace además, en cada plataforma, el mismo paquete
+**sin la vista 3D**, y la Release publica los dos:
+* se compila con `-DMCU_SIM_GUI_3D=OFF`, y `--comprueba-3d` confirma con un 3
+  que no la lleva;
+* sus ficheros terminan en `-sin-3d`.
+
+Para probar los dos sin etiquetar, el CI se lanza a mano (*Actions ▸ ci ▸ Run
+workflow*).
+
+Para compilar con Qt Quick 3D en MSYS2 hacen falta, además,
+`mingw-w64-x86_64-qt6-declarative`, `mingw-w64-x86_64-qt6-quick3d` y
+`mingw-w64-x86_64-qt6-shadertools`. En Homebrew, `qt` ya los trae.
 
 ### En Windows con MSYS2: tres trampas, y la tercera es la que muerde
 
@@ -311,6 +396,7 @@ descarguen el simulador. Eso es trabajo de la **fase 9** y está anotado allí.
 | Linux, g++ 13, **Qt 6.4.2** | **Verificado**: configura, compila, enlaza y arranca (`QT_QPA_PLATFORM=offscreen`) |
 | Windows, MSYS2 / MinGW-w64 | **Verificado por el CI** desde el 2026-10-01: compila con el Qt de MSYS2 y pasa `ctest`. **A mano, en una máquina, no**: los intentos fallaron **por el entorno y no por el código** —la causa era que **ESET pone en cuarentena los ejecutables recién compilados**—. Las tres trampas están arriba, y hay una cuarta que llega al repartirlo: las DLL (plan §8.8) |
 | macOS, clang, Qt 6 | **Verificado por el CI** desde el 2026-10-01, con el Qt de Homebrew: compila y pasa `ctest`. A mano, no |
+| La vista 3D | **Linux, verificada** con Qt 6.4.2: se dibuja en X11 (xvfb) y en Wayland (weston), también desde el AppImage. **Windows y macOS**: el código y los scripts de empaquetado están, pero **sin verificar hasta su primer CI** con Qt Quick 3D |
 
 Es la misma regla que sigue `mcu-sim` y por el mismo motivo: decir lo que se ha
 probado y lo que no, en vez de dar por bueno lo que parece obvio.
@@ -319,8 +405,11 @@ probado y lo que no, en vez de dar por bueno lo que parece obvio.
 pruebas en las tres plataformas de esta tabla en cada push a `main` y en cada
 pull request: Linux con el Qt del sistema (Ubuntu 24.04), Windows con MSYS2 y
 macOS con Homebrew. Pasó en las tres por primera vez el 2026-10-01, y de ahí
-las dos filas de arriba. Lo que el CI no ve es una ventana abierta en una
-pantalla de verdad: eso sigue siendo a mano.
+las dos filas de arriba.
+
+Compila con la vista 3D en las tres (`-DMCU_SIM_GUI_3D=ON`). En Linux,
+además, la dibuja en una pantalla virtual (xvfb). Lo que el CI no ve es una
+ventana abierta en una pantalla de verdad: eso sigue siendo a mano.
 
 ---
 
@@ -342,7 +431,11 @@ buscado y dónde la guardará al lanzar. Si la encontró, de qué fichero la ley
 El firmware va **por chip**: el diálogo le pregunta a `mcu-sim placa --mcus`
 qué MCUs lleva la placa y pone una fila por cada uno, con su fichero —vacío, el
 del XML— y una casilla «sin firmware» (plan §42; en la configuración,
-`firmware:N/u0` y `sin-firmware:N/u0`). El puerto es una
+`firmware:N/u0` y `sin-firmware:N/u0`). Igual con `mcu-sim placa --memorias`:
+una fila por memoria no volátil —la Flash de cada MCU, una `I2cEeprom`...—
+con el fichero Intel HEX de su contenido, que se carga al arrancar y se guarda
+al acabar; vacío, el del XML (plan §53; en la configuración,
+`contenido:N/U5`). El puerto es una
 preferencia: si está cogido, la ventana escucha en otro y se lo pasa al hijo,
 sin decir nada.
 
@@ -358,16 +451,19 @@ repos/
 
 Dos repositorios a propósito: `mcu-sim` tiene que seguir clonándose y
 compilándose sin Qt en cualquier máquina, que es lo que hace que sus suites
-—2 118 comprobaciones solo la del F407— valgan en todas partes.
+—2 151 comprobaciones solo la del F407— valgan en todas partes.
 
 ### Los ejecutables
 
 **Una etiqueta `v*` publica los ejecutables** como Release, con Qt dentro, para
 que quien solo quiera usar la ventana no tenga que compilar nada ni instalar
 Qt: un `.zip` para Windows, un AppImage para Linux y una `.app` para cada Mac.
+De cada uno hay **dos**: con la vista 3D y sin ella (`-sin-3d`), que es más
+pequeño.
 Los construye la integración continua con `ci/empaqueta-*.sh`, en **cada**
 ejecución —los paquetes de un push a `main` se pueden bajar de la página de esa
-ejecución—, y la etiqueta solo añade publicarlos, y solo si todo pasó:
+ejecución—, y la etiqueta añade los de sin la vista 3D y publicarlos, y solo
+si todo pasó:
 
 ```bash
 git tag v0.2.0 && git push origin v0.2.0
@@ -376,7 +472,9 @@ git tag v0.2.0 && git push origin v0.2.0
 Lo que comprueba cada paquete antes de publicarse: que **arranca**; en Windows,
 además, que con un `PATH` sin MSYS2 todo lo que carga está en el paquete o en
 Windows —la DLL equivocada en el `PATH` es justo lo que pasaba fuera del shell
-de MSYS2—; y en macOS, que nada dentro de la `.app` apunta a Homebrew.
+de MSYS2—; en macOS, que nada dentro de la `.app` apunta a Homebrew; y en los
+tres, con la vista 3D, que se carga con los módulos de QML del paquete
+(`--comprueba-3d`).
 Las instrucciones para quien lo descarga están en `doc/notas_release.md`, que
 es el texto de la propia Release; las licencias, en `TERCEROS.md`. `mcu-sim`
 va aparte, en sus propias Release.

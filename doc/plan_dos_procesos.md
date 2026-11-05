@@ -20,18 +20,25 @@ Las fuentes de este plan son tres, y conviene saber cuál es cuál:
 mide cualquier regresión. La primera columna es la de cuando se escribió este
 plan y se queda como estaba; la que vale es la segunda:
 
-| | Al escribir el plan | **Hoy** (2026-10-01, `mcu-sim` `0e449d0`) |
+| | Al escribir el plan | **Hoy** (2026-11-03, `mcu-sim` `ea99e1a`, rama `cnc`) |
 | :--- | ---: | ---: |
-| Suite del F407 | 2074, en `2336217899213 ps` | **2118**, `resto` **`2240553274213 ps`** (total `2337219149213 ps`) |
+| Suite del F407 | 2074, en `2336217899213 ps` | **2151**, `resto` **`2281249034555 ps`** (total `2416514909555 ps`) |
 | Suite del F446 | 203, en `1033367277932 ps` | **204**, en `1033367277932 ps` |
 | Banco del F417 | 164, en `718988288 ps` | **165**, en `718988288 ps` |
 | Banco del puente UART (`testserie`) | — | **189**, en `400677589564 ps` |
+| Banco de la frontera con la ventana (`testgui`) | — | **145**, en `76450000000 ps` |
+| Suite del MSP432P401R (`testp4`) | — | **406**, `resto` **`22456139139423 ps`** |
+| Suite del MSP432E401Y (`teste4`) | — | **296**, `resto` **`4505148675235 ps`** |
+| Suite del STM32F303 (`testf3`) | — | **428**, `resto` **`116875480154660 ps`** |
 | Capa de red, sin SystemC | `make red` 13/13 | `make red` 13/13 |
-| Placas en `placas/` | 6, que validan con 0 avisos | 10: las 6 de antes y las 4 del puente UART |
-| Referencias en el catálogo | 29 | 29 |
+| Placas en `placas/` | 6, que validan con 0 avisos | 67 |
+| Referencias en el catálogo | 29 | 46: las STM32F4, las STM32F302/303/358 y los MSP432P401R y MSP432E401Y |
 
 Lo que ha cambiado por el camino, para que nadie lo tome por una regresión:
 
+* **Desde el 2026-10-01**, cada cambio de una cifra está explicado en el
+  propio `invariantes.txt`, en el commit que la movió. Las suites del MSP432 y
+  del F303 llegaron con sus ramas.
 * **+43 en el F407**: las comprobaciones de `--gui` de la fase 0 (§8.4).
 * **+1 en cada suite**: `T00`/`A0`, que contrastan las huellas de los
   firmwares antes de simular nada (**T-22** de `mcu-sim/doc/todo.md`).
@@ -1751,6 +1758,9 @@ un push a `main` ya dice si funciona, y sus paquetes se pueden bajar de la
 página de la ejecución para probarlos a mano antes de etiquetar. La etiqueta
 solo añade el trabajo `publica`, que depende de los otros tres.
 
+*(Desde el 2026-11-03 los paquetes llevan además la vista 3D, con sus módulos
+de QML, y con una etiqueta hay otro sin ella por plataforma: §52.)*
+
 `mcu-sim-gui --version` dice ahora de qué etiqueta sale (`MCU_SIM_GUI_VERSION`
 en CMake): la del tag en una Release, `<versión>-desarrollo` compilado a mano.
 
@@ -2998,3 +3008,198 @@ piezas, y G8 comprueba sus tipos y los mandos de la postura (`prueba_cruzada`
 de cada revision es una variante del dibujo (`U5@I3G4250D`). Sin código nuevo, como antes; y
 `placas/dos_f3discovery.xml`, el sistema de dos Discovery de S3, se abre en la
 ventana como cualquier otro sistema.
+
+## 49. Un display en el dibujo, y dos motores tras un L298N
+
+**El efecto `display`.** La fuente de laboratorio de `mcu-sim` tiene un display
+que enseña la tensión y la corriente de media, como el de verdad, y en su
+dibujo es un rectángulo negro. Un enlace con `efecto="display"` y varios
+observables en `observable=`, separados por espacios, hace que la ventana
+escriba sus valores DENTRO del elemento:
+* uno por fila;
+* cuatro cifras rojas pegadas a la derecha, con los decimales que da la escala
+  de cada observable;
+* los mA de más de 1000, en A (`7.475 V`, `0.367 A`).
+
+Solo lo pone la tabla de enlaces. Un observable que la pieza no tiene se dice,
+y sin ninguno que enseñar, el elemento se queda sin efecto.
+
+**El sistema de dos motores.** `placas/nucleo_f446re_encoder_lcd_servo_2xmcc.xml`
+de `mcu-sim` junta en un sistema:
+* la Nucleo con el servo, el KY-040 de 24 PPR, la pantalla y el FTDI;
+* un L298N con dos motorreductores con su encoder;
+* su batería y la fuente de laboratorio.
+
+La ventana no cambia: las piezas nuevas —`MotorCC`, `L298` y `Regulador`—
+llegan en el catálogo como cualquier otra, con el ángulo del motor de 0 a 360
+grados, que es el que sugiere pintar, y sus mandos `bloquear` y `carga`.
+
+**Cómo se ha comprobado**:
+* `prueba_ilustracion` I26: el display, con sus cifras y sus filas.
+* `prueba_cruzada` G9, contra el `mcu-sim` de verdad:
+  * nueve placas y cuarenta y seis piezas, sin avisos —eran cuarenta y cuatro
+    hasta que la Nucleo llevó el pull-up de 4K7 de B1 y su resistencia en
+    serie, R30 y R29, que no se ven pero son piezas—;
+  * los dos motores comparten dibujo, y el L298N llega sin los puentes de ENA
+    y ENB;
+  * diez clics del mando, mandados antes de arrancar, los ponen a toda
+    marcha, a unas 238 rpm;
+  * la fuente, con su display.
+
+## 50. La fresadora CNC en la ilustración
+
+La rama `cnc` de `mcu-sim` simula una fresadora de sobremesa, la 3020, por
+fases (`doc/analisis_cnc.md` allí). Su §9 decide cómo se ve: **en planta y
+alzado**, con los carros moviéndose sobre el dibujo, y la pieza mecanizada
+encima de la mesa. Lo que eso ha pedido aquí, fase a fase:
+
+| Fase de la CNC | Qué ha pedido a la ventana | Prueba |
+| :--- | :--- | :--- |
+| F0 | El efecto **`desplaza`**, el `angulo` lineal: un enlace con `observable="x z"` y `vector="2.5 0  0 -2.5"` traslada el elemento, cada observable por su vector, en unidades del dibujo, y se suman. Así un elemento se mueve con dos ejes sin componer grupos anidados | I27 |
+| F2 | **Las cotas**: un numérico en mm en un `display` lleva siempre su signo y una cifra más (`+123.46 mm`), como el display de un control numérico | I26 |
+| F4 | **La imagen a trozos**: con `imagen_parcial=1` en `T_VERSION`, el modelo manda solo lo que cambió de la imagen de la pieza (`T_IMAGEN_RECT`), y la ventana lo pega en la última; un trozo que se sale, o sin la imagen entera antes, se ignora y se dice | I13 |
+| F4 | **Una pantalla que se desplaza**: con `observable=` y `vector=`, como `desplaza`: la pieza mecanizada va con la mesa | I28 |
+| F4 | **El orden del dibujo**: los elementos vivos se apilan en el orden del SVG, no en el de las piezas: el carro X, dibujado después de la pieza, la recorre por encima | I28 |
+
+`desplaza` no mueve el elemento hasta tener los valores de todos sus
+observables. Con él van su halo y su contorno de alarma, y los observables que
+lo mueven no llevan etiqueta. Un vector que no casa, o un observable que la
+pieza no tiene, se dice, y la pieza se queda sin efecto.
+
+`T_IMAGEN_RECT` y `imagen_parcial` se añadieron sin subir la versión del
+protocolo (`doc/protocolo.md` §3 y §4.1): una ventana que no lo dice recibe las
+imágenes enteras, como antes.
+
+**Cómo se ha comprobado**: `prueba_ilustracion`, con las pruebas de la tabla;
+hoy, **351** comprobaciones.
+
+## 51. La vista 3D
+
+La fase F8 de la CNC: **la misma máquina, en tres dimensiones**, en otra
+ventana (*Vista ▸ Vista 3D*, Ctrl+3). El plan de la CNC decía que en `mcu-sim`
+no cambiaría nada, y no ha sido así. Los observables dicen dónde está cada
+carro, pero no cómo es; y el color de la imagen de la pieza no se puede
+deshacer en alturas. Así que:
+
+* **La placa declara su forma** en un `<vista3d>` junto a su `<ilustracion>`,
+  y llega en `T_PLACA`:
+  * `<solido>`: una caja o un cilindro, con `en=`, `color=` y, si es de una
+    pieza, los observables que lo mueven con su vector de tres números. Un
+    cilindro puede girar sobre su eje con `gira=`, un observable en grados.
+  * `<superficie>`: la imagen de alturas de una pieza.
+* **La pieza manda sus alturas** en una segunda imagen, `alturas`: la altura en
+  centésimas de mm en el rojo y el verde, y en el azul, por dónde pasó la
+  fresa. Solo se pide con la ventana 3D abierta.
+
+**Aquí** (`src/escena3d.*`, `src/vista3d.*`, `src/escena3d.qml`):
+
+* **La escena**, sin Qt Quick: se lee de `T_PLACA` contra el catálogo
+  —observables e imágenes por nombre— y dice lo que no casa. Se mueve con las
+  muestras y descifra las alturas.
+* **La ventana**, con Qt Quick 3D en un `QQuickWidget`:
+  * cada sólido es una caja o un cilindro de Qt Quick 3D;
+  * cada superficie, una malla de C++ (`QQuick3DGeometry`), un vértice por
+    celda, con el color de la pieza en 2D, rehecha como mucho cada 100 ms;
+  * la cámara orbita con el ratón (`OrbitCameraController`), y «Vista
+    inicial» la devuelve a donde dice la placa.
+* **Opcional al compilar**: `MCU_SIM_GUI_3D` (AUTO, ON u OFF). Sin ella, la
+  ventana 3D dice que esa compilación no la lleva.
+
+**Lo que costó**: una superficie sin alturas todavía, con su geometría vacía,
+tumbaba Qt Quick 3D (un `stride` de 0). La geometría se le pone al llegar sus
+primeras alturas.
+
+**Cómo se ha comprobado**: `prueba_vista3d`, **12** comprobaciones:
+* la escena leída de `T_PLACA` contra el catálogo, con sus avisos;
+* cómo la mueven las muestras;
+* el descifrado de las alturas;
+* la escena dibujada —con `offscreen` no hay con qué, y se dice—, y la carga
+  de `--comprueba-3d` (§52);
+* con `MCU_SIM`, el bolsillo de 20 x 10 x 2 mm de la 3020 con la ventana
+  entera: el hueco de la superficie 3D mide 1,98 mm y está donde toca.
+
+## 52. La vista 3D en los paquetes, y los paquetes sin ella
+
+**Los paquetes de la §17 llevan la vista 3D**, con los módulos de QML que
+importa `escena3d.qml` —`QtQuick3D`, `QtQuick3D.Helpers` y los de `QtQuick`
+que piden—:
+
+| Plataforma | Cómo se meten | Dónde van |
+| :--- | :--- | :--- |
+| Linux | `linuxdeploy-plugin-qt` con `QML_SOURCES_PATHS=src` | `usr/qml` del AppImage |
+| Windows | `windeployqt6 --qmldir src`; sus DLL, con el mismo bucle de `ldd`; y un `qt.conf` | `qml/`, junto al `.exe` |
+| macOS | A mano, con `qmlimportscanner`; lo que `macdeployqt` no trae, copiado de Homebrew; sin los `rpath` de Homebrew; firmados uno a uno; y un `qt.conf` | `Contents/Resources/qml` |
+
+En macOS, a mano porque, con el Qt de Homebrew partido en fórmulas,
+`macdeployqt -qmldir` no encuentra ni `qmlimportscanner` ni los módulos.
+
+**`mcu-sim-gui --comprueba-3d`** es la prueba de cada paquete:
+* carga la escena con un cubo, sin enseñarla;
+* dice si Qt Quick 3D y sus módulos de QML se han cargado, y de dónde;
+* sale con 0 si se carga, 1 si no, y 3 si esa compilación no la lleva.
+
+Cada script la ejecuta desde dentro del paquete —en Windows, con el `PATH` sin
+MSYS2— y falla si las rutas de QML apuntan fuera. No la dibuja, porque eso
+depende del OpenGL, Direct3D o Metal de cada máquina, no del paquete.
+
+**En Wayland**, el AppImage necesitaba además el complemento de OpenGL de
+Wayland (`wayland-graphics-integration-client`). Sin él no hay OpenGL, y el Qt
+6.4 se cae al abrir la vista 3D, dentro de `rhiFlush`. Lo mete el complemento
+de Qt de `linuxdeploy` con `EXTRA_QT_MODULES=waylandcompositor`.
+
+**Con una etiqueta, dos paquetes por plataforma**:
+* el de la vista 3D, con el nombre de siempre;
+* otro sin ella, `-sin-3d`, compilado aparte con `-DMCU_SIM_GUI_3D=OFF`: pasa
+  sus pruebas, `--comprueba-3d` confirma con un 3 que no la lleva, y se
+  empaqueta con el mismo script.
+
+`publica` exige los ocho. En un push normal solo se hace el de la vista 3D, y
+lanzando el CI a mano (`workflow_dispatch`) se hacen los dos, para probarlos
+sin etiquetar. En Linux, el de sin 3D pesa 35,6 MB y el otro, 44,4.
+
+**Cómo se ha comprobado**, y lo que no:
+* **Linux, aquí**: el AppImage carga la vista 3D desde dentro y la dibuja en
+  X11 (xvfb) y en Wayland (weston); quitándole un módulo, falla y dice cuál.
+  El de sin 3D se empaqueta y arranca.
+* **⚠ SIN VERIFICAR**: los scripts de Windows y de macOS con la vista 3D, y
+  los paquetes sin ella en esas dos plataformas, hasta su primer CI.
+
+## 53. El contenido de las memorias no volátiles
+
+Pedido por el uso: lo que guardaba una memoria no volátil —la Flash de un
+MCU, la EEPROM del MSP432E4, una `I2cEeprom`, una `SdCard`, una `ExtNand`— se
+perdía al acabar la simulación. `mcu-sim` tiene ahora el atributo
+`contenido="fichero.hex"` en el `<mcu>` y el `<componente>` de la placa, en el
+`<mcu ref>` y el nuevo `<memoria ref>` del sistema, y `--contenido ID=FICHERO`,
+por ese orden de menos a más; y `placa --memorias`, que las lista en XML (su
+`doc/parts.md` §2.7). La memoria se carga de ese fichero Intel HEX al
+arrancar —antes del firmware— y se guarda en él al acabar. En la ventana:
+
+1. **`Lanzador::memorias_de`** ejecuta `mcu-sim placa --memorias` —con el
+   `--mcu` elegido— y `lee_memorias` lo lee (`MemoriaCli`: id, tipo, clase
+   `mcu` o `pieza`, lo que es y el contenido del XML). Un `mcu-sim` anterior
+   no sabe, y entonces no hay filas.
+2. **El diálogo** se las pide cada vez que pide los MCUs (§42): al abrirse,
+   al acabar de escribir otra placa y al cambiar el directorio. Debajo del
+   firmware, **una fila por memoria** —«N/U5 (I2cEeprom): EEPROM de 64
+   bytes»— con su fichero en `contenido:<id>`, de muestra el del XML —o que
+   se pierde al acabar—, y un «…» que deja elegir un fichero que aún no
+   existe. `--contenido` no sale como opción suelta. Lo de las memorias que
+   ahora no están se sigue recordando.
+3. **La línea de órdenes** lleva un `--contenido=ID=FICHERO` por cada fila
+   escrita; una vacía no escribe nada, y vale el del XML. Al lanzar, la
+   ventana pregunta otra vez por las memorias, como por los chips.
+4. **Detener mcu-sim** ya no mata sin más: primero pide parar (`T_PARA`),
+   que es el final ordenado en el que `mcu-sim` guarda sus memorias, y solo
+   si en tres segundos no ha terminado —o no hay sesión— lo mata. En Windows,
+   `terminate()` no llega a un proceso de consola, y la memoria se habría
+   perdido siempre.
+
+**Cómo se ha comprobado**: `prueba_argumentos` 51 → **60** (G7): leer
+`--memorias`, y uno anterior; la línea con lo elegido, sin elección y con una
+memoria que ya no está; y el diálogo sin memorias, con dos, en otra placa y
+de vuelta, con lo que se recuerda. Y `prueba_lanzamiento` 23 → **29** (L8),
+con el `mcu-sim` de verdad: las memorias del banco de piezas y de
+`discovery_min.xml`, el diálogo con la fila de la Flash, y lanzar con
+`--contenido`: *Detener mcu-sim* lo para con `T_PARA` y la Flash queda en su
+fichero, en Intel HEX.

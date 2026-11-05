@@ -430,5 +430,77 @@ int main(int argc, char** argv)
                   "sigue recordando");
     }
 
+    // -------------------------------------------------------------------------
+    std::printf("G7 El contenido de cada memoria no volatil\n");
+    {
+        QVector<MemoriaCli> m;
+        QString e;
+        const QByteArray salida =
+            "\n        SystemC 2.3.4-Accellera\n"
+            "<memorias placa=\"s.xml\">\n"
+            "  <memoria id=\"N/u0\" tipo=\"STM32F446RE\" clase=\"mcu\" que=\"Flash\" "
+            "contenido=\"flash.hex\"/>\n"
+            "  <memoria id=\"N/U5\" tipo=\"I2cEeprom\" clase=\"pieza\" "
+            "que=\"EEPROM de 64 bytes\" contenido=\"\"/>\n"
+            "</memorias>\n";
+        comprueba(lee_memorias(salida, m, e) && m.size() == 2 && m[0].id == "N/u0" &&
+                      m[0].clase == "mcu" && m[0].que == "Flash" && m[0].contenido == "flash.hex" &&
+                      m[1].tipo == "I2cEeprom" && m[1].clase == "pieza" && m[1].contenido.isEmpty(),
+                  "mcu-sim --memorias se lee, con la cabecera de SystemC delante: " +
+                      e.toStdString());
+        QVector<MemoriaCli> m2;
+        comprueba(!lee_memorias("uso: sim placa.xml", m2, e) && m2.isEmpty() &&
+                      e.contains("--memorias"),
+                  "y uno anterior, que no sabe, se dice: " + e.toStdString());
+
+        const ArgumentosCli a = lista();
+        ValoresCli v{{"placa", "s.xml"}, {"contenido:N/U5", "eeprom.hex"},
+                     {"contenido:Z/U9", "de_otro_sistema.hex"}};
+        comprueba(linea_de_ordenes(a, v, {}, nullptr, {}, m) ==
+                      QStringList({"s.xml", "--contenido=N/U5=eeprom.hex"}),
+                  "la linea lleva el contenido elegido; el de la memoria sin eleccion, no -vale "
+                  "el del XML-, y el de una que no esta, tampoco");
+
+        // El dialogo
+        ArgumentosCli con = a;
+        OpcionCli o;
+        o.nombre = "--contenido";
+        o.forma = "valor";
+        o.tipo = "texto";
+        o.repetible = true;
+        o.con_gui = true;
+        con.opciones << o;
+        Configuracion c;
+        c.ejecutable = "mcu-sim";
+        c.argumentos = {{"placa", "s.xml"}, {"contenido:N/u0", "mia.hex"}};
+        DialogoLanzamiento d(c, "127.0.0.1:5555", &con);
+        comprueba(!d.findChild<QWidget*>("arg:--contenido") && !d.findChild<QLabel*>("contenidos"),
+                  "sin saber sus memorias, no hay filas; --contenido no sale como opcion suelta");
+        d.pon_memorias(m);
+        auto* cu = d.findChild<QLineEdit*>("arg:contenido:N/u0");
+        auto* ce = d.findChild<QLineEdit*>("arg:contenido:N/U5");
+        comprueba(cu && ce && d.findChild<QLabel*>("contenidos") && cu->text() == "mia.hex" &&
+                      cu->placeholderText().contains("flash.hex") &&
+                      ce->placeholderText().contains("se pierde") && ce->text().isEmpty(),
+                  "una fila por memoria: el fichero de antes, de muestra el del XML, y la que "
+                  "el XML deja sin contenido lo dice");
+        if (!cu || !ce) return resultado();
+        comprueba(d.linea() == QStringList({"s.xml", "--contenido=N/u0=mia.hex"}),
+                  "la eleccion pisa la del XML: \"" + d.linea().join(' ').toStdString() + "\"");
+        cu->clear();
+        ce->setText("e.hex");
+        comprueba(d.linea() == QStringList({"s.xml", "--contenido=N/U5=e.hex"}) &&
+                      d.findChild<QLabel*>("orden")->text().contains("--contenido=N/U5=e.hex"),
+                  "vacia, la del XML sin decir nada; y la de la pieza, con su id");
+        d.pon_memorias({});
+        comprueba(!d.findChild<QLineEdit*>("arg:contenido:N/U5") &&
+                      d.configuracion().argumentos.value("contenido:N/U5") == "e.hex",
+                  "en otra placa sin esas memorias no hay filas, y lo elegido se recuerda");
+        d.pon_memorias(m);
+        comprueba(d.findChild<QLineEdit*>("arg:contenido:N/U5") &&
+                      d.findChild<QLineEdit*>("arg:contenido:N/U5")->text() == "e.hex",
+                  "y al volver, sale otra vez");
+    }
+
     return resultado();
 }
