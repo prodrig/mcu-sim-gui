@@ -906,6 +906,9 @@ void VentanaPrincipal::pon_relojes(quint64 t_sim_ns, double t_pared_s, quint64 d
                     .arg(t_pared_s, 0, 'f', 2)
                     .arg(deltas);
     if (ses_.pausada()) t += tr(" · <b>en pausa</b>");
+    // --stopped-core-stops-sim: el tiempo no avanza mientras el depurador
+    // tenga un núcleo parado; el modelo sigue atendiendo a la ventana
+    if (ses_.congelada()) t += tr(" · <b>congelada: un nucleo parado por el depurador</b>");
     if (ses_.perdidas() > 0)
         t += tr(" · <b>va por detras: %1 instantaneas perdidas</b>").arg(ses_.perdidas());
     relojes_->setText(t);

@@ -534,6 +534,16 @@ contesta a «¿se ha colgado?» en el único caso donde la respuesta es no
 [`analisis_gui.md` §3.4]. Al terminar, uno último con `F_TERMINADA` justo antes
 de `T_FIN`.
 
+**`F_CONGELADA`** (`4`, añadida el 2026-11-09 sin subir la versión): con
+`--stopped-core-stops-sim`, mientras el depurador tenga un núcleo parado el
+tiempo simulado no avanza —ni los periféricos ni las piezas—. A diferencia de
+la pausa, el modelo **sí cede el hilo**: los servidores de GDB y las sondas de
+OpenOCD siguen atendidos, y esta conexión también —`T_ESTADO` cada 250 ms de
+pared, todos en el mismo instante, `T_PING`, `T_ORDENES` (se aplican al
+seguir), `T_PAUSA` y `T_PARA`—. Sin instantáneas: no pasa el tiempo. Cuando el
+núcleo sigue, otra vez `F_CORRIENDO`. Una ventana que no conoce esta fase la
+toma por una fase en marcha: no pierde nada salvo el aviso.
+
 **El atasco, en números.** Lo que no ha salido no pasa de **256 kB**. Por encima,
 las instantáneas se quedan en la cola del muestreador, que cuando se llena tira
 las nuevas y las cuenta en `perdidas`; los avisos esperan en la suya.

@@ -45,6 +45,9 @@
 //                    T_PARA. `para()` vale antes de arrancar y en marcha;
 //   `pausada()`   -> lo que dijo el último T_ESTADO. La pausa la decide el
 //                    modelo: hasta que no lo dice, no está en pausa.
+//   `congelada()` -> lo mismo con F_CONGELADA: `--stopped-core-stops-sim` y un
+//                    núcleo parado por el depurador; el tiempo no avanza, y
+//                    el modelo sigue atendiendo.
 // =============================================================================
 #ifndef MCU_SIM_GUI_SESION_H
 #define MCU_SIM_GUI_SESION_H
@@ -109,6 +112,9 @@ public:
     bool paso(quint64 ns);
     quint32 ritmo() const { return ritmo_; }
     bool    pausada() const { return fase_ == proto::F_PAUSADA; }
+    // Con `--stopped-core-stops-sim` y un núcleo parado por el depurador, el
+    // tiempo simulado no avanza (F_CONGELADA): lo dijo el último T_ESTADO
+    bool    congelada() const { return fase_ == proto::F_CONGELADA; }
     // T_SUSCRIBE: qué observables, y cada cuánto tiempo SIMULADO. Reemplaza a
     // la anterior; vacía, las apaga. false si no hay un modelo saludado.
     bool suscribe(quint64 periodo_ns, const QVector<quint16>& ids);

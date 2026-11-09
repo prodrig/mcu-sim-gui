@@ -301,6 +301,17 @@ paso, se miran variables y se carga el programa con `load`.
 la ventana en *Pausa*, el depurador no recibe respuesta: arranca y no pauses
 desde la ventana mientras depuras —la pausa la hace el depurador—.
 
+**Con el núcleo parado, ¿sigue el tiempo?** Por omisión sí, como en una placa:
+con el núcleo parado en un punto de ruptura los periféricos siguen —un
+temporizador cuenta, la UART recibe, un perro guardián avanza (los servidores
+de GDB hacen con él lo mismo que OpenOCD con ese chip)—, y mientras haya un
+depurador conectado el modelo no va más deprisa que el reloj de pared. Si
+prefieres que **todo se detenga** mientras el núcleo está parado, marca
+**`--stopped-core-stops-sim`** en el diálogo: con cualquier núcleo parado por
+el depurador —de cualquier MCU de la placa— no avanza nada, ni periféricos ni
+piezas, y los relojes de la ventana dicen **«congelada»**. *Parar* sigue funcionando; al continuar desde el depurador,
+todo sigue donde estaba.
+
 Un *step over* sobre la línea de un `while (1) { f(); }` no acaba nunca: la
 llamada y el salto de vuelta son de la misma línea, y GDB sigue hasta salir
 de ella, como con una placa. Desde ahí, *step into* o un punto de ruptura.
@@ -442,6 +453,7 @@ se use. Las de hoy:
 | `--cmsis-dap` | Una sonda CMSIS-DAP por TCP para OpenOCD (`cmsis-dap tcp`); puerto 4441 si no se dice `--port` |
 | `--port N` | El puerto del servidor de GDB o de la sonda; 3333 por omisión |
 | `--traza-gdb` | Escribe cada paquete que llega del depurador: para ver qué pasa cuando no conecta |
+| `--stopped-core-stops-sim` | Con un núcleo parado por el depurador —de cualquier MCU de la placa—, el tiempo simulado se detiene: ni periféricos ni piezas avanzan hasta que siga. La ventana lo dice en los relojes: «congelada» (§5) |
 | `--serie ID=DESTINO` | Adónde da cada puente serie (§6); varios, separados por «;» |
 | `--espera-terminal` | No arranca el MCU hasta que haya un terminal en cada puente serie por red |
 | `--usb [ID=]DESTINO` | El USB de un MSP432E4 o de un STM32F303 como dispositivo: un PC que enumera el puerto serie USB del firmware y lo lleva a un puerto, como `--serie` |
