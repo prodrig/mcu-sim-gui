@@ -410,8 +410,12 @@ int main(int argc, char** argv)
             comprueba(!s.sigue() && !s.pausada(),
                       "a demanda, sigue() no manda nada; y no esta en pausa hasta que el "
                       "modelo lo diga");
+            m.manda(T_ESTADO, bytes(Estado{F_CONGELADA, 0, 0, 0.05, 4}));
+            comprueba(espera([&] { return s.congelada(); }) && !s.pausada(),
+                      "un T_ESTADO CONGELADA (--stopped-core-stops-sim): congelada(), y no "
+                      "pausada()");
             m.manda(T_ESTADO, bytes(Estado{F_PAUSADA, 0, 0, 0.1, 5}));
-            comprueba(espera([&] { return s.pausada(); }),
+            comprueba(espera([&] { return s.pausada(); }) && !s.congelada(),
                       "un T_ESTADO PAUSADA: pausada()");
             Paso p{};
             comprueba(s.paso(250000000ull) && m.espera_leidos(3) && m.leido[2].tipo == T_PASO &&

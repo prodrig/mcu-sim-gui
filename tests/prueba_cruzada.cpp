@@ -24,7 +24,9 @@
 // dibujo, y la rosa encendiendose en orden, un LED cada 101 ms. Y G9, el
 // sistema de los dos motores (`placas/nucleo_f446re_encoder_lcd_servo_2xmcc.xml`):
 // nueve placas, el L298N, dos MotorCC con su encoder compartiendo dibujo, y el
-// mando que los pone en marcha.
+// mando que los pone en marcha. Y G10, desde la rama esp32rv: la ESP32-C3
+// SuperMini con su blinky y su dibujo, y la ESP32-C6-DevKitC-1, con los pines
+// llamados `GPIO8` (ni `PA5` ni `P1.0`).
 //
 // Necesita un `mcu-sim` compilado y su árbol de fuentes, porque las placas y
 // los firmwares están allí. Se le dicen con dos variables de entorno:
@@ -38,6 +40,7 @@
 #include <QCoreApplication>
 #include <QHash>
 #include <QProcess>
+#include <QRegularExpression>
 
 #include <algorithm>
 #include <cmath>
@@ -664,6 +667,102 @@ int main(int argc, char** argv)
         const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);
         comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0,
                   "y mcu-sim termina con codigo 0");
+    }
+    // -------------------------------------------------------------------------
+    // G10, desde la rama esp32rv de mcu-sim (E13 de su doc/analisis_esp32_riscv.md):
+    // un RISC-V de Espressif. La ESP32-C3 SuperMini con blinky.elf (GPIO8, el
+    // LED azul D1, a masa: diez cambios cada 500 us y luego uno cada 250 ms) y
+    // su dibujo. Como en G7, lo que no se puede dar por hecho: los pines se
+    // llaman `GPIO8` -ni `PA5` ni `P1.0`-, y las tiras J1 y J2 los llevan.
+    // Y la ESP32-C6-DevKitC-1, que se monta con su dibujo y sus dos tiras.
+    // -------------------------------------------------------------------------
+    std::printf("G10 Un ESP32-C3: la SuperMini, con los nombres de Espressif\n");
+    {
+        Sesion s;
+        s.escucha(QHostAddress::LocalHost, 0);
+        int listos = 0, fines = 0;
+        quint64 t_inst = 0;
+        QVector<quint64> ts;
+        QVector<float>   led;
+        QObject::connect(&s, &Sesion::listo, [&] { ++listos; });
+        QObject::connect(&s, &Sesion::fin, [&](quint32, qint32, quint64) { ++fines; });
+        QObject::connect(&s, &Sesion::instantanea, [&](quint64 t, quint32) { t_inst = t; });
+        QObject::connect(&s, &Sesion::muestra, [&](quint16, float v) {
+            ts.push_back(t_inst);
+            led.push_back(v);
+        });
+        QProcess p;
+        p.setWorkingDirectory(src);
+        p.start(sim, {"placas/esp32c3_supermini.xml", "verif/fw/esp32c3/blinky.elf", "--ms=600",
+                      "--gui", QStringLiteral("127.0.0.1:%1").arg(s.puerto())});
+        comprueba(espera([&] { return listos == 1; }, 20000),
+                  "mcu-sim monta la SuperMini, saluda y dice T_LISTO");
+        const PlacaGui& pl = s.placa();
+        QHash<QString, QString> nodo;            // "D1" -> "GPIO8"
+        QStringList tiras;
+        bool todas = !pl.piezas.isEmpty();
+        for (const PiezaGui& pz : pl.piezas) {
+            todas = todas && pz.en_placa;
+            if (!pz.patillas.isEmpty()) nodo[pz.id] = pz.patillas[0].nodo;
+            if (pz.id == "J1" || pz.id == "J2")
+                for (const PatillaGui& pt : pz.patillas) tiras << pt.nodo;
+        }
+        comprueba(todas && pl.avisos.isEmpty() && nodo.value("D1") == "GPIO8" &&
+                      nodo.value("BOOT") == "GPIO9" && nodo.value("RESET") == "CHIP_PU",
+                  "sus piezas llegan con los nombres de Espressif: D1 en GPIO8, BOOT en GPIO9 y "
+                  "RESET en CHIP_PU");
+        comprueba(tiras.size() == 16 && tiras.contains("GPIO21") && tiras.contains("GPIO0") &&
+                      tiras.filter(QRegularExpression(QStringLiteral("^P[A-K][0-9]+$"))).isEmpty(),
+                  "y sus dos tiras de ocho, J1 y J2, van a GPIOn: ninguno de la forma Pxn");
+        comprueba(s.ilustraciones().size() == 1 &&
+                      s.ilustraciones()[0].fichero == "esp32c3_supermini.svg" &&
+                      s.ilustraciones()[0].svg.contains("id=\"D1\"") &&
+                      s.ilustraciones()[0].svg.contains("id=\"J2.8\""),
+                  "con su dibujo, esp32c3_supermini.svg, que lleva el D1 y cada pin de J1 y J2");
+        quint16 id = 0;
+        for (const PiezaGui& pz : pl.piezas)
+            if (pz.id == "D1" && !pz.observables.isEmpty()) id = quint16(pz.observables[0].id_obs);
+        comprueba(s.suscribe(1000000, {id}), "suscrito al D1, cada 1 ms");
+        comprueba(s.arranca(RIT_LIBRE) && espera([&] { return fines == 1; }, 120000),
+                  "600 ms simulados");
+        int flancos = 0;
+        for (int k = 1; k < led.size(); ++k)
+            if (led[k] != led[k - 1]) ++flancos;
+        comprueba(ts.size() == 600 && flancos >= 2,
+                  "y el D1 parpadea en las muestras: cada 250 ms (" + std::to_string(flancos) +
+                      " flancos en 600 muestras)");
+        const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);
+        comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0,
+                  "y mcu-sim termina con codigo 0");
+    }
+    {
+        Sesion s;
+        s.escucha(QHostAddress::LocalHost, 0);
+        int listos = 0;
+        QObject::connect(&s, &Sesion::listo, [&] { ++listos; });
+        QProcess p;
+        p.setWorkingDirectory(src);
+        // Con --valida, mcu-sim monta la placa, la manda y acaba: sin T_LISTO
+        p.start(sim, {"placas/esp32c6_devkitc1.xml", "--valida",
+                      "--gui", QStringLiteral("127.0.0.1:%1").arg(s.puerto())});
+        comprueba(espera([&] { return !s.placa().piezas.isEmpty() && !s.ilustraciones().isEmpty(); }, 20000),
+                  "mcu-sim monta la ESP32-C6-DevKitC-1 (--valida) y la manda");
+        const PlacaGui& pl = s.placa();
+        QStringList tiras, ids;
+        for (const PiezaGui& pz : pl.piezas) {
+            ids << pz.id;
+            if (pz.id == "J1" || pz.id == "J3")
+                for (const PatillaGui& pt : pz.patillas) tiras << pt.nodo;
+        }
+        comprueba(ids.contains("LED") && ids.contains("UART") && ids.contains("U2") &&
+                      tiras.contains("GPIO8") && tiras.contains("GPIO23") &&
+                      tiras.filter(QRegularExpression(QStringLiteral("^P[A-K][0-9]+$"))).isEmpty(),
+                  "con el LED RGB, el puente UART, la Flash y las tiras J1 y J3 a GPIOn");
+        comprueba(s.ilustraciones().size() == 1 &&
+                      s.ilustraciones()[0].fichero == "esp32c6_devkitc1.svg" &&
+                      s.ilustraciones()[0].svg.contains("id=\"J3.11\""),
+                  "y su dibujo, esp32c6_devkitc1.svg");
+        p.waitForFinished(30000);
     }
     return resultado();
 }

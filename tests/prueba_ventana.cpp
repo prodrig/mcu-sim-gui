@@ -483,6 +483,15 @@ int main(int argc, char** argv)
         m.manda(T_ESTADO, bytes(Estado{F_PAUSADA, 0, 250000000ull, 0.2, 19}));
         comprueba(espera([&] { return paso->isEnabled(); }),
                   "y vuelve cuando el modelo dice que esta otra vez en pausa");
+        m.manda(T_ESTADO, bytes(Estado{F_CONGELADA, 0, 250000000ull, 0.3, 21}));
+        comprueba(espera([&] { return relojes->text().contains("congelada"); }) &&
+                      !relojes->text().contains("en pausa") && parar->isEnabled(),
+                  "T_ESTADO CONGELADA (--stopped-core-stops-sim): los relojes dicen "
+                  "'congelada', y Parar sigue a mano");
+        m.manda(T_ESTADO, bytes(Estado{F_PAUSADA, 0, 250000000ull, 0.4, 22}));
+        comprueba(espera([&] { return paso->isEnabled(); }) &&
+                      !relojes->text().contains("congelada"),
+                  "y al volver a la pausa ya no lo dicen");
         parar->click();
         comprueba(m.espera_leidos(5) && m.leido[4].tipo == T_PARA,
                   "Parar en marcha: T_PARA");

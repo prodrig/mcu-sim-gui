@@ -41,7 +41,9 @@ La **contraparte de visualización gráfica de
 >
 >   Con `--edit`, además, se colocan las placas y se guarda en el XML.
 > * **Otros chips**: los MSP432 de Texas Instruments y los STM32F3 de ST se
->   ven sin código nuevo en la ventana (plan §47 y §48).
+>   ven sin código nuevo en la ventana (plan §47 y §48); y los RISC-V de
+>   Espressif, el ESP32-C3 y el ESP32-C6, con sus placas dibujadas y sus pines
+>   llamados `GPIO8` (E13 de `doc/analisis_esp32_riscv.md` de `mcu-sim`).
 > * **La fresadora CNC** de `mcu-sim` (plan §50 a §52): en la ilustración, en
 >   planta y alzado; y en la **vista 3D** (*Vista ▸ Vista 3D*, Ctrl+3), con
 >   Qt Quick 3D, que es opcional al compilar y va en los paquetes de las tres

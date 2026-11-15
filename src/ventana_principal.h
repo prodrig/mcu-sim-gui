@@ -37,7 +37,11 @@
 //     dijo el último T_ESTADO, no lo que se pidió: la pausa la decide el
 //     modelo;
 //   * a demanda, «Paso» avanza los milisegundos que diga su casilla, y se
-//     vuelve a habilitar cuando el modelo dice que está otra vez en pausa.
+//     vuelve a habilitar cuando el modelo dice que está otra vez en pausa;
+//   * con `--stopped-core-stops-sim` (una opción más del diálogo, que la lee
+//     de `--argumentos`), los relojes dicen «congelada» mientras el modelo
+//     diga F_CONGELADA: un núcleo parado por el depurador tiene el tiempo
+//     detenido.
 //
 // Desde la fase 7, lanza el modelo ella misma:
 //

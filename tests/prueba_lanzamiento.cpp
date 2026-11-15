@@ -29,7 +29,11 @@
 //   L8  el contenido de cada memoria no volatil: `mcu-sim placa --memorias`,
 //       el dialogo con una fila por memoria, y lanzar con el contenido de la
 //       Flash elegido: «Detener mcu-sim» pide parar (T_PARA) y la Flash queda
-//       guardada en su fichero.
+//       guardada en su fichero;
+//   L9  --stopped-core-stops-sim: el diálogo la ofrece (la lee de
+//       `--argumentos`, con su ayuda) y la escribe en la línea; lanzado con
+//       el stub de GDB interno, una conexión a su puerto para el núcleo y los
+//       relojes dicen «congelada»; `$c` lo suelta y el tiempo vuelve a correr.
 //
 // Como `cruzada`, necesita MCU_SIM (el ejecutable) y MCU_SIM_SRC (su src/).
 // Sin ellas, código 77: saltada.
@@ -50,6 +54,7 @@
 #include <QPushButton>
 #include <QStatusBar>
 #include <QTcpServer>
+#include <QTcpSocket>
 
 #include "argumentos.h"
 #include "comun.h"
@@ -390,6 +395,53 @@ int main(int argc, char** argv)
         const QByteArray dentro = fh.open(QIODevice::ReadOnly) ? fh.readAll() : QByteArray();
         comprueba(dentro.startsWith(":020000040800") && dentro.trimmed().endsWith(":00000001FF"),
                   "y como se le pidio parar, guardo la Flash en su fichero, en Intel HEX");
+        v.close();
+    }
+
+    // -------------------------------------------------------------------------
+    std::printf("L9 --stopped-core-stops-sim, con el mcu-sim de verdad\n");
+    {
+        QTcpServer libre;
+        libre.listen(QHostAddress::LocalHost, 0);
+        const quint16 pg = libre.serverPort();
+        libre.close();
+        Configuracion c = configuracion();
+        c.argumentos.insert("--gdb-dap", "si");
+        c.argumentos.insert("--port", QString::number(pg));
+        c.argumentos.insert("--stopped-core-stops-sim", "si");
+        DialogoLanzamiento d(c, "127.0.0.1:1");
+        auto* cb = d.findChild<QCheckBox*>("arg:--stopped-core-stops-sim");
+        comprueba(cb && cb->isChecked() && cb->toolTip().contains("depuracion") &&
+                      d.linea().contains("--stopped-core-stops-sim"),
+                  "el dialogo la ofrece, con su ayuda, y la escribe en la linea");
+
+        VentanaPrincipal v(c);
+        v.show();
+        auto* arrancar = v.findChild<QPushButton*>("arrancar");
+        auto* relojes = v.findChild<QLabel*>("relojes");
+        comprueba(v.lanza() && espera([&] { return arrancar->isEnabled(); }, 20000) &&
+                      consola(v).contains("--stopped-core-stops-sim"),
+                  "la ventana lanza con --stopped-core-stops-sim");
+        arrancar->click();
+        comprueba(espera([&] { return relojes->text().contains("t = "); }, 10000) &&
+                      !relojes->text().contains("congelada"),
+                  "en marcha, sin depurador: no esta congelada");
+        // El stub interno para el núcleo en cuanto alguien se conecta
+        QTcpSocket gdb;
+        gdb.connectToHost(QHostAddress::LocalHost, pg);
+        const bool conectado = gdb.waitForConnected(5000);
+        comprueba(conectado && espera([&] { return relojes->text().contains("congelada"); }, 10000),
+                  "un depurador en el puerto del stub para el nucleo: los relojes dicen "
+                  "'congelada'");
+        const QString t1 = relojes->text().section(QStringLiteral(" ms"), 0, 0);
+        espera([] { return false; }, 800);
+        comprueba(relojes->text().section(QStringLiteral(" ms"), 0, 0) == t1,
+                  "y el tiempo simulado no se mueve: " + t1.toStdString() + " ms");
+        gdb.write("$c#63");
+        gdb.flush();
+        comprueba(espera([&] { return !relojes->text().contains("congelada"); }, 10000),
+                  "con $c sigue: ya no esta congelada");
+        gdb.close();
         v.close();
     }
 
