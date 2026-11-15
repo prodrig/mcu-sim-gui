@@ -87,6 +87,10 @@ ejemplo están en `placas/` de `mcu-sim`:
 | `dos_f3discovery.xml` | Dos F3DISCOVERY cableadas, para los ejemplos de ST de dos placas | el que dice el XML |
 | `stm32f3discovery_boot0.xml` | La F3DISCOVERY con BOOT0 a VDD —arranca el cargador de sistema— y un adaptador FT232RL en la USART1, para `stm32flash` | ninguno: se carga por el cargador |
 | `msp_exp432p401r.xml` | La LaunchPad MSP-EXP432P401R de Texas Instruments | `verif/fw/msp432p4/p4_demo/p4_demo.out`, el ELF de Code Composer Studio |
+| `esp32c3_supermini.xml` | La ESP32-C3 SuperMini: el LED azul de GPIO8, BOOT y RESET, y sus dos tiras de ocho | `verif/fw/esp32c3/blinky.elf`, o una compilación de ESP-IDF por su `flash_args` |
+| `esp32c3_devkitm1.xml` | La ESP32-C3-DevKitM-1 de Espressif: el LED RGB direccionable, el puente USB-UART con su auto-reset (esptool por RFC 2217) y las tiras J1 y J3 | una compilación de ESP-IDF por su `flash_args` |
+| `esp32c6_devkitc1.xml` | La ESP32-C6-DevKitC-1 de Espressif: sus dos USB (el puente USB-UART y el USB-Serial-JTAG del chip), el LED RGB y las tiras J1 y J3 | una compilación de ESP-IDF por su `flash_args` |
+| `esp32c3_y_f407.xml` | Un ESP32-C3 y un STM32F407 hablando por UART: dos arquitecturas en la misma placa | el que dice el XML |
 | `msp_exp432p401r_edumkii.xml` y `msp_exp432e401y_edumkii.xml` | Las LaunchPad del MSP432P401R y del MSP432E401Y con la BoosterPack EDUMKII: joystick, pantalla, RGB, zumbador... | el que dice el XML |
 | `nucleo_f446re_encoder_lcd_servo_2xmcc.xml` | La Nucleo con el servo, el encoder y la pantalla, y además un L298N con dos motorreductores con su encoder y una fuente de laboratorio, que enseña en su display lo que gastan | el que dice el XML |
 | `cnc_3020.xml` | **La fresadora CNC 3020** entera: la Nucleo, la CNC Shield, tres drivers A4988, los motores, los husillos, los carros, el cabezal y la pieza (abajo) | el que dice el XML: `verif/fw/cnc/cnc.bin` |
