@@ -301,8 +301,17 @@ Para probar los dos sin etiquetar, el CI se lanza a mano (*Actions ▸ ci ▸ Ru
 workflow*).
 
 Para compilar con Qt Quick 3D en MSYS2 hacen falta, además,
-`mingw-w64-x86_64-qt6-declarative`, `mingw-w64-x86_64-qt6-quick3d` y
-`mingw-w64-x86_64-qt6-shadertools`. En Homebrew, `qt` ya los trae.
+`mingw-w64-ucrt-x86_64-qt6-declarative`, `mingw-w64-ucrt-x86_64-qt6-quick3d` y
+`mingw-w64-ucrt-x86_64-qt6-shadertools`. En Homebrew, `qt` ya los trae.
+
+### En Windows con MSYS2: el entorno UCRT64
+
+Todo lo de Windows se hace en el shell **UCRT64** de MSYS2, con paquetes
+`mingw-w64-ucrt-x86_64-…`. Hasta el 2026-11-22 era MINGW64, pero MSYS2 lo da
+por obsoleto desde marzo de 2026 y desde octubre le va quitando paquetes: el
+primero que nos tocó fue `qt6-quick3d`, y sin él no hay vista 3D. Si tienes
+una instalación en MINGW64, instala lo mismo en UCRT64 (convive con la otra) y
+abre ese shell; no mezcles los dos, que es la trampa 1 de abajo con otro nombre.
 
 ### En Windows con MSYS2: tres trampas, y la tercera es la que muerde
 
@@ -311,16 +320,16 @@ aparecieron, que no es el orden de importancia: **la que de verdad rompe la
 compilación es la tercera.**
 
 **1. Usa el CMake de MinGW, no el de MSYS.** Si el error cita
-`/usr/share/cmake/...` mientras el compilador es `/mingw64/bin/c++.exe`, están
+`/usr/share/cmake/...` mientras el compilador es `/ucrt64/bin/c++.exe`, están
 mezclados dos entornos distintos. MSYS2 lo documenta: *«When building projects
 for Windows with CMake […] make sure to install the MinGW version of CMake»*, y
-recomienda Ninja como generador. Desde el shell **MINGW64**:
+recomienda Ninja como generador. Desde el shell **UCRT64**:
 
 ```bash
-pacman -S --needed mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja \
-                   mingw-w64-x86_64-gcc  mingw-w64-x86_64-qt6-base \
-                   mingw-w64-x86_64-qt6-svg
-which cmake     # tiene que decir /mingw64/bin/cmake
+pacman -S --needed mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja \
+                   mingw-w64-ucrt-x86_64-gcc  mingw-w64-ucrt-x86_64-qt6-base \
+                   mingw-w64-ucrt-x86_64-qt6-svg
+which cmake     # tiene que decir /ucrt64/bin/cmake
 ```
 
 **2. No compiles dentro de la carpeta sincronizada.** Un árbol de compilación
@@ -341,7 +350,7 @@ síntoma, en **ESET**, es este:
 file STRINGS file ".../CompilerIdCXX/a.exe" cannot be read.
 file failed to open for reading (Permission denied)
 ninja: error: '.../testCXXCompiler.cxx', missing and no known rule to make it
--- Check for working CXX compiler: /mingw64/bin/c++.exe - broken
+-- Check for working CXX compiler: /ucrt64/bin/c++.exe - broken
 ```
 
 Y la prueba que lo desenmascara no necesita CMake ninguno:

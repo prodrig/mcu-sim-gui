@@ -160,10 +160,13 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Windows, con MSYS2 y MinGW-w64: la misma cadena que se usa para `mcu-sim`
-  # en Windows (su `doc/compilacion.md` §5), con el Qt que empaqueta MSYS2.
+  # en Windows (su `doc/compilacion.md` §3), con el Qt que empaqueta MSYS2.
+  # En UCRT64 desde el 2026-11-22, como `mcu-sim`: MSYS2 da MINGW64 por
+  # obsoleto y le va quitando paquetes hoja; qt6-quick3d ya no estaba
+  # («target not found: mingw-w64-x86_64-qt6-quick3d»).
   # ---------------------------------------------------------------------------
   windows:
-    name: Windows (MSYS2 / MinGW-w64)
+    name: Windows (MSYS2 UCRT64 / MinGW-w64)
     runs-on: windows-latest
     timeout-minutes: 45
     defaults:
@@ -174,7 +177,7 @@ jobs:
 
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           pacboy: >-
             toolchain:p cmake:p ninja:p qt6-base:p qt6-svg:p
@@ -188,7 +191,7 @@ jobs:
           cmake --build build
 
       - name: Las pruebas
-        # Las DLL de Qt están en /mingw64/bin, que el shell de MSYS2 ya tiene
+        # Las DLL de Qt están en /ucrt64/bin, que el shell de MSYS2 ya tiene
         # en el PATH. Fuera de él harían falta al lado del .exe, y eso es la
         # fase 9 (windeployqt), no esto.
         run: ctest --test-dir build --output-on-failure
@@ -320,7 +323,7 @@ jobs:
     name: Publicar los ejecutables de una etiqueta
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [linux, windows, macos]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04     # con nombre, como linux: ubuntu-latest cambia debajo
     permissions:
       contents: write         # solo aqui, y solo para crear la Release
     steps:
