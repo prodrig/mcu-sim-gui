@@ -26,7 +26,11 @@
 // nueve placas, el L298N, dos MotorCC con su encoder compartiendo dibujo, y el
 // mando que los pone en marcha. Y G10, desde la rama esp32rv: la ESP32-C3
 // SuperMini con su blinky y su dibujo, y la ESP32-C6-DevKitC-1, con los pines
-// llamados `GPIO8` (ni `PA5` ni `P1.0`).
+// llamados `GPIO8` (ni `PA5` ni `P1.0`). Y G11, desde la rama msp430 (M12 de
+// su doc/analisis_msp430.md): la MSP-EXP430FR4133 con la demo de TI, su vidrio
+// LCD1 como una imagen que cambia, el estado de la CPU (LPM0 en la G2ET, que no
+// es estar parada) y los puentes de J101 como interruptores; y los dibujos nuevos de
+// las LaunchPad FR5969, FR5994 y FR6989.
 //
 // Necesita un `mcu-sim` compilado y su árbol de fuentes, porque las placas y
 // los firmwares están allí. Se le dicen con dos variables de entorno:
@@ -40,6 +44,7 @@
 #include <QCoreApplication>
 #include <QHash>
 #include <QProcess>
+#include <QSet>
 #include <QRegularExpression>
 
 #include <algorithm>
@@ -762,6 +767,129 @@ int main(int argc, char** argv)
                       s.ilustraciones()[0].fichero == "esp32c6_devkitc1.svg" &&
                       s.ilustraciones()[0].svg.contains("id=\"J3.11\""),
                   "y su dibujo, esp32c6_devkitc1.svg");
+        p.waitForFinished(30000);
+    }
+    // -------------------------------------------------------------------------
+    // G11, desde la rama msp430 de mcu-sim (M12 de su doc/analisis_msp430.md):
+    // la MSP-EXP430FR4133 con la demo de TI. El vidrio LCD1 llega como una
+    // imagen (`vidrio`, 192 x 60) que cambia mientras el texto se desplaza; la
+    // CPU, como la pieza u0.CPU, con `lpm` y `depurador` (y, con la G2ET, en
+    // LPM0: dormida no es parada); y el bloque J101 de
+    // la eZ-FET, con un interruptor por puente, que se quita en marcha.
+    // -------------------------------------------------------------------------
+    std::printf("G11 Una MSP430 de TI: la FR4133, su vidrio, su CPU y su J101\n");
+    {
+        Sesion s;
+        s.escucha(QHostAddress::LocalHost, 0);
+        int listos = 0, fines = 0, imagenes = 0, hechas = 0;
+        int ancho = 0, alto = 0;
+        QHash<quint16, QVector<float>> vals;
+        QSet<QByteArray> distintas;
+        QObject::connect(&s, &Sesion::listo, [&] { ++listos; });
+        QObject::connect(&s, &Sesion::fin, [&](quint32, qint32, quint64) { ++fines; });
+        QObject::connect(&s, &Sesion::muestra, [&](quint16 id, float v) { vals[id].push_back(v); });
+        QObject::connect(&s, &Sesion::imagen, [&](quint16, quint64, int w, int h, const QByteArray& rgb, float) {
+            ++imagenes; ancho = w; alto = h; distintas.insert(rgb);
+        });
+        QObject::connect(&s, &Sesion::orden_hecha, [&](quint64, quint16, quint16, float, quint32) { ++hechas; });
+        QProcess p;
+        p.setWorkingDirectory(src);
+        p.start(sim, {"placas/msp_exp430fr4133.xml", "verif/fw/fr4133/OutOfBox_MSP430FR4133.txt", "--ms=4000",
+                      "--gui", QStringLiteral("127.0.0.1:%1").arg(s.puerto())});
+        comprueba(espera([&] { return listos == 1; }, 20000),
+                  "mcu-sim monta la MSP-EXP430FR4133, saluda y dice T_LISTO");
+        const PlacaGui& pl = s.placa();
+        int img = -1, lpm = -1, dep = -1, modo = -1, j101 = -1;
+        QStringList puentes;
+        for (const PiezaGui& pz : pl.piezas) {
+            if (pz.id == "LCD1" && pz.imagenes.size() == 1 && pz.imagenes[0].nombre == "vidrio")
+                img = pz.imagenes[0].id_obs;
+            if (pz.id == "u0.CPU")
+                for (const ObservableGui& o : pz.observables) {
+                    if (o.nombre == "lpm") lpm = o.id_obs;
+                    if (o.nombre == "depurador") dep = o.id_obs;
+                    if (o.nombre == "modo") modo = o.id_obs;
+                }
+            if (pz.id == "J101") {
+                j101 = pz.idx;
+                for (const MandoGui& m : pz.mandos)
+                    if (m.tipo == "interruptor" && m.valor == 1.0) puentes << m.nombre;
+            }
+        }
+        comprueba(img >= 0 && pl.avisos.isEmpty(), "el LCD1 ensena una imagen, `vidrio`");
+        comprueba(lpm >= 0 && dep >= 0 && modo >= 0, "la CPU, u0.CPU, con lpm, depurador y modo");
+        comprueba(j101 >= 0 && puentes.size() == 7 && puentes.contains("11-12") && puentes.contains("13-14"),
+                  "y J101, con un interruptor por puente, los siete puestos");
+        comprueba(s.ilustraciones().size() == 1 && s.ilustraciones()[0].svg.contains("id=\"LCD1\""),
+                  "con su dibujo, que lleva el LCD1 (donde va la imagen)");
+        comprueba(s.suscribe(10000000, {quint16(img), quint16(lpm), quint16(dep), quint16(modo)}),
+                  "suscrito al vidrio y a la CPU, cada 10 ms");
+        // Quitar SBW TST (13-14) antes de arrancar: el chip sigue, la sonda no lo ve
+        comprueba(s.ordena(quint16(j101), 6, 0.f), "quita el puente SBW TST de J101");
+        comprueba(s.arranca(RIT_LIBRE) && espera([&] { return fines == 1; }, 120000), "4000 ms simulados");
+        comprueba(hechas == 1, "y la orden vuelve con su eco");
+        comprueba(ancho == 192 && alto == 60 && imagenes >= 3 && distintas.size() >= 3,
+                  "el vidrio llega como imagen de 192 x 60 y cambia con el texto (" +
+                      std::to_string(imagenes) + " imagenes, " + std::to_string(distintas.size()) +
+                      " distintas)");
+        const QVector<float>& d = vals.value(quint16(dep));
+        const QVector<float>& m = vals.value(quint16(modo));
+        comprueba(!d.contains(1.f) && !m.isEmpty(), "la CPU nunca esta parada por el depurador");
+        const bool acabo = p.state() == QProcess::NotRunning || p.waitForFinished(30000);
+        comprueba(acabo && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0,
+                  "y mcu-sim termina con codigo 0");
+    }
+    {
+        // La CPU en LPM0: el eco de la USCI_A0 de la G2ET (ej_uart_usci) duerme
+        // esperando un carácter. Durmiendo NO es parada: lpm a 1, depurador a 0
+        Sesion s;
+        s.escucha(QHostAddress::LocalHost, 0);
+        int listos = 0, fines = 0;
+        QHash<quint16, QVector<float>> vals;
+        QObject::connect(&s, &Sesion::listo, [&] { ++listos; });
+        QObject::connect(&s, &Sesion::fin, [&](quint32, qint32, quint64) { ++fines; });
+        QObject::connect(&s, &Sesion::muestra, [&](quint16 id, float v) { vals[id].push_back(v); });
+        QProcess p;
+        p.setWorkingDirectory(src);
+        p.start(sim, {"placas/msp_exp430g2et.xml", "verif/g2553/elf/ej_uart_usci.elf", "--ms=200",
+                      "--gui", QStringLiteral("127.0.0.1:%1").arg(s.puerto())});
+        comprueba(espera([&] { return listos == 1; }, 20000), "mcu-sim monta la MSP-EXP430G2ET con el eco de la USCI");
+        int lpm = -1, dep = -1, modo = -1;
+        for (const PiezaGui& pz : s.placa().piezas)
+            if (pz.id == "u0.CPU")
+                for (const ObservableGui& o : pz.observables) {
+                    if (o.nombre == "lpm") lpm = o.id_obs;
+                    if (o.nombre == "depurador") dep = o.id_obs;
+                    if (o.nombre == "modo") modo = o.id_obs;
+                }
+        comprueba(lpm >= 0 && s.suscribe(10000000, {quint16(lpm), quint16(dep), quint16(modo)}),
+                  "suscrito a la CPU, u0.CPU, cada 10 ms");
+        comprueba(s.arranca(RIT_LIBRE) && espera([&] { return fines == 1; }, 60000), "200 ms simulados");
+        const QVector<float>& l = vals.value(quint16(lpm));
+        const QVector<float>& d = vals.value(quint16(dep));
+        const QVector<float>& m = vals.value(quint16(modo));
+        comprueba(!l.isEmpty() && l.last() == 1.f && m.last() == 1.f && !d.contains(1.f),
+                  "la CPU duerme en LPM0 (modo 1): lpm a 1 y depurador a 0, que no es lo mismo");
+        p.waitForFinished(30000);
+    }
+    for (const char* b : {"msp_exp430fr5969", "msp_exp430fr5994", "msp_exp430fr6989"}) {
+        Sesion s;
+        s.escucha(QHostAddress::LocalHost, 0);
+        QProcess p;
+        p.setWorkingDirectory(src);
+        p.start(sim, {QStringLiteral("placas/%1.xml").arg(b), "--valida",
+                      "--gui", QStringLiteral("127.0.0.1:%1").arg(s.puerto())});
+        comprueba(espera([&] { return !s.placa().piezas.isEmpty() && !s.ilustraciones().isEmpty(); }, 20000),
+                  std::string("mcu-sim monta la ") + b + " (--valida) y la manda");
+        bool leds = false, cpu = false;
+        for (const PiezaGui& pz : s.placa().piezas) {
+            leds = leds || pz.id == "LED2";
+            cpu = cpu || pz.id == "u0.CPU";
+        }
+        comprueba(leds && cpu && s.ilustraciones()[0].fichero == QString(b) + ".svg" &&
+                      s.ilustraciones()[0].svg.contains("id=\"LED1\"") &&
+                      s.ilustraciones()[0].svg.contains("id=\"S3\""),
+                  std::string("con sus LED, su CPU y su dibujo, ") + b + ".svg");
         p.waitForFinished(30000);
     }
     return resultado();

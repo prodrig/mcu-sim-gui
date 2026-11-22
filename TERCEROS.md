@@ -15,7 +15,7 @@ dice qué son y con qué licencia se redistribuyen.
 - **Licencia**: **GNU LGPL versión 3** (`licencias/LGPL-3.0-only.txt`, que se
   apoya en `licencias/GPL-3.0-only.txt`).
 - **De dónde sale cada paquete**: Windows, del Qt de MSYS2
-  (`mingw-w64-x86_64-qt6-base` y `-qt6-svg`); Linux, del de Ubuntu 24.04
+  (`mingw-w64-ucrt-x86_64-qt6-base` y `-qt6-svg`, del entorno UCRT64); Linux, del de Ubuntu 24.04
   (`qt6-base-dev` y `qt6-svg-dev`);
   macOS, del de Homebrew (`qt`). Los tres son compilaciones sin modificar de
   Qt, y su código fuente está en <https://download.qt.io/official_releases/qt/>
