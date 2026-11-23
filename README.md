@@ -8,7 +8,7 @@ La **contraparte de visualización gráfica de
 > el circuito y el firmware, lanzar, depurar con GDB y el puerto serie, y
 > todas las opciones de la línea de órdenes—.
 
-> **Estado (2026-11-03).** Las **fases 0 a 7** del plan están hechas, y
+> **Estado (2026-11-23).** Las **fases 0 a 7** del plan están hechas, y
 > **de la 9, los ejecutables**; falta la **8**, grabar y reproducir sesiones.
 > Lo que hay hoy:
 >
@@ -40,10 +40,24 @@ La **contraparte de visualización gráfica de
 >   * los carros que se desplazan y la pieza mecanizada.
 >
 >   Con `--edit`, además, se colocan las placas y se guarda en el XML.
-> * **Otros chips**: los MSP432 de Texas Instruments y los STM32F3 de ST se
->   ven sin código nuevo en la ventana (plan §47 y §48); y los RISC-V de
->   Espressif, el ESP32-C3 y el ESP32-C6, con sus placas dibujadas y sus pines
->   llamados `GPIO8` (E13 de `doc/analisis_esp32_riscv.md` de `mcu-sim`).
+> * **Otros chips**, sin código nuevo en la ventana: todo llega por el
+>   protocolo de siempre.
+>   * Los MSP432 de Texas Instruments y los STM32F3 de ST (plan §47 y §48).
+>   * Los RISC-V de Espressif, el ESP32-C3 y el ESP32-C6, con sus placas
+>     dibujadas y sus pines llamados `GPIO8` (E13 de
+>     `doc/analisis_esp32_riscv.md` de `mcu-sim`).
+>   * Los MSP430 de TI, en sus diez LaunchPad (M12 de `doc/analisis_msp430.md`
+>     de `mcu-sim`): el vidrio LCD de la FR4133 y la FR6989 se ve sobre el
+>     dibujo como una pantalla; los puentes del bloque de aislamiento de la
+>     eZ-FET (J101...) son casillas que se quitan en marcha; y cada CPU dice si
+>     duerme en un modo de bajo consumo o la tiene parada el depurador, que no
+>     es lo mismo.
+> * **Las memorias no volátiles** (plan §53): el diálogo de lanzamiento da una
+>   fila por cada una —la Flash de cada MCU, una EEPROM...— con el fichero de
+>   su contenido, que se carga al arrancar y se guarda al acabar.
+> * **Un núcleo parado congela la placa**, si se quiere: con
+>   `--stopped-core-stops-sim`, mientras el depurador tiene parado un núcleo,
+>   el tiempo simulado no avanza y los relojes dicen «congelada».
 > * **La fresadora CNC** de `mcu-sim` (plan §50 a §52): en la ilustración, en
 >   planta y alzado; y en la **vista 3D** (*Vista ▸ Vista 3D*, Ctrl+3), con
 >   Qt Quick 3D, que es opcional al compilar y va en los paquetes de las tres
@@ -66,11 +80,16 @@ La **contraparte de visualización gráfica de
 ## Qué es, y por qué es un programa aparte
 
 `mcu-sim` es un simulador didáctico para quien desarrolla en el IDE de su
-microcontrolador —STM32CubeIDE, Code Composer Studio— y no tiene la tarjeta
-delante: se compila el firmware igual que para el chip y se ejecuta contra el
-modelo igual que contra una placa. Hoy modela **46 referencias**:
-* de ST, los STM32F405/407, F415/417 y F446, y los STM32F302/303/358;
-* de Texas Instruments, el MSP432P401R y el MSP432E401Y.
+microcontrolador —STM32CubeIDE, Code Composer Studio, ESP-IDF— y no tiene la
+tarjeta delante: se compila el firmware igual que para el chip y se ejecuta
+contra el modelo igual que contra una placa. Hoy modela **65 referencias, de
+tres fabricantes y con tres núcleos**:
+* de ST, los STM32F405/407, F415/417 y F446, y los STM32F302/303/358
+  (Cortex-M4F);
+* de Texas Instruments, el MSP432P401R y el MSP432E401Y (Cortex-M4F), y diez
+  MSP430: el G2553, el F5529, los FR2433, FR4133, FR2311, FR2355 y FR2476, y
+  los FR5969, FR5994 y FR6989;
+* de Espressif, el ESP32-C3 y el ESP32-C6 (RISC-V).
 
 Todo lo que se ve de él, sin esta ventana, es texto en una consola.
 
@@ -235,8 +254,8 @@ puede compilar sin ella (abajo).
 Hace falta **Qt 6.3 o posterior** (`Widgets`, `Network` y, desde las
 ilustraciones, `Svg` y `SvgWidgets`) y un compilador con C++17. Nada más: ni
 SystemC, ni una sola cabecera de `mcu-sim`. En Ubuntu son `qt6-base-dev` y
-`qt6-svg-dev`; en MSYS2, `qt6-base` y `qt6-svg`; el `qt` de Homebrew trae los
-dos.
+`qt6-svg-dev`; en MSYS2 (UCRT64), `mingw-w64-ucrt-x86_64-qt6-base` y
+`mingw-w64-ucrt-x86_64-qt6-svg`; el `qt` de Homebrew trae los dos.
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -312,6 +331,21 @@ por obsoleto desde marzo de 2026 y desde octubre le va quitando paquetes: el
 primero que nos tocó fue `qt6-quick3d`, y sin él no hay vista 3D. Si tienes
 una instalación en MINGW64, instala lo mismo en UCRT64 (convive con la otra) y
 abre ese shell; no mezcles los dos, que es la trampa 1 de abajo con otro nombre.
+
+Con los dos instalados, **comprueba el `PATH`** antes de compilar:
+
+```bash
+echo $MSYSTEM          # UCRT64
+which g++ cmake        # /ucrt64/bin/g++ y /ucrt64/bin/cmake
+```
+
+Si sale `/mingw64/bin` primero, algo lo antepone —una línea vieja del
+`~/.bashrc`, o el `PATH` de Windows con `MSYS2_PATH_TYPE=inherit`— y CMake
+cogerá el compilador y el Qt del otro entorno sin decir nada más que una línea
+(`Check for working CXX compiler: C:/msys64/mingw64/bin/c++.exe`). Pasó en la
+máquina del autor el 2026-11-23. Para una sesión basta con
+`export PATH=/ucrt64/bin:$PATH`; para siempre, quitar esa línea o ponerla
+detrás de `[ "$MSYSTEM" = MINGW64 ] &&`.
 
 ### En Windows con MSYS2: tres trampas, y la tercera es la que muerde
 
@@ -405,17 +439,17 @@ descarguen el simulador. Eso es trabajo de la **fase 9** y está anotado allí.
 | Plataforma | Estado |
 | :--- | :--- |
 | Linux, g++ 13, **Qt 6.4.2** | **Verificado**: configura, compila, enlaza y arranca (`QT_QPA_PLATFORM=offscreen`) |
-| Windows, MSYS2 / MinGW-w64 | **Verificado por el CI** desde el 2026-10-01: compila con el Qt de MSYS2 y pasa `ctest`. **A mano, en una máquina, no**: los intentos fallaron **por el entorno y no por el código** —la causa era que **ESET pone en cuarentena los ejecutables recién compilados**—. Las tres trampas están arriba, y hay una cuarta que llega al repartirlo: las DLL (plan §8.8) |
+| Windows, MSYS2 UCRT64 / MinGW-w64 | **Verificado por el CI** desde el 2026-10-01 —en UCRT64 desde el 2026-11-22—: compila con el Qt de MSYS2 y pasa `ctest`. **A mano, en una máquina, no**: los intentos fallaron **por el entorno y no por el código** —la causa era que **ESET pone en cuarentena los ejecutables recién compilados**—. Las tres trampas están arriba, y hay una cuarta que llega al repartirlo: las DLL (plan §8.8) |
 | macOS, clang, Qt 6 | **Verificado por el CI** desde el 2026-10-01, con el Qt de Homebrew: compila y pasa `ctest`. A mano, no |
-| La vista 3D | **Linux, verificada** con Qt 6.4.2: se dibuja en X11 (xvfb) y en Wayland (weston), también desde el AppImage. **Windows y macOS**: el código y los scripts de empaquetado están, pero **sin verificar hasta su primer CI** con Qt Quick 3D |
+| La vista 3D | **Linux, verificada** con Qt 6.4.2: se dibuja en X11 (xvfb) y en Wayland (weston), también desde el AppImage. **Windows y macOS**: el CI la compila y comprueba que el paquete la carga (`--comprueba-3d`); **dibujada en una pantalla de verdad, sin verificar** |
 
 Es la misma regla que sigue `mcu-sim` y por el mismo motivo: decir lo que se ha
 probado y lo que no, en vez de dar por bueno lo que parece obvio.
 
 **La integración continua** (`.github/workflows/ci.yml`) compila y pasa las
 pruebas en las tres plataformas de esta tabla en cada push a `main` y en cada
-pull request: Linux con el Qt del sistema (Ubuntu 24.04), Windows con MSYS2 y
-macOS con Homebrew. Pasó en las tres por primera vez el 2026-10-01, y de ahí
+pull request: Linux con el Qt del sistema (Ubuntu 24.04), Windows con MSYS2
+(UCRT64) y macOS con Homebrew, en Intel y en Apple Silicon. Pasó en las tres por primera vez el 2026-10-01, y de ahí
 las dos filas de arriba.
 
 Compila con la vista 3D en las tres (`-DMCU_SIM_GUI_3D=ON`). En Linux,
