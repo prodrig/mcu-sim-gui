@@ -39,6 +39,7 @@
 
 #include "generado.h"
 #include "panel.h"
+#include "trazado.h"
 
 namespace mcusim {
 
@@ -75,85 +76,11 @@ QColor color_de(QSvgRenderer* r, const QString& id)
     return QColor(int(R / A + 0.5), int(G / A + 0.5), int(B / A + 0.5));
 }
 
-// Plan §37: los puntos de una línea en tramos rectos, de la caja de `a` a la
-// de `b`, con los codos ya en unidades de la escena. El primer tramo sale de
-// `a` por el lado que mira a su primer codo; los dos últimos llegan solos a
-// `b`, por el lado que mira al último.
-QVector<QPointF> puntos_ruta(const QRectF& ra, const QRectF& rb, bool horizontal,
-                             const QVector<double>& codos)
-{
-    const QPointF ca = ra.center(), cb = rb.center();
-    QPointF pa;
-    if (horizontal) {
-        const double hacia = codos.isEmpty() ? cb.x() : codos[0];
-        pa = QPointF(hacia > ca.x() ? ra.right() : ra.left(), ca.y());
-    } else {
-        const double hacia = codos.isEmpty() ? cb.y() : codos[0];
-        pa = QPointF(ca.x(), hacia > ca.y() ? ra.bottom() : ra.top());
-    }
-    QVector<QPointF> p{pa};
-    bool h = horizontal;                         // el tramo que toca
-    for (const double v : codos) {
-        const QPointF q = p.back();
-        p.push_back(h ? QPointF(v, q.y()) : QPointF(q.x(), v));
-        h = !h;
-    }
-    const QPointF ult = p.back();
-    if (!h) {                                    // uno vertical y otro horizontal
-        const QPointF pb(ult.x() > cb.x() ? rb.right() : rb.left(), cb.y());
-        p << QPointF(ult.x(), pb.y()) << pb;
-    } else {                                     // uno horizontal y otro vertical
-        const QPointF pb(cb.x(), ult.y() > cb.y() ? rb.bottom() : rb.top());
-        p << QPointF(pb.x(), ult.y()) << pb;
-    }
-    return p;
-}
-
-// Y de vuelta: los codos de unos puntos que alternan horizontal y vertical,
-// sin los dos últimos tramos, que salen solos
-QVector<double> codos_de(const QVector<QPointF>& p, bool horizontal)
-{
-    QVector<double> c;
-    for (int j = 0; j + 3 < p.size(); ++j) {
-        const bool h = (j % 2 == 0) == horizontal;
-        c.push_back(h ? p[j + 1].x() : p[j + 1].y());
-    }
-    return c;
-}
-
-// Una polilínea con las esquinas redondeadas, de radio `r` como mucho: en
-// cada esquina, la mitad del tramo más corto. Los tramos de largo cero y los
-// puntos en línea no hacen esquina
-QPainterPath redondeada(const QVector<QPointF>& puntos, double r)
-{
-    QVector<QPointF> p;
-    for (const QPointF& x : puntos)
-        if (p.isEmpty() || QLineF(p.back(), x).length() > 1e-9) p.push_back(x);
-    QPainterPath c(p.isEmpty() ? QPointF() : p.front());
-    for (int i = 1; i + 1 < p.size(); ++i) {
-        const QPointF a = p[i - 1], b = p[i], d = p[i + 1];
-        const double l1 = QLineF(a, b).length(), l2 = QLineF(b, d).length();
-        const QPointF u1 = (b - a) / l1, u2 = (d - b) / l2;
-        if (std::abs(u1.x() * u2.y() - u1.y() * u2.x()) < 1e-9) {
-            c.lineTo(b);
-            continue;
-        }
-        const double rr = std::min({r, l1 / 2, l2 / 2});
-        c.lineTo(b - u1 * rr);
-        c.quadTo(b, b + u2 * rr);
-    }
-    if (p.size() > 1) c.lineTo(p.back());
-    return c;
-}
-
-double distancia(const QPointF& s, const QPointF& a, const QPointF& b)
-{
-    const QPointF d = b - a;
-    const double l2 = d.x() * d.x() + d.y() * d.y();
-    double t = l2 > 0 ? ((s - a).x() * d.x() + (s - a).y() * d.y()) / l2 : 0;
-    t = std::clamp(t, 0.0, 1.0);
-    return QLineF(s, a + d * t).length();
-}
+// Plan §37 y G8 de doc/analisis_build.md: la geometría de las líneas -los
+// tramos rectos, las esquinas redondeadas, la curva y el enganche- es de la
+// biblioteca `trazado`, que comparte con mcu-sim-build
+using trazado::puntos_ruta;
+using trazado::redondeada;
 
 QColor mezcla(const QColor& a, const QColor& b, double t, int alfa);
 // El degradado del halo de algo que brilla de color `col`
@@ -555,7 +482,7 @@ void VistaPlaca::traza_lineas()
     // sale: por el lado que mira a la otra -izquierda o derecha si está más
     // de lado que encima o debajo; arriba o abajo si no, que es lo que pasa
     // con placas giradas o puestas una sobre otra (plan §34)-
-    struct Enganche { QPointF p, dir; };
+    using trazado::Enganche;
     // ¿Es un PIN dibujado -`F/P1.TX`, y el dibujo tiene un `P1.TX`-? Ahí la
     // línea llega al borde del pin y no lleva punto: un punto de 2,6 mm tapa
     // un pin de 1 mm, y ese pin se vería distinto de sus vecinos
@@ -609,17 +536,9 @@ void VistaPlaca::traza_lineas()
     auto punto = [&](const QString& ref, const QPointF& hacia) {
         const QRectF r = caja_linea(ref);
         if (r.isNull() && r.topLeft().isNull()) return Enganche{};
-        const QPointF d = hacia - r.center();
         // Un conector de un dibujo -una tira- engancha por su lado; el borde
         // de una placa entera, por el centro de ese lado
-        if (std::abs(d.x()) >= std::abs(d.y())) {
-            const bool derecha = d.x() > 0;
-            return Enganche{QPointF(derecha ? r.right() : r.left(), r.center().y()),
-                            QPointF(derecha ? 1 : -1, 0)};
-        }
-        const bool abajo = d.y() > 0;
-        return Enganche{QPointF(r.center().x(), abajo ? r.bottom() : r.top()),
-                        QPointF(0, abajo ? 1 : -1)};
+        return trazado::enganche(r, hacia);
     };
     auto centro = [&](const QString& ref) {
         QRectF r = caja_de(ref);
@@ -653,9 +572,7 @@ void VistaPlaca::traza_lineas()
             // Una curva que sale y entra por su lado -en horizontal de una
             // tira puesta de pie, en vertical de una tumbada-: se ve de dónde
             // a dónde va aunque cruce por encima de una placa
-            const double lado = std::max(std::max(std::abs(pb.x() - pa.x()),
-                                                  std::abs(pb.y() - pa.y())) * 0.45, 10.0 / mm);
-            camino.cubicTo(pa + ea.dir * lado, pb + eb.dir * lado, pb);
+            camino = trazado::curva(ea, eb, 10.0 / mm);
         }
         auto* it = new QGraphicsPathItem(camino);
         // Un hilo es un cable, de su color; un acople, del de su acople
@@ -775,12 +692,9 @@ void VistaPlaca::enruta(const QString& clave)
         if (l.recta) {
             r.horizontal = rutas_.value(clave).horizontal;
         } else {
-            const QPainterPath& c = l.item->path();
-            const QPointF d = c.elementCount() > 1 ? QPointF(c.elementAt(1)) - l.pa : QPointF(1, 0);
-            r.horizontal = std::abs(d.x()) >= std::abs(d.y());
+            r.horizontal = trazado::eje_de_curva(l.item->path(), l.pa);
         }
-        r.codos = {std::round((r.horizontal ? (l.pa.x() + l.pb.x()) : (l.pa.y() + l.pb.y())) / 2 *
-                              mm)};
+        r.codos = {std::round(trazado::codo_medio(l.pa, l.pb, r.horizontal) * mm)};
         pon_ruta(clave, r);
         return;
     }
@@ -797,27 +711,13 @@ void VistaPlaca::anade_codo(const QString& clave, const QPointF& s)
 {
     for (const Linea& l : std::as_const(lineas_)) {
         if (l.clave != clave || !l.recta || l.puntos.size() < 2) continue;
-        // El tramo más cercano, y el punto de él más cercano
-        int k = 0;
-        double mejor = 1e300;
-        for (int j = 0; j + 1 < l.puntos.size(); ++j) {
-            const double d = distancia(s, l.puntos[j], l.puntos[j + 1]);
-            if (d < mejor) { mejor = d; k = j; }
-        }
-        const QPointF a = l.puntos[k], b = l.puntos[k + 1];
-        const QPointF c = QPointF(a.x() == b.x() ? a.x() : std::clamp(s.x(), std::min(a.x(), b.x()),
-                                                                      std::max(a.x(), b.x())),
-                                  a.y() == b.y() ? a.y() : std::clamp(s.y(), std::min(a.y(), b.y()),
-                                                                      std::max(a.y(), b.y())));
-        // Dos puntos iguales en medio: un tramo de largo cero entre las dos
-        // mitades, que siguen alternando
-        QVector<QPointF> p = l.puntos;
-        p.insert(k + 1, c);
-        p.insert(k + 1, c);
+        // En el tramo más cercano, en su punto más cercano: dos puntos
+        // iguales, un tramo de largo cero entre las dos mitades
         Ruta r = rutas_.value(clave);
         const double mm = mm_escena();
         r.codos.clear();
-        for (const double v : codos_de(p, r.horizontal)) r.codos.push_back(std::round(v * mm * 10) / 10);
+        for (const double v : trazado::con_codo(l.puntos, s, r.horizontal))
+            r.codos.push_back(std::round(v * mm * 10) / 10);
         pon_ruta(clave, r);
         return;
     }
@@ -848,16 +748,14 @@ int VistaPlaca::linea_en(const QPoint& p, int* tramo) const
         const Linea& l = lineas_[i];
         if (!l.item->isVisible()) continue;
         if (l.recta) {
-            for (int k = 0; k + 1 < l.puntos.size(); ++k)
-                if (distancia(s, l.puntos[k], l.puntos[k + 1]) <= tol) {
-                    if (tramo) *tramo = k;
-                    return i;
-                }
+            const int k = trazado::tramo_en(l.puntos, s, tol);
+            if (k >= 0) {
+                if (tramo) *tramo = k;
+                return i;
+            }
             continue;
         }
-        QPainterPathStroker borde;
-        borde.setWidth(2 * tol);
-        if (borde.createStroke(l.item->path()).contains(s)) {
+        if (trazado::toca(l.item->path(), s, tol)) {
             if (tramo) *tramo = -1;
             return i;
         }

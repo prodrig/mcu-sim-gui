@@ -60,7 +60,7 @@ endforeach()
 
 # Svg y SvgWidgets, desde las ilustraciones: QSvgRenderer para leer el
 # dibujo de una placa y QGraphicsSvgItem para pintar cada pieza encima
-find_package(Qt6 6.3 REQUIRED COMPONENTS Core Widgets Network Svg SvgWidgets)
+find_package(Qt6 6.3 REQUIRED COMPONENTS Core Gui Widgets Network Svg SvgWidgets)
 
 # LA VISTA 3D (F8 de la CNC de mcu-sim), con Qt Quick 3D, si esta: Quick,
 # QuickWidgets y Quick3D, que no son de qtbase. AUTO -lo de omision- la
@@ -148,6 +148,16 @@ qt_add_library(sesion STATIC
 )
 target_link_libraries(sesion PUBLIC transporte)
 
+# La geometria de las lineas -curvas y tramos rectos- (G8 de
+# doc/analisis_build.md, D7): la comparten mcu-sim-gui y mcu-sim-build. Solo
+# QtGui: puntos, cajas y caminos, sin widgets
+qt_add_library(trazado STATIC
+    src/trazado.h
+    src/trazado.cpp
+)
+target_include_directories(trazado PUBLIC src)
+target_link_libraries(trazado PUBLIC Qt6::Gui)
+
 qt_add_library(pantalla STATIC
     src/panel.h
     src/panel.cpp
@@ -164,7 +174,7 @@ qt_add_library(pantalla STATIC
     src/consola_serie.h
     src/consola_serie.cpp
 )
-target_link_libraries(pantalla PUBLIC sesion Qt6::Widgets Qt6::Svg Qt6::SvgWidgets)
+target_link_libraries(pantalla PUBLIC sesion trazado Qt6::Widgets Qt6::Svg Qt6::SvgWidgets)
 
 # La vista 3D, aparte: solo con Qt Quick 3D
 if(CON_3D)
