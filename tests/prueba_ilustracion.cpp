@@ -2748,6 +2748,37 @@ int main(int argc, char** argv)
                       suelta == "<placa nombre=\"m\" lienzo=\"0 0 50 40\" giro=\"90\">\n  <nodo id=\"a\"/>\n</placa>\n",
                   "en una placa suelta, en su raiz: el giro, el lienzo, y la escala de siempre "
                   "fuera: " + suelta.toStdString());
+
+        // El <build> de mcu-sim-build (B7 de doc/analisis_build.md): lo que
+        // dibuja mcu-sim-build va en el mismo XML, y Guardar en el XML no lo
+        // toca -ni sus <instancia x= y=>, que no son la disposicion de la
+        // ventana, ni su <linea>-
+        const QByteArray bloque_s =
+            "  <build version=\"1\">\n"
+            "    <linea linea=\"hilo A/J.2 B/J.1\" visible=\"no\"/>\n"
+            "  </build>\n";
+        QByteArray con_build = fuente;
+        con_build.replace("</sistema>\n", bloque_s + "</sistema>\n");
+        const bool bien_sb = escribe_disposicion(con_build, d, e);
+        QByteArray sin_bloque = con_build;
+        sin_bloque.replace(bloque_s, "");
+        comprueba(bien_sb && con_build.count(bloque_s) == 1 && QString::fromUtf8(sin_bloque) == r,
+                  "un sistema con su <build>: Guardar en el XML escribe lo suyo y deja el "
+                  "<build> como estaba:\n" + con_build.toStdString());
+        const QByteArray bloque_p =
+            "  <build version=\"1\">\n"
+            "    <marco x=\"0\" y=\"0\" ancho=\"50\" alto=\"40\"/>\n"
+            "    <instancia id=\"LD2\" x=\"5\" y=\"30\" giro=\"90\" escala=\"1.5\"/>\n"
+            "    <conexion a=\"LD2.anodo\" b=\"u0.PA5\"/>\n"
+            "  </build>\n";
+        QByteArray suelta_b = "<placa nombre=\"m\" escala=\"2\">\n  <nodo id=\"a\"/>\n" +
+                              bloque_p + "</placa>\n";
+        const bool bien_pb = escribe_disposicion(suelta_b, ds, e);
+        comprueba(bien_pb &&
+                      suelta_b == "<placa nombre=\"m\" lienzo=\"0 0 50 40\" giro=\"90\">\n"
+                                  "  <nodo id=\"a\"/>\n" + bloque_p + "</placa>\n",
+                  "y una placa suelta con su <build>: la raiz cambia, el <build> no: " +
+                      suelta_b.toStdString());
     }
     {
         // La ventana: sin lanzar ella mcu-sim, no sabe donde esta el XML; y
