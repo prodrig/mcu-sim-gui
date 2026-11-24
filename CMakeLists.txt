@@ -158,6 +158,30 @@ qt_add_library(trazado STATIC
 target_include_directories(trazado PUBLIC src)
 target_link_libraries(trazado PUBLIC Qt6::Gui)
 
+# mcu-sim-build (G9 y G10 de doc/analisis_build.md): lo que no pinta -la
+# biblioteca y su cache, las fichas, el documento, las redes, la exportacion y
+# la validacion con mcu-sim- va aparte y se prueba sin pantalla
+qt_add_library(construccion STATIC
+    src/construccion/ficha.h
+    src/construccion/ficha.cpp
+    src/construccion/biblioteca.h
+    src/construccion/biblioteca.cpp
+    src/construccion/documento.h
+    src/construccion/documento.cpp
+    src/construccion/catalogo.h
+    src/construccion/catalogo.cpp
+    src/construccion/redes.h
+    src/construccion/redes.cpp
+    src/construccion/exporta_placa.h
+    src/construccion/exporta_placa.cpp
+    src/construccion/importa.h
+    src/construccion/importa.cpp
+    src/construccion/valida.h
+    src/construccion/valida.cpp
+)
+target_include_directories(construccion PUBLIC src/construccion)
+target_link_libraries(construccion PUBLIC trazado Qt6::Core Qt6::Gui Qt6::Svg)
+
 qt_add_library(pantalla STATIC
     src/panel.h
     src/panel.cpp
@@ -241,6 +265,13 @@ if(BUILD_TESTING)
     prueba(prueba_ilustracion tests/prueba_ilustracion.cpp pantalla)
     prueba(prueba_serie       tests/prueba_serie.cpp       pantalla)
     prueba(prueba_vista3d tests/prueba_vista3d.cpp pantalla)
+    prueba(prueba_biblioteca tests/prueba_biblioteca.cpp construccion)
+    prueba(prueba_redes      tests/prueba_redes.cpp      construccion)
+    prueba(prueba_exporta    tests/prueba_exporta.cpp    construccion)
+    # (comun.h trae el modelo falso de las otras pruebas, que usa QtNetwork)
+    foreach(_p prueba_biblioteca prueba_redes prueba_exporta)
+        target_link_libraries(${_p} PRIVATE Qt6::Network)
+    endforeach()
     # La plantilla de configuracion se lee de las fuentes
     target_compile_definitions(prueba_argumentos PRIVATE FUENTES="${CMAKE_SOURCE_DIR}")
 
@@ -264,6 +295,14 @@ if(BUILD_TESTING)
     set_tests_properties(serie PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     # La vista 3D: sin Qt Quick 3D, o sin con qué dibujar, se salta el dibujo;
     # con MCU_SIM y MCU_SIM_SRC, además, la fresadora 3020 de verdad
+    # mcu-sim-build: con MCU_SIM_SRC (la biblioteca y las placas de mcu-sim);
+    # con MCU_SIM, ademas, cada placa exportada se valida con mcu-sim
+    add_test(NAME biblioteca COMMAND prueba_biblioteca)
+    set_tests_properties(biblioteca PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_test(NAME redes COMMAND prueba_redes)
+    set_tests_properties(redes PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME exporta COMMAND prueba_exporta)
+    set_tests_properties(exporta PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
     add_test(NAME vista3d COMMAND prueba_vista3d)
     set_tests_properties(vista3d PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 900)
 endif()
