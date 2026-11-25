@@ -178,9 +178,24 @@ qt_add_library(construccion STATIC
     src/construccion/importa.cpp
     src/construccion/valida.h
     src/construccion/valida.cpp
+    src/construccion/abre.h
+    src/construccion/abre.cpp
 )
 target_include_directories(construccion PUBLIC src/construccion)
 target_link_libraries(construccion PUBLIC trazado Qt6::Core Qt6::Gui Qt6::Svg)
+
+# La interfaz de mcu-sim-build (G9, G10): el lienzo, los paneles y la ventana
+qt_add_library(construccion_ui STATIC
+    src/construccion/lienzo.h
+    src/construccion/lienzo.cpp
+    src/construccion/panel_biblioteca.h
+    src/construccion/panel_biblioteca.cpp
+    src/construccion/panel_propiedades.h
+    src/construccion/panel_propiedades.cpp
+    src/construccion/ventana_build.h
+    src/construccion/ventana_build.cpp
+)
+target_link_libraries(construccion_ui PUBLIC construccion Qt6::Widgets Qt6::Svg)
 
 qt_add_library(pantalla STATIC
     src/panel.h
@@ -239,6 +254,23 @@ set_target_properties(mcu-sim-gui PROPERTIES
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     MACOSX_BUNDLE_COPYRIGHT "AGPLv3")
 
+# mcu-sim-build: dibujar placas (doc/analisis_build.md de mcu-sim)
+option(MCU_SIM_BUILD "Compila mcu-sim-build, el editor de placas" ON)
+if(MCU_SIM_BUILD)
+    qt_add_executable(mcu-sim-build src/construccion/main_build.cpp)
+    target_link_libraries(mcu-sim-build PRIVATE construccion_ui)
+    target_compile_definitions(mcu-sim-build PRIVATE MCU_SIM_GUI_VERSION="${VERSION_ANUNCIADA}")
+    set_target_properties(mcu-sim-build PROPERTIES
+        WIN32_EXECUTABLE ON
+        MACOSX_BUNDLE ON
+        MACOSX_BUNDLE_BUNDLE_NAME "mcu-sim-build"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.prodrig.mcu-sim-build"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_COPYRIGHT "AGPLv3")
+    install(TARGETS mcu-sim-build BUNDLE DESTINATION . RUNTIME DESTINATION bin)
+endif()
+
 install(TARGETS mcu-sim-gui
         BUNDLE  DESTINATION .
         RUNTIME DESTINATION bin)
@@ -269,7 +301,8 @@ if(BUILD_TESTING)
     prueba(prueba_redes      tests/prueba_redes.cpp      construccion)
     prueba(prueba_exporta    tests/prueba_exporta.cpp    construccion)
     # (comun.h trae el modelo falso de las otras pruebas, que usa QtNetwork)
-    foreach(_p prueba_biblioteca prueba_redes prueba_exporta)
+    prueba(prueba_build      tests/prueba_build.cpp      construccion_ui)
+    foreach(_p prueba_biblioteca prueba_redes prueba_exporta prueba_build)
         target_link_libraries(${_p} PRIVATE Qt6::Network)
     endforeach()
     # La plantilla de configuracion se lee de las fuentes
@@ -303,6 +336,9 @@ if(BUILD_TESTING)
     set_tests_properties(redes PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME exporta COMMAND prueba_exporta)
     set_tests_properties(exporta PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
+    add_test(NAME build COMMAND prueba_build)
+    set_tests_properties(build PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+                         SKIP_RETURN_CODE 77 TIMEOUT 900)
     add_test(NAME vista3d COMMAND prueba_vista3d)
     set_tests_properties(vista3d PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 900)
 endif()

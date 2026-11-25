@@ -62,9 +62,9 @@ QString xml_placa(const Documento& d, const Catalogo& c, const Redes& r)
     QString o;
     o += QStringLiteral("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     o += QStringLiteral("<!-- %1: placa hecha con %2 (doc/analisis_build.md de mcu-sim).\n"
-                        "     Lo que se escriba a mano en este comentario y en el que vaya justo\n"
-                        "     encima de un <componente>, un <nodo> o un <mcu> se conserva al\n"
-                        "     reabrirla. -->\n").arg(esc(d.nombre), QLatin1String(PROGRAMA));
+                        "     Al reabrirla, el lienzo sale del <build>; los <pin> y los <nodo> se\n"
+                        "     vuelven a calcular de las conexiones: lo que se cambie a mano fuera\n"
+                        "     del <build> y de los atributos se pierde al exportarla otra vez. -->\n").arg(esc(d.nombre), QLatin1String(PROGRAMA));
     o += QStringLiteral("<placa nombre=\"%1\">\n").arg(esc(d.nombre));
     for (const Instancia& i : d.instancias)
         if (i.clase == Instancia::Mcu)

@@ -23,7 +23,9 @@
 #include "catalogo.h"
 #include "comun.h"
 #include "exporta_placa.h"
+#include "abre.h"
 #include "importa.h"
+#include "redes.h"
 #include "valida.h"
 
 using namespace mcusim::build;
@@ -103,6 +105,19 @@ int main(int argc, char** argv)
         comprueba(nuevo.contains("<build version=\"1\"") &&
                       nuevo.count("<instancia ") == d.instancias.size(),
                   nombre.toStdString() + ": con su <build>");
+        // Y se reabre: lo mismo -el mismo XML al exportarla otra vez-
+        QString ea;
+        const Documento r = abre_build(nuevo, c, &ea);
+        const QString otra = xml_placa(r, c, calcula_redes(r, c));
+        if (!comprueba(!r.instancias.isEmpty() && otra == nuevo,
+                       nombre.toStdString() + ": se reabre y sale igual " + ea.toStdString())) {
+            const QStringList l1 = nuevo.split('\n'), l2 = otra.split('\n');
+            for (int k = 0; k < std::max(l1.size(), l2.size()); ++k)
+                if (l1.value(k) != l2.value(k)) {
+                    std::printf("       %s\n    -> %s\n", qPrintable(l1.value(k)), qPrintable(l2.value(k)));
+                    break;
+                }
+        }
         if (!sim.isEmpty()) {
             const Validacion v = valida_fichero(sim, ruta);
             if (!comprueba(v.valida, nombre.toStdString() + ": mcu-sim la valida"))
